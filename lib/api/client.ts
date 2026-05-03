@@ -4,8 +4,17 @@
  * Handles common fetch operations with error handling and credentials.
  */
 
-// Credential mode - easily switch between 'include', 'same-origin', or 'omit'
-const CREDENTIALS_MODE: RequestCredentials = 'include'
+/**
+ * Credential mode for CORS requests
+ * 
+ * - 'omit': Never send credentials (default for demo/cross-origin)
+ * - 'same-origin': Send credentials only for same-origin requests
+ * - 'include': Always send credentials (use when backend is configured for credentials)
+ * 
+ * If you encounter CORS issues with 'include', switch to 'omit'.
+ * If you need authentication cookies, use 'include' and ensure backend has proper CORS config.
+ */
+const CREDENTIALS_MODE: RequestCredentials = 'omit'
 
 export interface ApiResponse<T> {
   data: T | null
@@ -13,14 +22,22 @@ export interface ApiResponse<T> {
   ok: boolean
 }
 
-export function getApiBaseUrl(): string {
+/**
+ * Check if API is configured (env variable is set)
+ */
+export function isApiConfigured(): boolean {
+  return !!process.env.NEXT_PUBLIC_API_BASE_URL
+}
+
+/**
+ * Get the API base URL
+ * Returns null if not configured (allows graceful fallback to mock data)
+ */
+export function getApiBaseUrl(): string | null {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
   
   if (!baseUrl) {
-    throw new Error(
-      '[BuildMore API] NEXT_PUBLIC_API_BASE_URL 환경변수가 설정되지 않았습니다. ' +
-      '.env.local 파일에 NEXT_PUBLIC_API_BASE_URL을 설정해주세요.'
-    )
+    return null
   }
   
   // Remove trailing slash if present
@@ -31,8 +48,18 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  const baseUrl = getApiBaseUrl()
+  
+  // If no API URL configured, return error response (will trigger fallback)
+  if (!baseUrl) {
+    return {
+      data: null,
+      error: 'API URL이 설정되지 않았습니다. Mock 데이터를 사용합니다.',
+      ok: false,
+    }
+  }
+  
   try {
-    const baseUrl = getApiBaseUrl()
     const url = `${baseUrl}${endpoint}`
     
     const defaultHeaders: HeadersInit = {
@@ -69,7 +96,7 @@ export async function apiClient<T>(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     
     // Handle network errors gracefully
-    if (errorMessage.includes('fetch failed') || errorMessage.includes('network')) {
+    if (errorMessage.includes('fetch failed') || errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
       return {
         data: null,
         error: 'API 서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요.',

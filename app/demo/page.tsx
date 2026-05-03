@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { getHealth, getSampleAnalysis, type SampleAnalysisResponse } from "@/lib/api/analysis"
+import { getHealth, getSampleAnalysis } from "@/lib/api/analysis"
+import { isApiConfigured } from "@/lib/api/client"
+import { adaptApiResponse, type DisplayAnalysis } from "@/lib/api/adapters"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -102,28 +104,36 @@ export default function DemoAnalysisPage() {
   const [inputValue, setInputValue] = useState("")
   const [showSteps, setShowSteps] = useState(true)
   const [apiStatus, setApiStatus] = useState<ApiStatus>('connecting')
-  const [analysisData, setAnalysisData] = useState<SampleAnalysisResponse | null>(null)
+  const [analysisData, setAnalysisData] = useState<DisplayAnalysis | null>(null)
 
   // Fetch API data on mount
   const fetchApiData = useCallback(async () => {
+    // If API URL is not configured, immediately use mock data
+    if (!isApiConfigured()) {
+      setApiStatus('fallback')
+      return
+    }
+    
     setApiStatus('connecting')
     
     try {
-      // First check health
+      // Try health check first, but don't block on failure
       const healthResponse = await getHealth()
       
-      if (!healthResponse.ok) {
-        setApiStatus('fallback')
-        return
-      }
-      
-      // Then fetch sample analysis
+      // Even if health check fails, still try to get sample analysis
+      // (backend might have partial availability)
       const analysisResponse = await getSampleAnalysis()
       
       if (analysisResponse.ok && analysisResponse.data) {
-        setAnalysisData(analysisResponse.data)
+        // Use adapter to transform API response to display structure
+        const adapted = adaptApiResponse(analysisResponse.data, mockAnalysis)
+        setAnalysisData(adapted)
         setApiStatus('connected')
+      } else if (healthResponse.ok) {
+        // Health OK but analysis failed - still show as connected but use mock
+        setApiStatus('fallback')
       } else {
+        // Both failed
         setApiStatus('fallback')
       }
     } catch {
