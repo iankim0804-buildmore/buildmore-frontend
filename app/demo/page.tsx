@@ -1,7 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { getHealth, getSampleAnalysis } from "@/lib/api/analysis"
+import { isApiConfigured } from "@/lib/api/client"
+import { adaptApiResponse, type DisplayAnalysis } from "@/lib/api/adapters"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -94,9 +97,85 @@ const analysisSteps = [
   { step: "Bankability Score 산정", status: "complete", time: "0.4s" },
 ]
 
+// API connection status type
+type ApiStatus = 'connecting' | 'connected' | 'fallback'
+
 export default function DemoAnalysisPage() {
   const [inputValue, setInputValue] = useState("")
   const [showSteps, setShowSteps] = useState(true)
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('connecting')
+  const [analysisData, setAnalysisData] = useState<DisplayAnalysis | null>(null)
+
+  // Fetch API data on mount
+  const fetchApiData = useCallback(async () => {
+    // If API URL is not configured, immediately use mock data
+    if (!isApiConfigured()) {
+      setApiStatus('fallback')
+      return
+    }
+    
+    setApiStatus('connecting')
+    
+    try {
+      // Try health check first, but don't block on failure
+      const healthResponse = await getHealth()
+      
+      // Even if health check fails, still try to get sample analysis
+      // (backend might have partial availability)
+      const analysisResponse = await getSampleAnalysis()
+      
+      if (analysisResponse.ok && analysisResponse.data) {
+        // Use adapter to transform API response to display structure
+        const adapted = adaptApiResponse(analysisResponse.data, mockAnalysis)
+        setAnalysisData(adapted)
+        setApiStatus('connected')
+      } else if (healthResponse.ok) {
+        // Health OK but analysis failed - still show as connected but use mock
+        setApiStatus('fallback')
+      } else {
+        // Both failed
+        setApiStatus('fallback')
+      }
+    } catch {
+      setApiStatus('fallback')
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchApiData()
+  }, [fetchApiData])
+
+  // Merge API data with mock data (API takes priority)
+  const displayData = {
+    address: analysisData?.address ?? mockAnalysis.address,
+    assetType: analysisData?.assetType ?? mockAnalysis.assetType,
+    dealAmount: analysisData?.dealAmount ?? mockAnalysis.dealAmount,
+    score: analysisData?.score ?? mockAnalysis.score,
+    grade: analysisData?.grade ?? mockAnalysis.grade,
+    verdict: analysisData?.verdict ?? mockAnalysis.verdict,
+    financial: {
+      ltv: analysisData?.financial?.ltv ?? mockAnalysis.financial.ltv,
+      loanAmount: analysisData?.financial?.loanAmount ?? mockAnalysis.financial.loanAmount,
+      rate: analysisData?.financial?.rate ?? mockAnalysis.financial.rate,
+      monthlyInterest: analysisData?.financial?.monthlyInterest ?? mockAnalysis.financial.monthlyInterest,
+      equity: analysisData?.financial?.equity ?? mockAnalysis.financial.equity,
+      equityRatio: analysisData?.financial?.equityRatio ?? mockAnalysis.financial.equityRatio,
+    },
+    noi: {
+      deposit: analysisData?.noi?.deposit ?? mockAnalysis.noi.deposit,
+      monthlyRent: analysisData?.noi?.monthlyRent ?? mockAnalysis.noi.monthlyRent,
+      annualRent: analysisData?.noi?.annualRent ?? mockAnalysis.noi.annualRent,
+      noi: analysisData?.noi?.noi ?? mockAnalysis.noi.noi,
+      dscr: analysisData?.noi?.dscr ?? mockAnalysis.noi.dscr,
+      capRate: analysisData?.noi?.capRate ?? mockAnalysis.noi.capRate,
+    },
+    risks: {
+      legal: analysisData?.risks?.legal ?? mockAnalysis.risks.legal,
+      financial: analysisData?.risks?.financial ?? mockAnalysis.risks.financial,
+    },
+    comparables: analysisData?.comparables ?? mockAnalysis.comparables,
+    dataSources: analysisData?.dataSources ?? mockAnalysis.dataSources,
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -162,10 +241,22 @@ export default function DemoAnalysisPage() {
             <Settings className="w-4 h-4" />
             <span className="text-sm">설정</span>
           </Button>
-          <div className="px-3 py-2 bg-sidebar-accent rounded text-xs">
+            <div className="px-3 py-2 bg-sidebar-accent rounded text-xs">
             <div className="flex items-center gap-2 text-sidebar-foreground/70">
               <div className="w-2 h-2 rounded-full bg-chart-2 animate-pulse" />
               <span>LLM Wiki Active</span>
+            </div>
+            <div className="flex items-center gap-2 text-sidebar-foreground/70 mt-1.5">
+              <div className={`w-2 h-2 rounded-full ${
+                apiStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                apiStatus === 'connected' ? 'bg-chart-2' :
+                'bg-orange-400'
+              }`} />
+              <span className="text-sidebar-foreground/50">
+                {apiStatus === 'connecting' ? 'API 연결 중...' :
+                 apiStatus === 'connected' ? 'API 연결됨' :
+                 'Mock 데이터'}
+              </span>
             </div>
             <p className="text-sidebar-foreground/50 mt-1">v1.1.0</p>
           </div>
@@ -193,13 +284,33 @@ export default function DemoAnalysisPage() {
               <span className="text-sm font-medium text-foreground truncate max-w-[120px] sm:max-w-none">마포구 신수동 27-2</span>
             </div>
             <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
-              {mockAnalysis.assetType}
+              {displayData.assetType}
             </Badge>
             <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
-              {mockAnalysis.dealAmount}
+              {displayData.dealAmount}
             </Badge>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* API Status Indicator - Small and subtle */}
+            <Badge 
+              variant="outline" 
+              className={`text-[10px] px-1.5 py-0.5 ${
+                apiStatus === 'connecting' 
+                  ? 'border-yellow-500/30 text-yellow-600 bg-yellow-50' 
+                  : apiStatus === 'connected' 
+                    ? 'border-chart-2/30 text-chart-2 bg-chart-2/5' 
+                    : 'border-orange-400/30 text-orange-500 bg-orange-50'
+              }`}
+            >
+              <div className={`w-1 h-1 rounded-full mr-1 ${
+                apiStatus === 'connecting' 
+                  ? 'bg-yellow-500 animate-pulse' 
+                  : apiStatus === 'connected' 
+                    ? 'bg-chart-2' 
+                    : 'bg-orange-400'
+              }`} />
+              {apiStatus === 'connecting' ? 'API...' : apiStatus === 'connected' ? 'API' : 'Mock'}
+            </Badge>
             <Badge className="bg-chart-2/10 text-chart-2 border-chart-2/20 text-xs">
               <div className="w-1.5 h-1.5 rounded-full bg-chart-2 mr-1.5" />
               분석 완료
@@ -229,23 +340,23 @@ export default function DemoAnalysisPage() {
                   <CardContent className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">주소</p>
-                      <p className="font-medium text-foreground">{mockAnalysis.address}</p>
+                      <p className="font-medium text-foreground">{displayData.address}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">매입가</p>
-                      <p className="font-medium text-foreground">{mockAnalysis.dealAmount}</p>
+                      <p className="font-medium text-foreground">{displayData.dealAmount}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
-                      <p className="font-medium text-foreground">{mockAnalysis.noi.deposit}</p>
+                      <p className="font-medium text-foreground">{displayData.noi.deposit}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
-                      <p className="font-medium text-foreground">{mockAnalysis.noi.monthlyRent}</p>
+                      <p className="font-medium text-foreground">{displayData.noi.monthlyRent}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">자기자본</p>
-                      <p className="font-medium text-foreground">{mockAnalysis.financial.equity}</p>
+                      <p className="font-medium text-foreground">{displayData.financial.equity}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
@@ -325,7 +436,7 @@ export default function DemoAnalysisPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                예: &quot;자기자본을 20억으로 늘리면 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
+                예: &quot;자기자본을 20억으로 늘리�� 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
               </p>
             </div>
           </div>
@@ -334,7 +445,7 @@ export default function DemoAnalysisPage() {
           <div className="flex-1 bg-background overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-4 lg:p-6 space-y-4">
-                <AnalysisResultsContent mockAnalysis={mockAnalysis} showSteps={showSteps} setShowSteps={setShowSteps} />
+                <AnalysisResultsContent analysisData={displayData} showSteps={showSteps} setShowSteps={setShowSteps} />
               </div>
             </ScrollArea>
           </div>
@@ -352,16 +463,16 @@ export default function DemoAnalysisPage() {
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bankability Score</p>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-foreground">{mockAnalysis.score}</span>
+                        <span className="text-4xl font-bold text-foreground">{displayData.score}</span>
                         <span className="text-lg text-muted-foreground">/ 100</span>
                       </div>
                     </div>
                     <Badge className="bg-chart-3/10 text-chart-3 border-chart-3/20 text-xs px-2 py-1">
-                      {mockAnalysis.grade} · {mockAnalysis.verdict}
+                      {displayData.grade} · {displayData.verdict}
                     </Badge>
                   </div>
                   <div className="w-full bg-border rounded-full h-2 mb-2">
-                    <div className="bg-chart-3 h-2 rounded-full transition-all" style={{ width: `${mockAnalysis.score}%` }} />
+                    <div className="bg-chart-3 h-2 rounded-full transition-all" style={{ width: `${displayData.score}%` }} />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     선임대 계약 확보 시 금융기관 사전 협의 가능
@@ -373,19 +484,19 @@ export default function DemoAnalysisPage() {
               <div className="grid grid-cols-2 gap-3">
                 <Card className="border-border bg-white p-3">
                   <p className="text-xs text-muted-foreground mb-1">예상 LTV</p>
-                  <p className="text-xl font-bold text-foreground">{mockAnalysis.financial.ltv}</p>
+                  <p className="text-xl font-bold text-foreground">{displayData.financial.ltv}</p>
                 </Card>
                 <Card className="border-border bg-white p-3">
                   <p className="text-xs text-muted-foreground mb-1">DSCR</p>
-                  <p className="text-xl font-bold text-foreground">{mockAnalysis.noi.dscr}</p>
+                  <p className="text-xl font-bold text-foreground">{displayData.noi.dscr}</p>
                 </Card>
                 <Card className="border-border bg-white p-3">
                   <p className="text-xs text-muted-foreground mb-1">NOI (연)</p>
-                  <p className="text-xl font-bold text-foreground">{mockAnalysis.noi.noi}</p>
+                  <p className="text-xl font-bold text-foreground">{displayData.noi.noi}</p>
                 </Card>
                 <Card className="border-border bg-white p-3">
                   <p className="text-xs text-muted-foreground mb-1">예상 대출</p>
-                  <p className="text-xl font-bold text-foreground">{mockAnalysis.financial.loanAmount.split('~')[0]}억+</p>
+                  <p className="text-xl font-bold text-foreground">{displayData.financial.loanAmount.split('~')[0]}억+</p>
                 </Card>
               </div>
 
@@ -441,19 +552,19 @@ export default function DemoAnalysisPage() {
                 <CardContent className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">매입가</p>
-                    <p className="font-medium text-foreground">{mockAnalysis.dealAmount}</p>
+                    <p className="font-medium text-foreground">{displayData.dealAmount}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">예상 월세</p>
-                    <p className="font-medium text-foreground">{mockAnalysis.noi.monthlyRent}</p>
+                    <p className="font-medium text-foreground">{displayData.noi.monthlyRent}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">자기자본</p>
-                    <p className="font-medium text-foreground">{mockAnalysis.financial.equity}</p>
+                    <p className="font-medium text-foreground">{displayData.financial.equity}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">자기자본 비율</p>
-                    <p className="font-medium text-foreground">{mockAnalysis.financial.equityRatio}</p>
+                    <p className="font-medium text-foreground">{displayData.financial.equityRatio}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -469,15 +580,15 @@ export default function DemoAnalysisPage() {
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-muted-foreground">예상 대출 가능액</span>
-                    <span className="font-semibold text-foreground">{mockAnalysis.financial.loanAmount}</span>
+                    <span className="font-semibold text-foreground">{displayData.financial.loanAmount}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-muted-foreground">예상 금리</span>
-                    <span className="font-semibold text-foreground">{mockAnalysis.financial.rate}</span>
+                    <span className="font-semibold text-foreground">{displayData.financial.rate}</span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground">월 이자 부담</span>
-                    <span className="font-semibold text-foreground">{mockAnalysis.financial.monthlyInterest}</span>
+                    <span className="font-semibold text-foreground">{displayData.financial.monthlyInterest}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -493,11 +604,11 @@ export default function DemoAnalysisPage() {
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-muted-foreground">연 임대수입</span>
-                    <span className="font-semibold text-foreground">{mockAnalysis.noi.annualRent}</span>
+                    <span className="font-semibold text-foreground">{displayData.noi.annualRent}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-border">
                     <span className="text-muted-foreground">Cap Rate</span>
-                    <span className="font-semibold text-foreground">{mockAnalysis.noi.capRate}</span>
+                    <span className="font-semibold text-foreground">{displayData.noi.capRate}</span>
                   </div>
                   <div className="p-2 bg-chart-3/5 rounded-lg border border-chart-3/10 mt-2">
                     <p className="text-xs text-muted-foreground">
@@ -516,7 +627,7 @@ export default function DemoAnalysisPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {mockAnalysis.risks.legal.map((risk, i) => (
+                  {displayData.risks.legal.map((risk, i) => (
                     <div key={i} className="flex items-start gap-2 p-2 bg-secondary/30 rounded-lg">
                       <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${
                         risk.level === 'error' ? 'text-destructive' : 
@@ -569,7 +680,7 @@ export default function DemoAnalysisPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {mockAnalysis.comparables.map((comp, i) => (
+                    {displayData.comparables.map((comp, i) => (
                       <div key={i} className="flex items-center justify-between p-2 bg-secondary/30 rounded-lg">
                         <div>
                           <p className="text-sm font-medium text-foreground">{comp.address}</p>
@@ -595,7 +706,7 @@ export default function DemoAnalysisPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-1.5">
-                    {mockAnalysis.dataSources.map((source, i) => (
+                    {displayData.dataSources.map((source, i) => (
                       <Badge key={i} variant="secondary" className="text-xs font-normal">
                         {source}
                       </Badge>
@@ -666,7 +777,38 @@ export default function DemoAnalysisPage() {
 }
 
 // Extracted component for Analysis Results (used in desktop right panel)
-function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { mockAnalysis: typeof import('./page').mockAnalysis, showSteps: boolean, setShowSteps: (v: boolean) => void }) {
+interface AnalysisDisplayData {
+  address: string
+  assetType: string
+  dealAmount: string
+  score: number
+  grade: string
+  verdict: string
+  financial: {
+    ltv: string
+    loanAmount: string
+    rate: string
+    monthlyInterest: string
+    equity: string
+    equityRatio: string
+  }
+  noi: {
+    deposit: string
+    monthlyRent: string
+    annualRent: string
+    noi: string
+    dscr: string
+    capRate: string
+  }
+  risks: {
+    legal: Array<{ text: string; level: string }>
+    financial: Array<{ text: string; level: string }>
+  }
+  comparables: Array<{ address: string; type: string; price: string; ltv: string; date: string }>
+  dataSources: string[]
+}
+
+function AnalysisResultsContent({ analysisData, showSteps, setShowSteps }: { analysisData: AnalysisDisplayData, showSteps: boolean, setShowSteps: (v: boolean) => void }) {
   return (
     <>
       {/* Bankability Score Card */}
@@ -676,16 +818,16 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bankability Score</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-bold text-foreground">{mockAnalysis.score}</span>
+                <span className="text-5xl font-bold text-foreground">{analysisData.score}</span>
                 <span className="text-xl text-muted-foreground">/ 100</span>
               </div>
             </div>
             <Badge className="bg-chart-3/10 text-chart-3 border-chart-3/20 text-sm px-3 py-1">
-              {mockAnalysis.grade} · {mockAnalysis.verdict}
+              {analysisData.grade} · {analysisData.verdict}
             </Badge>
           </div>
           <div className="w-full bg-border rounded-full h-3 mb-3">
-            <div className="bg-chart-3 h-3 rounded-full transition-all" style={{ width: `${mockAnalysis.score}%` }} />
+            <div className="bg-chart-3 h-3 rounded-full transition-all" style={{ width: `${analysisData.score}%` }} />
           </div>
           <p className="text-sm text-muted-foreground">
             임대수익은 양호하나, 자기자본 확보와 공사비 리스크 보완이 필요합니다. 선임대 계약 확보 시 금융기관 사전 협의 가능합니다.
@@ -722,29 +864,29 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-secondary/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-1">예상 LTV</p>
-                  <p className="text-2xl font-bold text-foreground">{mockAnalysis.financial.ltv}</p>
+                  <p className="text-2xl font-bold text-foreground">{analysisData.financial.ltv}</p>
                 </div>
                 <div className="p-4 bg-secondary/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-1">예상 금리</p>
-                  <p className="text-2xl font-bold text-foreground">{mockAnalysis.financial.rate}</p>
+                  <p className="text-2xl font-bold text-foreground">{analysisData.financial.rate}</p>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">예상 대출 가능액</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.financial.loanAmount}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.financial.loanAmount}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">자기자본 필요액</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.financial.equity}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.financial.equity}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">자기자본 비율</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.financial.equityRatio}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.financial.equityRatio}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-sm text-muted-foreground">월 이자 부담</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.financial.monthlyInterest}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.financial.monthlyInterest}</span>
                 </div>
               </div>
               <div className="p-3 bg-chart-1/5 rounded-lg border border-chart-1/10">
@@ -771,29 +913,29 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-chart-2/5 rounded-lg border border-chart-2/10">
                   <p className="text-xs text-muted-foreground mb-1">NOI (연)</p>
-                  <p className="text-2xl font-bold text-foreground">{mockAnalysis.noi.noi}</p>
+                  <p className="text-2xl font-bold text-foreground">{analysisData.noi.noi}</p>
                 </div>
                 <div className="p-4 bg-chart-2/5 rounded-lg border border-chart-2/10">
                   <p className="text-xs text-muted-foreground mb-1">DSCR</p>
-                  <p className="text-2xl font-bold text-foreground">{mockAnalysis.noi.dscr}</p>
+                  <p className="text-2xl font-bold text-foreground">{analysisData.noi.dscr}</p>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">예상 보증금</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.noi.deposit}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.noi.deposit}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">예상 월세</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.noi.monthlyRent}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.noi.monthlyRent}</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-border">
                   <span className="text-sm text-muted-foreground">연 임대수입</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.noi.annualRent}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.noi.annualRent}</span>
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-sm text-muted-foreground">Cap Rate</span>
-                  <span className="text-sm font-semibold text-foreground">{mockAnalysis.noi.capRate}</span>
+                  <span className="text-sm font-semibold text-foreground">{analysisData.noi.capRate}</span>
                 </div>
               </div>
               <div className="p-3 bg-chart-3/5 rounded-lg border border-chart-3/10">
@@ -818,7 +960,7 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {mockAnalysis.risks.legal.map((risk, i) => (
+              {analysisData.risks.legal.map((risk, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 bg-secondary/30 rounded-lg">
                   <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${
                     risk.level === 'error' ? 'text-destructive' : 
@@ -839,7 +981,7 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {mockAnalysis.risks.financial.map((risk, i) => (
+              {analysisData.risks.financial.map((risk, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 bg-secondary/30 rounded-lg">
                   <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${
                     risk.level === 'error' ? 'text-destructive' : 
@@ -893,7 +1035,7 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {mockAnalysis.comparables.map((comp, i) => (
+                {analysisData.comparables.map((comp, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-foreground">{comp.address}</p>
@@ -951,7 +1093,7 @@ function AnalysisResultsContent({ mockAnalysis, showSteps, setShowSteps }: { moc
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            {mockAnalysis.dataSources.map((source, i) => (
+            {analysisData.dataSources.map((source, i) => (
               <Badge key={i} variant="secondary" className="text-xs font-normal">
                 {source}
               </Badge>
