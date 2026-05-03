@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { getHealth, getSampleAnalysis } from "@/lib/api/analysis"
+import { getHealth, getSampleAnalysis, runAnalysis } from "@/lib/api/analysis"
 import { isApiConfigured } from "@/lib/api/client"
 import { adaptApiResponse, type DisplayAnalysis } from "@/lib/api/adapters"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { toast } from "sonner"
 import {
   Landmark,
   FileText,
@@ -35,9 +36,63 @@ import {
   Scale,
   CircleDot,
   ExternalLink,
+  Edit3,
+  X,
+  Loader2,
 } from "lucide-react"
 
-// Mock data for the analysis
+// Deal condition type
+interface DealConditions {
+  address: string
+  asset_type: string
+  deal_amount: number
+  deposit: number
+  monthly_rent: number
+  equity: number
+  investment_purpose: string
+  interest_rate: number
+  vacancy_rate: number
+  operating_expense_ratio: number
+  remodeling_cost: number
+}
+
+// Default deal conditions
+const defaultDealConditions: DealConditions = {
+  address: "서울시 마포구 신수동 27-2",
+  asset_type: "근린생활시설",
+  deal_amount: 4200000000,
+  deposit: 350000000,
+  monthly_rent: 28000000,
+  equity: 1850000000,
+  investment_purpose: "리모델링 후 임대",
+  interest_rate: 0.05,
+  vacancy_rate: 0.10,
+  operating_expense_ratio: 0.20,
+  remodeling_cost: 0,
+}
+
+// Format number to Korean style (억/만)
+function formatToKorean(value: number): string {
+  if (value >= 100000000) {
+    const billions = value / 100000000
+    return `${billions % 1 === 0 ? billions : billions.toFixed(1)}억`
+  } else if (value >= 10000) {
+    const millions = value / 10000
+    return `${millions.toLocaleString()}만`
+  }
+  return value.toLocaleString()
+}
+
+// Parse Korean format to number
+function parseKoreanToNumber(value: string, unit: '억' | '만원'): number {
+  const num = parseFloat(value.replace(/,/g, ''))
+  if (isNaN(num)) return 0
+  if (unit === '억') return num * 100000000
+  if (unit === '만원') return num * 10000
+  return num
+}
+
+// Mock data for the analysis (fallback)
 const mockAnalysis = {
   address: "서울시 마포구 신수동 27-2",
   assetType: "근린생활시설",
@@ -87,28 +142,53 @@ const mockAnalysis = {
   ],
 }
 
-const analysisSteps = [
-  { step: "질문 의도 분석", status: "complete", time: "0.3s" },
-  { step: "실거래 사례 확인", status: "complete", time: "1.2s" },
-  { step: "임대수익 추정", status: "complete", time: "0.8s" },
-  { step: "금리 및 LTV 시나리오 적용", status: "complete", time: "0.6s" },
-  { step: "법규/개발 리스크 체크", status: "complete", time: "1.4s" },
-  { step: "유사 사례 비교", status: "complete", time: "0.9s" },
-  { step: "Bankability Score 산정", status: "complete", time: "0.4s" },
+// Analysis process steps
+const analysisProcessSteps = [
+  "질문 의도 분석 중",
+  "입력 조건 정리 중",
+  "임대수익 추정 중",
+  "LTV / 금리 시나리오 적용 중",
+  "NOI / DSCR 계산 중",
+  "리스크 체크 중",
+  "Bankability Score 산정 중",
 ]
 
 // API connection status type
-type ApiStatus = 'connecting' | 'connected' | 'fallback'
+type ApiStatus = 'connecting' | 'connected' | 'fallback' | 'analyzing'
+
+// Chat message type
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 export default function DemoAnalysisPage() {
   const [inputValue, setInputValue] = useState("")
   const [showSteps, setShowSteps] = useState(true)
   const [apiStatus, setApiStatus] = useState<ApiStatus>('connecting')
   const [analysisData, setAnalysisData] = useState<DisplayAnalysis | null>(null)
+  
+  // Deal conditions state
+  const [dealConditions, setDealConditions] = useState<DealConditions>(defaultDealConditions)
+  const [editMode, setEditMode] = useState(false)
+  const [editConditions, setEditConditions] = useState<DealConditions>(defaultDealConditions)
+  
+  // Analysis process state
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [currentStep, setCurrentStep] = useState(-1)
+  const [completedSteps, setCompletedSteps] = useState<number[]>([])
+  
+  // Chat messages
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: 'user', content: '마포구 신수동 27-2 근생을 42억에 매입해서 리모델링 후 임대하려고 해. 금융적으로 괜찮을까?' },
+  ])
+  
+  // Score highlight animation
+  const [scoreHighlight, setScoreHighlight] = useState(false)
+  const previousApiStatus = useRef<ApiStatus>('connecting')
 
   // Fetch API data on mount
   const fetchApiData = useCallback(async () => {
-    // If API URL is not configured, immediately use mock data
     if (!isApiConfigured()) {
       setApiStatus('fallback')
       return
@@ -117,26 +197,20 @@ export default function DemoAnalysisPage() {
     setApiStatus('connecting')
     
     try {
-      // Try health check first, but don't block on failure
       const healthResponse = await getHealth()
-      
-      // Even if health check fails, still try to get sample analysis
-      // (backend might have partial availability)
       const analysisResponse = await getSampleAnalysis()
       
       if (analysisResponse.ok && analysisResponse.data) {
-        // Use adapter to transform API response to display structure
         const adapted = adaptApiResponse(analysisResponse.data, mockAnalysis)
         setAnalysisData(adapted)
         setApiStatus('connected')
       } else if (healthResponse.ok) {
-        // Health OK but analysis failed - still show as connected but use mock
         setApiStatus('fallback')
       } else {
-        // Both failed
         setApiStatus('fallback')
       }
-    } catch {
+    } catch (error) {
+      console.log('[v0] API connection error:', error)
       setApiStatus('fallback')
     }
   }, [])
@@ -145,11 +219,139 @@ export default function DemoAnalysisPage() {
     fetchApiData()
   }, [fetchApiData])
 
+  // Run analysis with current deal conditions
+  const handleRunAnalysis = useCallback(async (userMessage: string) => {
+    if (!userMessage.trim()) return
+    
+    // Add user message to chat
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setInputValue("")
+    
+    // Start analysis process visualization
+    setIsAnalyzing(true)
+    setCurrentStep(0)
+    setCompletedSteps([])
+    previousApiStatus.current = apiStatus
+    setApiStatus('analyzing')
+    
+    // Simulate step progression
+    const stepDelay = 400
+    for (let i = 0; i < analysisProcessSteps.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, stepDelay))
+      setCurrentStep(i)
+      setCompletedSteps(prev => [...prev, i])
+    }
+    
+    // Make API call
+    try {
+      const payload = {
+        address: dealConditions.address,
+        asset_type: dealConditions.asset_type,
+        deal_amount: dealConditions.deal_amount,
+        deposit: dealConditions.deposit,
+        monthly_rent: dealConditions.monthly_rent,
+        equity: dealConditions.equity,
+        investment_purpose: dealConditions.investment_purpose,
+        user_message: userMessage,
+        interest_rate: dealConditions.interest_rate,
+        vacancy_rate: dealConditions.vacancy_rate,
+        operating_expense_ratio: dealConditions.operating_expense_ratio,
+        remodeling_cost: dealConditions.remodeling_cost,
+      }
+      
+      const response = await runAnalysis(payload)
+      
+      if (response.ok && response.data) {
+        const adapted = adaptApiResponse(response.data, mockAnalysis)
+        setAnalysisData(adapted)
+        setApiStatus('connected')
+        
+        // Add AI response to chat
+        const aiMessage = adapted.verdict 
+          ? `현재 조건에서는 **${adapted.verdict}**입니다. 예상 LTV가 ${adapted.financial?.ltv ?? 'N/A'} 수준이며, DSCR ${adapted.noi?.dscr ?? 'N/A'}로 분석됩니다.`
+          : '분석이 완료되었습니다. 결과를 확인해주세요.'
+        setChatMessages(prev => [...prev, { role: 'assistant', content: aiMessage }])
+        
+        // Trigger score highlight
+        setScoreHighlight(true)
+        setTimeout(() => setScoreHighlight(false), 1500)
+      } else {
+        console.log('[v0] Analysis API failed:', response.error)
+        setApiStatus('fallback')
+        setChatMessages(prev => [...prev, { role: 'assistant', content: '분석 중 오류가 발생했습니다. Mock 데이터로 표시합니다.' }])
+      }
+    } catch (error) {
+      console.log('[v0] Analysis error:', error)
+      setApiStatus('fallback')
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '분석 중 오류가 발생했습니다. Mock 데이터로 표시합니다.' }])
+    }
+    
+    setIsAnalyzing(false)
+    setCurrentStep(-1)
+  }, [dealConditions, apiStatus])
+
+  // Handle new analysis button
+  const handleNewAnalysis = useCallback(() => {
+    setDealConditions(defaultDealConditions)
+    setEditConditions(defaultDealConditions)
+    setAnalysisData(null)
+    setChatMessages([])
+    setInputValue("")
+    setShowSteps(true)
+    setIsAnalyzing(false)
+    setCurrentStep(-1)
+    setCompletedSteps([])
+    setEditMode(false)
+    
+    // Re-fetch sample data
+    fetchApiData()
+    
+    toast.success("새 분석이 시작되었습니다.")
+  }, [fetchApiData])
+
+  // Handle edit mode
+  const handleStartEdit = () => {
+    setEditConditions({ ...dealConditions })
+    setEditMode(true)
+  }
+
+  const handleCancelEdit = () => {
+    setEditConditions({ ...dealConditions })
+    setEditMode(false)
+  }
+
+  const handleApplyEdit = () => {
+    setDealConditions({ ...editConditions })
+    setEditMode(false)
+    toast.success("딜 조건이 업데이트되었습니다.")
+  }
+
+  // Handle button clicks for not-yet-implemented features
+  const handleComingSoon = (featureName: string) => {
+    toast.info("이 기능은 다음 단계에서 활성화됩니다.", {
+      description: featureName,
+    })
+  }
+
+  const handlePdfReport = () => {
+    toast.info("PDF 리포트 생성 기능은 다음 단계에서 활성화됩니다.", {
+      description: "현재 분석 결과는 은행 제출용 리포트 구조로 변환될 예정입니다.",
+    })
+  }
+
+  // Handle form submit
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (inputValue.trim() && !isAnalyzing) {
+      handleRunAnalysis(inputValue)
+    }
+  }
+
   // Merge API data with mock data (API takes priority)
   const displayData = {
     address: analysisData?.address ?? mockAnalysis.address,
     assetType: analysisData?.assetType ?? mockAnalysis.assetType,
-    dealAmount: analysisData?.dealAmount ?? mockAnalysis.dealAmount,
+    dealAmount: analysisData?.dealAmount ?? formatToKorean(dealConditions.deal_amount),
     score: analysisData?.score ?? mockAnalysis.score,
     grade: analysisData?.grade ?? mockAnalysis.grade,
     verdict: analysisData?.verdict ?? mockAnalysis.verdict,
@@ -158,12 +360,12 @@ export default function DemoAnalysisPage() {
       loanAmount: analysisData?.financial?.loanAmount ?? mockAnalysis.financial.loanAmount,
       rate: analysisData?.financial?.rate ?? mockAnalysis.financial.rate,
       monthlyInterest: analysisData?.financial?.monthlyInterest ?? mockAnalysis.financial.monthlyInterest,
-      equity: analysisData?.financial?.equity ?? mockAnalysis.financial.equity,
+      equity: analysisData?.financial?.equity ?? formatToKorean(dealConditions.equity),
       equityRatio: analysisData?.financial?.equityRatio ?? mockAnalysis.financial.equityRatio,
     },
     noi: {
-      deposit: analysisData?.noi?.deposit ?? mockAnalysis.noi.deposit,
-      monthlyRent: analysisData?.noi?.monthlyRent ?? mockAnalysis.noi.monthlyRent,
+      deposit: analysisData?.noi?.deposit ?? formatToKorean(dealConditions.deposit),
+      monthlyRent: analysisData?.noi?.monthlyRent ?? formatToKorean(dealConditions.monthly_rent),
       annualRent: analysisData?.noi?.annualRent ?? mockAnalysis.noi.annualRent,
       noi: analysisData?.noi?.noi ?? mockAnalysis.noi.noi,
       dscr: analysisData?.noi?.dscr ?? mockAnalysis.noi.dscr,
@@ -176,6 +378,23 @@ export default function DemoAnalysisPage() {
     comparables: analysisData?.comparables ?? mockAnalysis.comparables,
     dataSources: analysisData?.dataSources ?? mockAnalysis.dataSources,
   }
+
+  // Generate dynamic analysis steps based on current state
+  const displaySteps = isAnalyzing 
+    ? analysisProcessSteps.map((step, i) => ({
+        step,
+        status: completedSteps.includes(i) ? 'complete' : (currentStep === i ? 'running' : 'pending'),
+        time: completedSteps.includes(i) ? `${(0.3 + Math.random() * 1.2).toFixed(1)}s` : '...',
+      }))
+    : [
+        { step: "질문 의도 분석", status: "complete", time: "0.3s" },
+        { step: "실거래 사례 확인", status: "complete", time: "1.2s" },
+        { step: "임대수익 추정", status: "complete", time: "0.8s" },
+        { step: "금리 및 LTV 시나리오 적용", status: "complete", time: "0.6s" },
+        { step: "법규/개발 리스크 체크", status: "complete", time: "1.4s" },
+        { step: "유사 사례 비교", status: "complete", time: "0.9s" },
+        { step: "Bankability Score 산정", status: "complete", time: "0.4s" },
+      ]
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -192,23 +411,43 @@ export default function DemoAnalysisPage() {
         {/* Nav Items */}
         <ScrollArea className="flex-1 py-4">
           <nav className="px-3 space-y-1">
-            <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={handleNewAnalysis}
+            >
               <Plus className="w-4 h-4" />
               <span className="text-sm">새 분석</span>
             </Button>
-            <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => handleComingSoon("내 분석 기록")}
+            >
               <FolderOpen className="w-4 h-4" />
               <span className="text-sm">내 분석 기록</span>
             </Button>
-            <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => handleComingSoon("관심 지역")}
+            >
               <MapPin className="w-4 h-4" />
               <span className="text-sm">관심 지역</span>
             </Button>
-            <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => handleComingSoon("리포트 보관함")}
+            >
               <FileText className="w-4 h-4" />
               <span className="text-sm">리포트 보관함</span>
             </Button>
-            <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => handleComingSoon("데이터 출처")}
+            >
               <Database className="w-4 h-4" />
               <span className="text-sm">데이터 출처</span>
             </Button>
@@ -217,14 +456,22 @@ export default function DemoAnalysisPage() {
           <div className="mt-6 px-3">
             <p className="text-xs text-sidebar-foreground/50 uppercase tracking-wider px-3 mb-2">최근 분석</p>
             <div className="space-y-1">
-              <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground bg-sidebar-accent">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground bg-sidebar-accent"
+                onClick={() => handleComingSoon("최근 분석: 마포구 신수동 27-2")}
+              >
                 <Building2 className="w-4 h-4" />
                 <div className="flex-1 text-left">
                   <p className="text-xs truncate">마포구 신수동 27-2</p>
-                  <p className="text-xs text-sidebar-foreground/50">42억</p>
+                  <p className="text-xs text-sidebar-foreground/50">{formatToKorean(dealConditions.deal_amount)}</p>
                 </div>
               </Button>
-              <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+              <Button 
+                variant="ghost" 
+                className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                onClick={() => handleComingSoon("최근 분석: 강남구 역삼동 123-4")}
+              >
                 <Building2 className="w-4 h-4" />
                 <div className="flex-1 text-left">
                   <p className="text-xs truncate">강남구 역삼동 123-4</p>
@@ -250,11 +497,13 @@ export default function DemoAnalysisPage() {
               <div className={`w-2 h-2 rounded-full ${
                 apiStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
                 apiStatus === 'connected' ? 'bg-chart-2' :
+                apiStatus === 'analyzing' ? 'bg-blue-500 animate-pulse' :
                 'bg-orange-400'
               }`} />
               <span className="text-sidebar-foreground/50">
                 {apiStatus === 'connecting' ? 'API 연결 중...' :
                  apiStatus === 'connected' ? 'API 연결됨' :
+                 apiStatus === 'analyzing' ? '분석 중...' :
                  'Mock 데이터'}
               </span>
             </div>
@@ -281,7 +530,7 @@ export default function DemoAnalysisPage() {
             <div className="hidden sm:block h-4 w-px bg-border" />
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground truncate max-w-[120px] sm:max-w-none">마포구 신수동 27-2</span>
+              <span className="text-sm font-medium text-foreground truncate max-w-[120px] sm:max-w-none">{dealConditions.address.split(' ').slice(-2).join(' ')}</span>
             </div>
             <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
               {displayData.assetType}
@@ -299,7 +548,9 @@ export default function DemoAnalysisPage() {
                   ? 'border-yellow-500/30 text-yellow-600 bg-yellow-50' 
                   : apiStatus === 'connected' 
                     ? 'border-chart-2/30 text-chart-2 bg-chart-2/5' 
-                    : 'border-orange-400/30 text-orange-500 bg-orange-50'
+                    : apiStatus === 'analyzing'
+                      ? 'border-blue-500/30 text-blue-600 bg-blue-50'
+                      : 'border-orange-400/30 text-orange-500 bg-orange-50'
               }`}
             >
               <div className={`w-1 h-1 rounded-full mr-1 ${
@@ -307,15 +558,21 @@ export default function DemoAnalysisPage() {
                   ? 'bg-yellow-500 animate-pulse' 
                   : apiStatus === 'connected' 
                     ? 'bg-chart-2' 
-                    : 'bg-orange-400'
+                    : apiStatus === 'analyzing'
+                      ? 'bg-blue-500 animate-pulse'
+                      : 'bg-orange-400'
               }`} />
-              {apiStatus === 'connecting' ? 'API...' : apiStatus === 'connected' ? 'API' : 'Mock'}
+              {apiStatus === 'connecting' ? 'API...' : apiStatus === 'connected' ? 'API' : apiStatus === 'analyzing' ? '분석 중' : 'Mock'}
             </Badge>
-            <Badge className="bg-chart-2/10 text-chart-2 border-chart-2/20 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-chart-2 mr-1.5" />
-              분석 완료
+            <Badge className={`text-xs ${isAnalyzing ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : 'bg-chart-2/10 text-chart-2 border-chart-2/20'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isAnalyzing ? 'bg-blue-500 animate-pulse' : 'bg-chart-2'}`} />
+              {isAnalyzing ? '분석 중...' : '분석 완료'}
             </Badge>
-            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 hidden sm:flex">
+            <Button 
+              size="sm" 
+              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 hidden sm:flex"
+              onClick={handlePdfReport}
+            >
               <FileBarChart className="w-4 h-4" />
               PDF 리포트 생성
             </Button>
@@ -332,111 +589,210 @@ export default function DemoAnalysisPage() {
                 {/* Deal Input Card */}
                 <Card className="border-border">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Calculator className="w-4 h-4 text-muted-foreground" />
-                      딜 조건
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-muted-foreground" />
+                        딜 조건
+                      </CardTitle>
+                      {!editMode ? (
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleStartEdit}>
+                          <Edit3 className="w-3 h-3 mr-1" />
+                          조건 수정
+                        </Button>
+                      ) : (
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleCancelEdit}>
+                            <X className="w-3 h-3 mr-1" />
+                            취소
+                          </Button>
+                          <Button size="sm" className="h-7 px-2 text-xs" onClick={handleApplyEdit}>
+                            적용
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">주소</p>
-                      <p className="font-medium text-foreground">{displayData.address}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">매입가</p>
-                      <p className="font-medium text-foreground">{displayData.dealAmount}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
-                      <p className="font-medium text-foreground">{displayData.noi.deposit}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
-                      <p className="font-medium text-foreground">{displayData.noi.monthlyRent}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">자기자본</p>
-                      <p className="font-medium text-foreground">{displayData.financial.equity}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
-                      <p className="font-medium text-foreground">리모델링 후 임대</p>
-                    </div>
+                    {editMode ? (
+                      <>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">주소</p>
+                          <Input 
+                            value={editConditions.address}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, address: e.target.value }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
+                          <Input 
+                            type="number"
+                            step="0.1"
+                            value={editConditions.deal_amount / 100000000}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, deal_amount: parseFloat(e.target.value) * 100000000 || 0 }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">예상 보증금 (억)</p>
+                          <Input 
+                            type="number"
+                            step="0.1"
+                            value={editConditions.deposit / 100000000}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, deposit: parseFloat(e.target.value) * 100000000 || 0 }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">예상 월세 (만원)</p>
+                          <Input 
+                            type="number"
+                            step="100"
+                            value={editConditions.monthly_rent / 10000}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, monthly_rent: parseFloat(e.target.value) * 10000 || 0 }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">자기자본 (억)</p>
+                          <Input 
+                            type="number"
+                            step="0.1"
+                            value={editConditions.equity / 100000000}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, equity: parseFloat(e.target.value) * 100000000 || 0 }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
+                          <Input 
+                            value={editConditions.investment_purpose}
+                            onChange={(e) => setEditConditions(prev => ({ ...prev, investment_purpose: e.target.value }))}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">주소</p>
+                          <p className="font-medium text-foreground">{dealConditions.address}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">매입가</p>
+                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.deal_amount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
+                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.deposit)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
+                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.monthly_rent)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">자기자본</p>
+                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.equity)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
+                          <p className="font-medium text-foreground">{dealConditions.investment_purpose}</p>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
                 {/* Chat Messages */}
                 <div className="space-y-4">
-                  {/* User Message */}
-                  <div className="flex justify-end">
-                    <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-4 py-3 max-w-[85%]">
-                      <p className="text-sm">마포구 신수동 27-2 근생을 42억에 매입해서 리모델링 후 임대하려고 해. 금융적으로 괜찮을까?</p>
-                    </div>
-                  </div>
-
-                  {/* AI Response */}
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
-                      <Landmark className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="flex-1 space-y-3">
-                      <div className="bg-secondary rounded-lg rounded-tl-sm px-4 py-3">
-                        <p className="text-sm text-foreground leading-relaxed">
-                          현재 조건에서는 <strong>조건부 검토 가능</strong>합니다. 예상 LTV가 52~58% 수준이며, DSCR 1.21x로 원리금 상환 비율은 최소 기준을 충족합니다. 다만 선임대 근거 확보와 공사비 리스크 보완이 필요합니다.
-                        </p>
+                  {chatMessages.map((message, i) => (
+                    message.role === 'user' ? (
+                      <div key={i} className="flex justify-end">
+                        <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-4 py-3 max-w-[85%]">
+                          <p className="text-sm">{message.content}</p>
+                        </div>
                       </div>
+                    ) : (
+                      <div key={i} className="flex gap-3">
+                        <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
+                          <Landmark className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1 space-y-3">
+                          <div className="bg-secondary rounded-lg rounded-tl-sm px-4 py-3">
+                            <p className="text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ))}
 
-                      {/* Analysis Steps */}
-                      <Card className="border-border">
-                        <CardHeader className="pb-2">
-                          <button 
-                            onClick={() => setShowSteps(!showSteps)}
-                            className="flex items-center justify-between w-full"
-                          >
-                            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                              <Clock className="w-3.5 h-3.5" />
-                              분석 프로세스 (5.6s)
-                            </CardTitle>
-                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showSteps ? '' : '-rotate-90'}`} />
-                          </button>
-                        </CardHeader>
-                        {showSteps && (
-                          <CardContent className="pt-0">
-                            <div className="space-y-2">
-                              {analysisSteps.map((step, i) => (
-                                <div key={i} className="flex items-center gap-3 text-xs">
-                                  <div className="w-4 h-4 rounded-full bg-chart-2/10 flex items-center justify-center">
+                  {/* Analysis Steps Card */}
+                  {(chatMessages.length > 0 || isAnalyzing) && (
+                    <Card className="border-border">
+                      <CardHeader className="pb-2">
+                        <button 
+                          onClick={() => setShowSteps(!showSteps)}
+                          className="flex items-center justify-between w-full"
+                        >
+                          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5" />
+                            분석 프로세스 {isAnalyzing ? '' : '(5.6s)'}
+                          </CardTitle>
+                          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showSteps ? '' : '-rotate-90'}`} />
+                        </button>
+                      </CardHeader>
+                      {showSteps && (
+                        <CardContent className="pt-0">
+                          <div className="space-y-2">
+                            {displaySteps.map((step, i) => (
+                              <div key={i} className="flex items-center gap-3 text-xs">
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                                  step.status === 'complete' ? 'bg-chart-2/10' :
+                                  step.status === 'running' ? 'bg-blue-500/10' :
+                                  'bg-muted'
+                                }`}>
+                                  {step.status === 'complete' ? (
                                     <CheckCircle2 className="w-3 h-3 text-chart-2" />
-                                  </div>
-                                  <span className="flex-1 text-foreground">{step.step}</span>
-                                  <span className="text-muted-foreground font-mono">{step.time}</span>
+                                  ) : step.status === 'running' ? (
+                                    <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                                  ) : (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                                  )}
                                 </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        )}
-                      </Card>
-                    </div>
-                  </div>
+                                <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
+                                <span className="text-muted-foreground font-mono">{step.time}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  )}
                 </div>
               </div>
             </ScrollArea>
 
             {/* Input Area - Desktop */}
             <div className="p-4 border-t border-border bg-white">
-              <div className="flex gap-2">
+              <form onSubmit={handleSubmit} className="flex gap-2">
                 <Input
                   placeholder="추가 질문을 입력하세요..."
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className="flex-1"
+                  disabled={isAnalyzing}
                 />
-                <Button size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Send className="w-4 h-4" />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  disabled={isAnalyzing || !inputValue.trim()}
+                >
+                  {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </Button>
-              </div>
+              </form>
               <p className="text-xs text-muted-foreground mt-2">
-                예: &quot;자기자본을 20억으로 늘리�� 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
+                예: &quot;자기자본을 20억으로 늘리면 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
               </p>
             </div>
           </div>
@@ -445,7 +801,13 @@ export default function DemoAnalysisPage() {
           <div className="flex-1 bg-background overflow-hidden">
             <ScrollArea className="h-full">
               <div className="p-4 lg:p-6 space-y-4">
-                <AnalysisResultsContent analysisData={displayData} showSteps={showSteps} setShowSteps={setShowSteps} />
+                <AnalysisResultsContent 
+                  analysisData={displayData} 
+                  showSteps={showSteps} 
+                  setShowSteps={setShowSteps} 
+                  scoreHighlight={scoreHighlight}
+                  onPdfReport={handlePdfReport}
+                />
               </div>
             </ScrollArea>
           </div>
@@ -457,13 +819,13 @@ export default function DemoAnalysisPage() {
           <div className="flex-1 overflow-y-auto pb-[140px]">
             <div className="p-4 space-y-4">
               {/* Bankability Score Card - Most Important First */}
-              <Card className="border-border bg-white overflow-hidden">
+              <Card className={`border-border bg-white overflow-hidden transition-all duration-500 ${scoreHighlight ? 'ring-2 ring-primary/50 shadow-lg' : ''}`}>
                 <div className="bg-primary/5 border-b border-border p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bankability Score</p>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-foreground">{displayData.score}</span>
+                        <span className={`text-4xl font-bold text-foreground transition-all duration-500 ${scoreHighlight ? 'scale-110' : ''}`}>{displayData.score}</span>
                         <span className="text-lg text-muted-foreground">/ 100</span>
                       </div>
                     </div>
@@ -472,7 +834,7 @@ export default function DemoAnalysisPage() {
                     </Badge>
                   </div>
                   <div className="w-full bg-border rounded-full h-2 mb-2">
-                    <div className="bg-chart-3 h-2 rounded-full transition-all" style={{ width: `${displayData.score}%` }} />
+                    <div className="bg-chart-3 h-2 rounded-full transition-all duration-500" style={{ width: `${displayData.score}%` }} />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     선임대 계약 확보 시 금융기관 사전 협의 가능
@@ -508,9 +870,9 @@ export default function DemoAnalysisPage() {
                     <div>
                       <p className="text-sm font-medium text-foreground mb-1">주요 리스크</p>
                       <ul className="text-xs text-muted-foreground space-y-1">
-                        <li>• 공사비 상승 리스크</li>
-                        <li>• 선임대 근거 보완 필요</li>
-                        <li>• 금리 인상 리스크</li>
+                        {displayData.risks.financial.slice(0, 3).map((risk, i) => (
+                          <li key={i}>• {risk.text}</li>
+                        ))}
                       </ul>
                     </div>
                   </div>
@@ -519,48 +881,53 @@ export default function DemoAnalysisPage() {
 
               {/* Chat Thread */}
               <div className="space-y-3">
-                {/* User Message */}
-                <div className="flex justify-end">
-                  <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]">
-                    <p className="text-sm">마포구 신수동 27-2 근생을 42억에 매입해서 리모델링 후 임대하려고 해. 금융적으로 괜찮을까?</p>
-                  </div>
-                </div>
-
-                {/* AI Response */}
-                <div className="flex gap-2">
-                  <div className="w-7 h-7 rounded bg-secondary flex items-center justify-center shrink-0">
-                    <Landmark className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-secondary rounded-lg rounded-tl-sm px-3 py-2">
-                      <p className="text-sm text-foreground leading-relaxed">
-                        현재 조건에서는 <strong>조건부 검토 가능</strong>합니다. 예상 LTV가 52~58% 수준이며, DSCR 1.21x로 원리금 상환 비율은 최소 기준을 충족합니다.
-                      </p>
+                {chatMessages.map((message, i) => (
+                  message.role === 'user' ? (
+                    <div key={i} className="flex justify-end">
+                      <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]">
+                        <p className="text-sm">{message.content}</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  ) : (
+                    <div key={i} className="flex gap-2">
+                      <div className="w-7 h-7 rounded bg-secondary flex items-center justify-center shrink-0">
+                        <Landmark className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="bg-secondary rounded-lg rounded-tl-sm px-3 py-2">
+                          <p className="text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ))}
               </div>
 
               {/* Deal Condition Summary */}
               <Card className="border-border bg-white">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Calculator className="w-4 h-4 text-muted-foreground" />
-                    딜 조건
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-muted-foreground" />
+                      딜 조건
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleStartEdit}>
+                      <Edit3 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">매입가</p>
-                    <p className="font-medium text-foreground">{displayData.dealAmount}</p>
+                    <p className="font-medium text-foreground">{formatToKorean(dealConditions.deal_amount)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">예상 월세</p>
-                    <p className="font-medium text-foreground">{displayData.noi.monthlyRent}</p>
+                    <p className="font-medium text-foreground">{formatToKorean(dealConditions.monthly_rent)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">자기자본</p>
-                    <p className="font-medium text-foreground">{displayData.financial.equity}</p>
+                    <p className="font-medium text-foreground">{formatToKorean(dealConditions.equity)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">자기자본 비율</p>
@@ -727,7 +1094,7 @@ export default function DemoAnalysisPage() {
                       <p className="text-xs text-muted-foreground mb-2">
                         투자위원회 메모와 사업계획서 양식으로 확장 가능
                       </p>
-                      <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 w-full">
+                      <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 w-full" onClick={handlePdfReport}>
                         <FileText className="w-3.5 h-3.5" />
                         PDF 리포트 생성
                       </Button>
@@ -742,36 +1109,120 @@ export default function DemoAnalysisPage() {
           <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-30" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
             {/* Quick Action Buttons */}
             <div className="px-4 pt-3 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8">
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8" onClick={handlePdfReport}>
                 <FileText className="w-3.5 h-3.5" />
                 PDF 리포트
               </Button>
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8">
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8" onClick={() => handleComingSoon("유사 사례")}>
                 <Building2 className="w-3.5 h-3.5" />
                 유사 사례
               </Button>
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8">
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8" onClick={() => handleComingSoon("은행 제출 패키지")}>
                 <Banknote className="w-3.5 h-3.5" />
                 은행 제출 패키지
               </Button>
             </div>
             {/* Input Area */}
             <div className="px-4 pb-2">
-              <div className="flex gap-2">
+              <form onSubmit={handleSubmit} className="flex gap-2">
                 <Input
                   placeholder="추가 질문을 입력하세요..."
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className="flex-1 h-10"
+                  disabled={isAnalyzing}
                 />
-                <Button size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0">
-                  <Send className="w-4 h-4" />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0"
+                  disabled={isAnalyzing || !inputValue.trim()}
+                >
+                  {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </Button>
-              </div>
+              </form>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Mobile Edit Modal */}
+      {editMode && (
+        <div className="fixed inset-0 bg-black/50 z-50 lg:hidden flex items-end">
+          <div className="bg-white w-full rounded-t-2xl p-4 animate-in slide-in-from-bottom duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground">딜 조건 수정</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCancelEdit}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">주소</p>
+                <Input 
+                  value={editConditions.address}
+                  onChange={(e) => setEditConditions(prev => ({ ...prev, address: e.target.value }))}
+                  className="h-10"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
+                  <Input 
+                    type="number"
+                    step="0.1"
+                    value={editConditions.deal_amount / 100000000}
+                    onChange={(e) => setEditConditions(prev => ({ ...prev, deal_amount: parseFloat(e.target.value) * 100000000 || 0 }))}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">보증금 (억)</p>
+                  <Input 
+                    type="number"
+                    step="0.1"
+                    value={editConditions.deposit / 100000000}
+                    onChange={(e) => setEditConditions(prev => ({ ...prev, deposit: parseFloat(e.target.value) * 100000000 || 0 }))}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">월세 (만원)</p>
+                  <Input 
+                    type="number"
+                    step="100"
+                    value={editConditions.monthly_rent / 10000}
+                    onChange={(e) => setEditConditions(prev => ({ ...prev, monthly_rent: parseFloat(e.target.value) * 10000 || 0 }))}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">자기자본 (억)</p>
+                  <Input 
+                    type="number"
+                    step="0.1"
+                    value={editConditions.equity / 100000000}
+                    onChange={(e) => setEditConditions(prev => ({ ...prev, equity: parseFloat(e.target.value) * 100000000 || 0 }))}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
+                <Input 
+                  value={editConditions.investment_purpose}
+                  onChange={(e) => setEditConditions(prev => ({ ...prev, investment_purpose: e.target.value }))}
+                  className="h-10"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button variant="outline" className="flex-1" onClick={handleCancelEdit}>취소</Button>
+              <Button className="flex-1" onClick={handleApplyEdit}>적용</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -808,17 +1259,29 @@ interface AnalysisDisplayData {
   dataSources: string[]
 }
 
-function AnalysisResultsContent({ analysisData, showSteps, setShowSteps }: { analysisData: AnalysisDisplayData, showSteps: boolean, setShowSteps: (v: boolean) => void }) {
+function AnalysisResultsContent({ 
+  analysisData, 
+  showSteps, 
+  setShowSteps,
+  scoreHighlight,
+  onPdfReport,
+}: { 
+  analysisData: AnalysisDisplayData
+  showSteps: boolean
+  setShowSteps: (v: boolean) => void
+  scoreHighlight?: boolean
+  onPdfReport?: () => void
+}) {
   return (
     <>
       {/* Bankability Score Card */}
-      <Card className="border-border bg-white overflow-hidden">
+      <Card className={`border-border bg-white overflow-hidden transition-all duration-500 ${scoreHighlight ? 'ring-2 ring-primary/50 shadow-lg' : ''}`}>
         <div className="bg-primary/5 border-b border-border p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Bankability Score</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-bold text-foreground">{analysisData.score}</span>
+                <span className={`text-5xl font-bold text-foreground transition-all duration-500 ${scoreHighlight ? 'scale-110' : ''}`}>{analysisData.score}</span>
                 <span className="text-xl text-muted-foreground">/ 100</span>
               </div>
             </div>
@@ -827,7 +1290,7 @@ function AnalysisResultsContent({ analysisData, showSteps, setShowSteps }: { ana
             </Badge>
           </div>
           <div className="w-full bg-border rounded-full h-3 mb-3">
-            <div className="bg-chart-3 h-3 rounded-full transition-all" style={{ width: `${analysisData.score}%` }} />
+            <div className="bg-chart-3 h-3 rounded-full transition-all duration-500" style={{ width: `${analysisData.score}%` }} />
           </div>
           <p className="text-sm text-muted-foreground">
             임대수익은 양호하나, 자기자본 확보와 공사비 리스크 보완이 필요합니다. 선임대 계약 확보 시 금융기관 사전 협의 가능합니다.
@@ -1070,11 +1533,11 @@ function AnalysisResultsContent({ analysisData, showSteps, setShowSteps }: { ana
                 투자위원회 메모와 사업계획서 양식으로 확장할 수 있습니다.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5">
+                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5" onClick={onPdfReport}>
                   <FileText className="w-3.5 h-3.5" />
                   PDF 리포트 생성
                 </Button>
-                <Button size="sm" variant="outline" className="gap-1.5">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={onPdfReport}>
                   Bank Package 문의
                 </Button>
               </div>
