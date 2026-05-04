@@ -298,32 +298,49 @@ export interface AdminDashboardData {
 // Transform Functions
 // ============================================
 
-function formatKST(date: Date): string {
-  return date.toLocaleString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Seoul',
-  })
+function formatKST(date: Date | null | undefined): string {
+  if (!date || isNaN(date.getTime())) return '-'
+  
+  try {
+    return date.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Seoul',
+    })
+  } catch {
+    return '-'
+  }
 }
 
-function formatRelativeTime(timestamp: string): string {
-  const now = new Date()
-  const date = new Date(timestamp)
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+function formatRelativeTime(timestamp: string | null | undefined): string {
+  if (!timestamp) return '-'
+  
+  try {
+    const now = new Date()
+    const date = new Date(timestamp)
+    
+    // Check for invalid date
+    if (isNaN(date.getTime())) return '-'
+    
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMins < 1) return '방금 전'
-  if (diffMins < 60) return `${diffMins}분 전`
-  if (diffHours < 24) return `${diffHours}시간 전`
-  return `${diffDays}일 전`
+    if (diffMins < 1) return '방금 전'
+    if (diffMins < 60) return `${diffMins}분 전`
+    if (diffHours < 24) return `${diffHours}시간 전`
+    return `${diffDays}일 전`
+  } catch {
+    return '-'
+  }
 }
 
-function mapGrade(grade: string): 'A' | 'B+' | 'B' | 'C' | 'D' {
+function mapGrade(grade: string | null | undefined): 'A' | 'B+' | 'B' | 'C' | 'D' {
+  if (!grade) return 'D' // Default grade for null/undefined
   const normalized = grade.toUpperCase()
   if (normalized === 'A' || normalized === 'A+') return 'A'
   if (normalized === 'B+') return 'B+'
@@ -353,17 +370,19 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   }
 
   // Transform scheduler jobs
-  const schedulerJobs: FrontendSchedulerJob[] = (data.scheduler?.jobs ?? []).map((job, index) => ({
-    id: job.id || String(index + 1),
-    name: job.name,
-    trigger: job.schedule,
-    lastRun: job.last_run ? formatKST(new Date(job.last_run)) : null,
-    nextRun: formatKST(new Date(job.next_run)),
-    lastStatus: job.recent_runs?.[0] === 'success' ? 'success' :
-                job.recent_runs?.[0] === 'failure' ? 'failed' : 'pending',
-    successCount: Math.round((job.success_rate / 100) * 30),
-    lastResult: `success_rate=${job.success_rate}%`,
-  }))
+  const schedulerJobs: FrontendSchedulerJob[] = (data.scheduler?.jobs ?? [])
+    .filter((job): job is SchedulerJob => job != null)
+    .map((job, index) => ({
+      id: job.id || String(index + 1),
+      name: job.name || '알 수 없음',
+      trigger: job.schedule || '-',
+      lastRun: job.last_run ? formatKST(new Date(job.last_run)) : null,
+      nextRun: job.next_run ? formatKST(new Date(job.next_run)) : '-',
+      lastStatus: job.recent_runs?.[0] === 'success' ? 'success' :
+                  job.recent_runs?.[0] === 'failure' ? 'failed' : 'pending',
+      successCount: Math.round(((job.success_rate ?? 0) / 100) * 30),
+      lastResult: `success_rate=${job.success_rate ?? 0}%`,
+    }))
 
   // Extract data sources from scheduler jobs
   const dataSources: FrontendDataSource[] = [
@@ -394,12 +413,14 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     rules: data.wiki?.stats?.rules ?? 0,
   }
 
-  const wikiUpdates: FrontendWikiUpdate[] = (data.wiki?.recent_updates ?? []).map((update, index) => ({
-    id: update.id || String(index + 1),
-    time: formatRelativeTime(update.timestamp),
-    jobName: update.type,
-    result: update.title,
-  }))
+  const wikiUpdates: FrontendWikiUpdate[] = (data.wiki?.recent_updates ?? [])
+    .filter((update): update is WikiUpdate => update != null)
+    .map((update, index) => ({
+      id: update.id || String(index + 1),
+      time: formatRelativeTime(update.timestamp),
+      jobName: update.type || '-',
+      result: update.title || '-',
+    }))
 
   // Transform usage data
   const usageStats: FrontendUsageStats = {
@@ -420,14 +441,16 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     },
   }
 
-  const recentAnalyses: FrontendRecentAnalysis[] = (data.usage?.recent_analyses ?? []).map((analysis, index) => ({
-    id: analysis.id || String(index + 1),
-    time: formatRelativeTime(analysis.timestamp),
-    inputType: analysis.ticker || '직접입력',
-    grade: mapGrade(analysis.grade),
-    score: parseInt(analysis.grade) || 70,
-    responseTime: analysis.response_time_ms,
-  }))
+  const recentAnalyses: FrontendRecentAnalysis[] = (data.usage?.recent_analyses ?? [])
+    .filter((analysis): analysis is RecentAnalysis => analysis != null)
+    .map((analysis, index) => ({
+      id: analysis.id || String(index + 1),
+      time: analysis.timestamp ? formatRelativeTime(analysis.timestamp) : '-',
+      inputType: analysis.ticker || '직접입력',
+      grade: mapGrade(analysis.grade),
+      score: analysis.grade ? (parseInt(analysis.grade) || 70) : 70,
+      responseTime: analysis.response_time_ms ?? 0,
+    }))
 
   // Static planned sources
   const plannedSources: FrontendPlannedSource[] = [
