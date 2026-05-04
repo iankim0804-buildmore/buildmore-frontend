@@ -92,7 +92,7 @@ async function fetchAdmin<T>(path: string): Promise<T | null> {
   const timeoutId = setTimeout(() => controller.abort(), 5000)
 
   try {
-    const res = await fetch(`/admin/api${path}`, {
+    const res = await fetch(`/api/admin${path}`, {
       signal: controller.signal,
       credentials: 'include'
     })
