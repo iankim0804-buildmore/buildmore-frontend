@@ -1,6 +1,6 @@
 'use client'
 
-import type { SchedulerJob, DataSource } from '@/lib/admin-mock-data'
+import type { FrontendSchedulerJob, FrontendDataSource } from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -14,11 +14,11 @@ import {
 } from 'lucide-react'
 
 interface SchedulerSectionProps {
-  jobs: SchedulerJob[]
-  dataSources: DataSource[]
+  jobs: FrontendSchedulerJob[]
+  dataSources: FrontendDataSource[]
 }
 
-function getStatusIcon(status: SchedulerJob['lastStatus']) {
+function getStatusIcon(status: FrontendSchedulerJob['lastStatus']) {
   switch (status) {
     case 'success':
       return <CheckCircle2 className="h-4 w-4 text-emerald-400" />

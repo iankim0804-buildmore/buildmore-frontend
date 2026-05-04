@@ -1,81 +1,92 @@
-// Admin API Types - matching backend responses
+// Admin API Types - matching ACTUAL backend responses
 
+// === Overview API Response ===
 export interface AdminOverview {
-  server_status: 'healthy' | 'degraded' | 'down'
-  scheduler_status: 'running' | 'paused' | 'error'
-  pipeline_status: 'idle' | 'processing' | 'error'
-  scheduler_jobs: number
+  server_status: 'ok' | 'error'
+  scheduler_status: 'ok' | 'error'
+  pipeline_status: 'ok' | 'warning' | 'error'
   pipeline_queued_count: number
-  last_updated: string
+  last_updated_at: string
 }
 
+// === Scheduler API Response ===
 export interface SchedulerJob {
-  id: string
+  job_id: string
   name: string
-  schedule: string
-  status: 'active' | 'paused' | 'error'
-  last_run: string | null
-  next_run: string
-  success_rate: number
-  recent_runs: ('success' | 'failure' | 'skipped')[]
-  data_source_status: 'connected' | 'disconnected' | 'error'
+  trigger_type: string
+  interval_description: string
+  next_run_time: string | null
+  last_run_time: string | null
+  last_status: 'success' | 'failure' | 'running' | null
+  last_message: string | null
+  success_count_30d: number
+  fail_count_30d: number
+  total_count_30d: number
+}
+
+export interface FailedSource {
+  name: string
+  error: string
 }
 
 export interface AdminScheduler {
   jobs: SchedulerJob[]
-  total_jobs: number
-  active_jobs: number
-  paused_jobs: number
+  failed_sources: FailedSource[]
 }
 
-export interface WikiStats {
+// === Wiki API Response ===
+export interface WikiData {
   metric_snapshots: number
-  facts: number
+  extracted_facts: number
   signals: number
   rules: number
-}
-
-export interface WikiQueueItem {
-  type: string
-  count: number
-  status: 'pending' | 'processing' | 'completed'
+  cases: number
+  last_fact_extracted_at: string | null
+  processing_queue: {
+    total: number
+    done: number
+    queued: number
+    failed: number
+    by_task_type: Record<string, { total: number; done: number; queued: number }>
+  }
 }
 
 export interface WikiUpdate {
   id: string
   type: string
   title: string
-  timestamp: string
-  status: 'added' | 'updated' | 'deleted'
+  created_at: string
 }
 
 export interface AdminWiki {
-  stats: WikiStats
-  queue: WikiQueueItem[]
-  queue_total: number
-  queue_processing: number
+  wiki: WikiData
   recent_updates: WikiUpdate[]
 }
 
+// === Usage API Response ===
 export interface UsageStats {
-  today: number
-  week: number
-  month: number
+  analysis_requests_today: number
+  analysis_requests_week: number
+  analysis_requests_month: number
+  chat_sessions_today: number
+  chat_sessions_week: number
+  chat_sessions_month: number
+  unique_ips_today: number
+  unique_ips_week: number
+  unique_ips_month: number
 }
 
 export interface RecentAnalysis {
-  id: string
-  ticker: string
-  timestamp: string
-  grade: string
-  response_time_ms: number
-  user_ip_hash: string
+  id?: string
+  requested_at: string
+  input_type: string
+  grade: string | null
+  bankability_score: number | null
+  response_time_ms: number | null
 }
 
 export interface AdminUsage {
-  analyses: UsageStats
-  chats: UsageStats
-  unique_ips: UsageStats
+  stats: UsageStats
   recent_analyses: RecentAnalysis[]
 }
 
@@ -89,7 +100,7 @@ export interface AdminData {
 // Fetch wrapper with timeout and error handling
 async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10초 타임아웃
+  const timeoutId = setTimeout(() => controller.abort(), 10000)
 
   try {
     const res = await fetch(`/api/admin${path}`, {
@@ -238,7 +249,7 @@ export interface FrontendRecentAnalysis {
   inputType: string
   grade: 'A' | 'B+' | 'B' | 'C' | 'D'
   score: number
-  responseTime: number
+  responseTime: number | null
 }
 
 export interface FrontendSystemStatus {
@@ -322,7 +333,6 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
     const now = new Date()
     const date = new Date(timestamp)
     
-    // Check for invalid date
     if (isNaN(date.getTime())) return '-'
     
     const diffMs = now.getTime() - date.getTime()
@@ -340,7 +350,7 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
 }
 
 function mapGrade(grade: string | null | undefined): 'A' | 'B+' | 'B' | 'C' | 'D' {
-  if (!grade) return 'D' // Default grade for null/undefined
+  if (!grade) return 'D'
   const normalized = grade.toUpperCase()
   if (normalized === 'A' || normalized === 'A+') return 'A'
   if (normalized === 'B+') return 'B+'
@@ -351,105 +361,114 @@ function mapGrade(grade: string | null | undefined): 'A' | 'B+' | 'B' | 'C' | 'D
 
 export function transformToFrontendData(data: AdminData): AdminDashboardData {
   const now = new Date()
+  const jobs = data.scheduler?.jobs ?? []
 
   // Transform overview to systemStatus
   const systemStatus: FrontendSystemStatus = {
     server: {
-      status: data.overview?.server_status === 'healthy' ? 'ok' : 'error',
-      message: data.overview?.server_status === 'healthy' ? 'API 응답 정상' : 'API 응답 오류',
+      status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
+      message: data.overview?.server_status === 'ok' ? 'API 응답 정상' : 'API 응답 오류',
     },
     scheduler: {
-      active: data.scheduler?.active_jobs ?? 0,
-      total: data.scheduler?.total_jobs ?? 0,
+      active: jobs.filter(j => j.last_status === 'success' || j.last_status === 'running').length,
+      total: jobs.length,
     },
     pipeline: {
-      status: (data.overview?.pipeline_queued_count ?? 0) > 1000 ? 'danger' :
-              (data.overview?.pipeline_queued_count ?? 0) > 500 ? 'warning' : 'ok',
+      status: data.overview?.pipeline_status === 'ok' ? 'ok' :
+              data.overview?.pipeline_status === 'warning' ? 'warning' : 'danger',
       queued: data.overview?.pipeline_queued_count ?? 0,
     },
   }
 
-  // Transform scheduler jobs
-  const schedulerJobs: FrontendSchedulerJob[] = (data.scheduler?.jobs ?? [])
+  // Transform scheduler jobs - using ACTUAL backend field names
+  const schedulerJobs: FrontendSchedulerJob[] = jobs
     .filter((job): job is SchedulerJob => job != null)
     .map((job, index) => ({
-      id: job.id || String(index + 1),
+      id: job.job_id || String(index + 1),
       name: job.name || '알 수 없음',
-      trigger: job.schedule || '-',
-      lastRun: job.last_run ? formatKST(new Date(job.last_run)) : null,
-      nextRun: job.next_run ? formatKST(new Date(job.next_run)) : '-',
-      lastStatus: job.recent_runs?.[0] === 'success' ? 'success' :
-                  job.recent_runs?.[0] === 'failure' ? 'failed' : 'pending',
-      successCount: Math.round(((job.success_rate ?? 0) / 100) * 30),
-      lastResult: `success_rate=${job.success_rate ?? 0}%`,
+      trigger: job.interval_description || job.trigger_type || '-',
+      lastRun: job.last_run_time ? formatKST(new Date(job.last_run_time)) : null,
+      nextRun: job.next_run_time ? formatKST(new Date(job.next_run_time)) : '-',
+      lastStatus: job.last_status === 'success' ? 'success' :
+                  job.last_status === 'failure' ? 'failed' : 'pending',
+      successCount: job.success_count_30d ?? 0,
+      lastResult: job.last_message || `성공 ${job.success_count_30d ?? 0}회 / 실패 ${job.fail_count_30d ?? 0}회`,
     }))
 
-  // Extract data sources from scheduler jobs
+  // Data sources from failed_sources
+  const failedSources = data.scheduler?.failed_sources ?? []
   const dataSources: FrontendDataSource[] = [
     { id: '1', name: '서울시 열린데이터광장', isActive: true },
     { id: '2', name: '소상공인시장진흥공단', isActive: true },
     { id: '3', name: '유튜브 채널 (구해줘빌딩)', isActive: true },
     { id: '4', name: '시공조아 블로그', isActive: true },
-    { id: '5', name: 'sg365.go.kr', isActive: false, error: 'DNS 해석 불가, 비활성화됨' },
-    { id: '6', name: 'data.go.kr', isActive: false, error: '연결 리셋 반복, 비활성화됨' },
+    ...failedSources.map((fs, i) => ({
+      id: `failed-${i}`,
+      name: fs.name,
+      isActive: false,
+      error: fs.error,
+    }))
   ]
 
-  // Transform wiki data
+  // Transform wiki data - using ACTUAL nested structure
+  const wikiData = data.wiki?.wiki
   const processingQueue: FrontendProcessingQueue = {
-    total: data.wiki?.queue_total ?? 0,
-    done: (data.wiki?.queue_total ?? 0) - (data.wiki?.queue_processing ?? 0),
-    queued: data.wiki?.queue_processing ?? 0,
+    total: wikiData?.processing_queue?.total ?? 0,
+    done: wikiData?.processing_queue?.done ?? 0,
+    queued: wikiData?.processing_queue?.queued ?? 0,
     breakdown: {
-      embed: data.wiki?.queue?.find(q => q.type === 'embed')?.count ?? 0,
-      summarize: data.wiki?.queue?.find(q => q.type === 'summarize')?.count ?? 0,
-      tag: data.wiki?.queue?.find(q => q.type === 'tag')?.count ?? 0,
+      embed: wikiData?.processing_queue?.by_task_type?.embed?.queued ?? 0,
+      summarize: wikiData?.processing_queue?.by_task_type?.summarize?.queued ?? 0,
+      tag: wikiData?.processing_queue?.by_task_type?.tag?.queued ?? 0,
     },
   }
 
   const wikiStats: FrontendWikiStats = {
-    metricSnapshots: data.wiki?.stats?.metric_snapshots ?? 0,
-    facts: data.wiki?.stats?.facts ?? 0,
-    signals: data.wiki?.stats?.signals ?? 0,
-    rules: data.wiki?.stats?.rules ?? 0,
+    metricSnapshots: wikiData?.metric_snapshots ?? 0,
+    facts: wikiData?.extracted_facts ?? 0,
+    signals: wikiData?.signals ?? 0,
+    rules: wikiData?.rules ?? 0,
   }
 
   const wikiUpdates: FrontendWikiUpdate[] = (data.wiki?.recent_updates ?? [])
     .filter((update): update is WikiUpdate => update != null)
     .map((update, index) => ({
       id: update.id || String(index + 1),
-      time: formatRelativeTime(update.timestamp),
+      time: formatRelativeTime(update.created_at),
       jobName: update.type || '-',
       result: update.title || '-',
     }))
 
-  // Transform usage data
+  // Transform usage data - using ACTUAL field names
+  const stats = data.usage?.stats
   const usageStats: FrontendUsageStats = {
     analysisRequests: {
-      today: data.usage?.analyses?.today ?? 0,
-      thisWeek: data.usage?.analyses?.week ?? 0,
-      thisMonth: data.usage?.analyses?.month ?? 0,
+      today: stats?.analysis_requests_today ?? 0,
+      thisWeek: stats?.analysis_requests_week ?? 0,
+      thisMonth: stats?.analysis_requests_month ?? 0,
     },
     chatSessions: {
-      today: data.usage?.chats?.today ?? 0,
-      thisWeek: data.usage?.chats?.week ?? 0,
-      thisMonth: data.usage?.chats?.month ?? 0,
+      today: stats?.chat_sessions_today ?? 0,
+      thisWeek: stats?.chat_sessions_week ?? 0,
+      thisMonth: stats?.chat_sessions_month ?? 0,
     },
     uniqueIps: {
-      today: data.usage?.unique_ips?.today ?? 0,
-      thisWeek: data.usage?.unique_ips?.week ?? 0,
-      thisMonth: data.usage?.unique_ips?.month ?? 0,
+      today: stats?.unique_ips_today ?? 0,
+      thisWeek: stats?.unique_ips_week ?? 0,
+      thisMonth: stats?.unique_ips_month ?? 0,
     },
   }
 
+  // Transform recent analyses - using ACTUAL field names
   const recentAnalyses: FrontendRecentAnalysis[] = (data.usage?.recent_analyses ?? [])
     .filter((analysis): analysis is RecentAnalysis => analysis != null)
     .map((analysis, index) => ({
       id: analysis.id || String(index + 1),
-      time: analysis.timestamp ? formatRelativeTime(analysis.timestamp) : '-',
-      inputType: analysis.ticker || '직접입력',
+      time: formatRelativeTime(analysis.requested_at),
+      inputType: analysis.input_type || '직접입력',
       grade: mapGrade(analysis.grade),
-      score: analysis.grade ? (parseInt(analysis.grade) || 70) : 70,
-      responseTime: analysis.response_time_ms ?? 0,
+      score: analysis.bankability_score ?? 0,
+      responseTime: analysis.response_time_ms,
     }))
 
   // Static planned sources
@@ -465,7 +484,7 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       url: 'ai-mvp-ssmrdesign0804.replit.app',
       spec: 'Reserved VM · 0.5 vCPU / 2 GiB · Asia 리전',
       region: 'Asia',
-      status: data.overview?.server_status === 'healthy' ? 'ok' : 'error',
+      status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
     },
     database: {
       name: 'Neon Postgres (Singapore)',

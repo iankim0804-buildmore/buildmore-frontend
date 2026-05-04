@@ -1,10 +1,10 @@
 'use client'
 
 import type {
-  DataSource,
-  PlannedSource,
-  SystemInfo,
-} from '@/lib/admin-mock-data'
+  FrontendDataSource,
+  FrontendPlannedSource,
+  FrontendSystemInfo,
+} from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   CheckCircle2,
@@ -16,9 +16,9 @@ import {
 } from 'lucide-react'
 
 interface DataLayerSectionProps {
-  dataSources: DataSource[]
-  plannedSources: PlannedSource[]
-  systemInfo: SystemInfo
+  dataSources: FrontendDataSource[]
+  plannedSources: FrontendPlannedSource[]
+  systemInfo: FrontendSystemInfo
 }
 
 export function DataLayerSection({

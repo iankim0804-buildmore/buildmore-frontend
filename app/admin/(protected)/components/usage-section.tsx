@@ -1,6 +1,6 @@
 'use client'
 
-import type { UsageStats, RecentAnalysis } from '@/lib/admin-mock-data'
+import type { FrontendUsageStats, FrontendRecentAnalysis } from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,11 +13,11 @@ import {
 } from '@/components/ui/table'
 
 interface UsageSectionProps {
-  usageStats: UsageStats
-  recentAnalyses: RecentAnalysis[]
+  usageStats: FrontendUsageStats
+  recentAnalyses: FrontendRecentAnalysis[]
 }
 
-function getGradeBadgeColor(grade: RecentAnalysis['grade']) {
+function getGradeBadgeColor(grade: FrontendRecentAnalysis['grade']) {
   switch (grade) {
     case 'A':
       return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
@@ -143,7 +143,7 @@ export function UsageSection({ usageStats, recentAnalyses }: UsageSectionProps) 
                     {analysis.score}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
-                    {(analysis.responseTime / 1000).toFixed(1)}s
+                    {analysis.responseTime != null ? `${(analysis.responseTime / 1000).toFixed(1)}s` : '—'}
                   </TableCell>
                 </TableRow>
               ))}
