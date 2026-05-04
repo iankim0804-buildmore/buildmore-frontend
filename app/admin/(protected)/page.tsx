@@ -11,15 +11,31 @@ import { DataLayerSection } from './components/data-layer-section'
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
-    const newData = await fetchAdminDashboardData()
-    // Only update if we got data, otherwise keep existing state
-    if (newData) {
-      setData(newData)
-      setLastRefresh(new Date())
+    try {
+      const newData = await fetchAdminDashboardData()
+      if (newData) {
+        setData(newData)
+        setLastRefresh(new Date())
+        setError(null)
+      } else {
+        // If no data and no existing data, show error
+        if (!data) {
+          setError('데이터를 불러올 수 없습니다. 백엔드 API 연결을 확인해주세요.')
+        }
+      }
+    } catch (err) {
+      console.error('[v0] Admin fetch error:', err)
+      if (!data) {
+        setError('데이터 로딩 중 오류가 발생했습니다.')
+      }
+    } finally {
+      setIsLoading(false)
     }
-  }, [])
+  }, [data])
 
   useEffect(() => {
     // Initial fetch
@@ -31,10 +47,42 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval)
   }, [fetchData])
 
+  if (isLoading && !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <div className="text-muted-foreground">데이터 로딩 중...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center max-w-md px-4">
+          <div className="text-destructive text-lg font-medium mb-2">오류 발생</div>
+          <div className="text-muted-foreground mb-4">{error}</div>
+          <button
+            onClick={() => {
+              setIsLoading(true)
+              setError(null)
+              fetchData()
+            }}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (!data) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">로딩 중...</div>
+        <div className="text-muted-foreground">데이터가 없습니다.</div>
       </div>
     )
   }
