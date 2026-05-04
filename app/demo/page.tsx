@@ -40,6 +40,7 @@ import {
   X,
   Loader2,
 } from "lucide-react"
+import { MarketTrendSection } from "./components/market-trend-section"
 
 // Deal condition type
 interface DealConditions {
@@ -1063,6 +1064,9 @@ export default function DemoAnalysisPage() {
                 </CardContent>
               </Card>
 
+              {/* Market Trend Section */}
+              <MarketTrendSection />
+
               {/* Data Sources */}
               <Card className="border-border bg-white">
                 <CardHeader className="pb-2">
@@ -1480,7 +1484,7 @@ function AnalysisResultsContent({
                   <ul className="space-y-1 text-xs text-muted-foreground">
                     <li className="flex items-center gap-1"><CircleDot className="w-2 h-2" /> 선임대 계약 확보</li>
                     <li className="flex items-center gap-1"><CircleDot className="w-2 h-2" /> 자기자본 40%+</li>
-                    <li className="flex items-center gap-1"><CircleDot className="w-2 h-2" /> 공사비 상한 설정</li>
+                    <li className="flex items-center gap-1"><CircleDot className="w-2 h-2" /> 공사비 상한 ���정</li>
                   </ul>
                 </div>
               </div>
@@ -1545,6 +1549,9 @@ function AnalysisResultsContent({
           </div>
         </CardContent>
       </Card>
+
+      {/* Market Trend Section */}
+      <MarketTrendSection />
 
       {/* Data Sources */}
       <Card className="border-border bg-white">
