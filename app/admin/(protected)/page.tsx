@@ -7,6 +7,7 @@ import { SchedulerSection } from './components/scheduler-section'
 import { WikiSection } from './components/wiki-section'
 import { UsageSection } from './components/usage-section'
 import { DataLayerSection } from './components/data-layer-section'
+import { DeltaSection } from './components/delta-section'
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
@@ -132,6 +133,9 @@ export default function AdminDashboardPage() {
           plannedSources={data.plannedSources}
           systemInfo={data.systemInfo}
         />
+
+        {/* Section 5: Delta Status */}
+        <DeltaSection onRefresh={fetchData} />
       </main>
     </div>
   )
