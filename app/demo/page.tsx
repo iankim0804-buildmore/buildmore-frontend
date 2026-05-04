@@ -23,6 +23,7 @@ import {
   Send,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   AlertTriangle,
   CheckCircle2,
   Info,
@@ -398,9 +399,9 @@ export default function DemoAnalysisPage() {
       ]
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left Sidebar - Desktop Only */}
-      <aside className="hidden lg:flex w-60 flex-col bg-sidebar border-r border-sidebar-border">
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Left Sidebar - Desktop Only - Fixed */}
+      <aside className="hidden lg:flex w-60 flex-col bg-sidebar border-r border-sidebar-border fixed top-0 left-0 h-screen z-40">
         {/* Logo */}
         <div className="h-14 flex items-center gap-2 px-4 border-b border-sidebar-border">
           <div className="w-7 h-7 bg-sidebar-primary rounded flex items-center justify-center">
@@ -513,10 +514,10 @@ export default function DemoAnalysisPage() {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen lg:min-h-0">
-        {/* Top Header - Sticky on Mobile */}
-        <header className="h-14 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 sticky top-0 z-20 lg:relative">
+      {/* Main Content - Offset by sidebar width on desktop */}
+      <div className="flex-1 flex flex-col h-screen lg:ml-60">
+        {/* Top Header - Fixed */}
+        <header className="h-14 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 fixed top-0 left-0 right-0 lg:left-60 z-30">
           <div className="flex items-center gap-4">
             {/* Mobile Logo */}
             <Link href="/" className="lg:hidden flex items-center gap-2">
@@ -581,226 +582,231 @@ export default function DemoAnalysisPage() {
         </header>
 
         {/* Content Area - Different layout for mobile vs desktop */}
-        {/* Desktop Layout */}
-        <div className="hidden lg:flex flex-1 flex-row overflow-hidden">
-          {/* Center Panel: Chat/Input */}
-          <div className="flex-1 flex flex-col border-r border-border bg-white lg:max-w-xl">
-            <ScrollArea className="flex-1">
-              <div className="p-4 lg:p-6 space-y-6">
-                {/* Deal Input Card */}
-                <Card className="border-border">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <Calculator className="w-4 h-4 text-muted-foreground" />
-                        딜 조건
-                      </CardTitle>
-                      {!editMode ? (
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleStartEdit}>
-                          <Edit3 className="w-3 h-3 mr-1" />
-                          조건 수정
+        {/* Desktop Layout - Below fixed header */}
+        <div className="hidden lg:flex flex-1 flex-row overflow-hidden pt-14">
+          {/* Center Panel: Chat/Input - Fixed */}
+          <div className="w-[420px] xl:w-[480px] flex flex-col border-r border-border bg-white fixed top-14 bottom-0 left-60 z-20">
+            {/* Deal Conditions Card - Fixed at top */}
+            <div className="p-4 border-b border-border bg-white shrink-0">
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-muted-foreground" />
+                      딜 조건
+                    </CardTitle>
+                    {!editMode ? (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleStartEdit}>
+                        <Edit3 className="w-3 h-3 mr-1" />
+                        조건 수정
+                      </Button>
+                    ) : (
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleCancelEdit}>
+                          <X className="w-3 h-3 mr-1" />
+                          취소
                         </Button>
-                      ) : (
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleCancelEdit}>
-                            <X className="w-3 h-3 mr-1" />
-                            취소
-                          </Button>
-                          <Button size="sm" className="h-7 px-2 text-xs" onClick={handleApplyEdit}>
-                            적용
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                    {editMode ? (
-                      <>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">주소</p>
-                          <Input 
-                            value={editConditions.address}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, address: e.target.value }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
-                          <Input 
-                            type="number"
-                            step="0.1"
-                            value={editConditions.deal_amount / 100000000}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, deal_amount: parseFloat(e.target.value) * 100000000 || 0 }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">예상 보증금 (억)</p>
-                          <Input 
-                            type="number"
-                            step="0.1"
-                            value={editConditions.deposit / 100000000}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, deposit: parseFloat(e.target.value) * 100000000 || 0 }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">예상 월세 (만원)</p>
-                          <Input 
-                            type="number"
-                            step="100"
-                            value={editConditions.monthly_rent / 10000}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, monthly_rent: parseFloat(e.target.value) * 10000 || 0 }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">자기자본 (억)</p>
-                          <Input 
-                            type="number"
-                            step="0.1"
-                            value={editConditions.equity / 100000000}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, equity: parseFloat(e.target.value) * 100000000 || 0 }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
-                          <Input 
-                            value={editConditions.investment_purpose}
-                            onChange={(e) => setEditConditions(prev => ({ ...prev, investment_purpose: e.target.value }))}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">주소</p>
-                          <p className="font-medium text-foreground">{dealConditions.address}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">매입가</p>
-                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.deal_amount)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
-                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.deposit)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
-                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.monthly_rent)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">자기자본</p>
-                          <p className="font-medium text-foreground">{formatToKorean(dealConditions.equity)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
-                          <p className="font-medium text-foreground">{dealConditions.investment_purpose}</p>
-                        </div>
-                      </>
+                        <Button size="sm" className="h-7 px-2 text-xs" onClick={handleApplyEdit}>
+                          적용
+                        </Button>
+                      </div>
                     )}
-                  </CardContent>
-                </Card>
-
-                {/* Chat Messages */}
-                <div className="space-y-4">
-                  {chatMessages.map((message, i) => (
-                    message.role === 'user' ? (
-                      <div key={i} className="flex justify-end">
-                        <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-4 py-3 max-w-[85%]">
-                          <p className="text-sm">{message.content}</p>
-                        </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                  {editMode ? (
+                    <>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">주소</p>
+                        <Input 
+                          value={editConditions.address}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, address: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
                       </div>
-                    ) : (
-                      <div key={i} className="flex gap-3">
-                        <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
-                          <Landmark className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex-1 space-y-3">
-                          <div className="bg-secondary rounded-lg rounded-tl-sm px-4 py-3">
-                            <p className="text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-                          </div>
-                        </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
+                        <Input 
+                          type="number"
+                          step="0.1"
+                          value={editConditions.deal_amount / 100000000}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, deal_amount: parseFloat(e.target.value) * 100000000 || 0 }))}
+                          className="h-8 text-sm"
+                        />
                       </div>
-                    )
-                  ))}
-
-                  {/* Analysis Steps Card */}
-                  {(chatMessages.length > 0 || isAnalyzing) && (
-                    <Card className="border-border">
-                      <CardHeader className="pb-2">
-                        <button 
-                          onClick={() => setShowSteps(!showSteps)}
-                          className="flex items-center justify-between w-full"
-                        >
-                          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5" />
-                            분석 프로세스 {isAnalyzing ? '' : '(5.6s)'}
-                          </CardTitle>
-                          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showSteps ? '' : '-rotate-90'}`} />
-                        </button>
-                      </CardHeader>
-                      {showSteps && (
-                        <CardContent className="pt-0">
-                          <div className="space-y-2">
-                            {displaySteps.map((step, i) => (
-                              <div key={i} className="flex items-center gap-3 text-xs">
-                                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                                  step.status === 'complete' ? 'bg-chart-2/10' :
-                                  step.status === 'running' ? 'bg-blue-500/10' :
-                                  'bg-muted'
-                                }`}>
-                                  {step.status === 'complete' ? (
-                                    <CheckCircle2 className="w-3 h-3 text-chart-2" />
-                                  ) : step.status === 'running' ? (
-                                    <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                                  ) : (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-                                  )}
-                                </div>
-                                <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
-                                <span className="text-muted-foreground font-mono">{step.time}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      )}
-                    </Card>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">예상 보증금 (억)</p>
+                        <Input 
+                          type="number"
+                          step="0.1"
+                          value={editConditions.deposit / 100000000}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, deposit: parseFloat(e.target.value) * 100000000 || 0 }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">예상 월세 (만원)</p>
+                        <Input 
+                          type="number"
+                          step="100"
+                          value={editConditions.monthly_rent / 10000}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, monthly_rent: parseFloat(e.target.value) * 10000 || 0 }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">자기자본 (억)</p>
+                        <Input 
+                          type="number"
+                          step="0.1"
+                          value={editConditions.equity / 100000000}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, equity: parseFloat(e.target.value) * 100000000 || 0 }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
+                        <Input 
+                          value={editConditions.investment_purpose}
+                          onChange={(e) => setEditConditions(prev => ({ ...prev, investment_purpose: e.target.value }))}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">주소</p>
+                        <p className="font-medium text-foreground">{dealConditions.address}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">매입가</p>
+                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.deal_amount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
+                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.deposit)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
+                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.monthly_rent)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">자기자본</p>
+                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.equity)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
+                        <p className="font-medium text-foreground">{dealConditions.investment_purpose}</p>
+                      </div>
+                    </>
                   )}
-                </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Chat Messages - Scrollable */}
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-4">
+                {chatMessages.map((message, i) => (
+                  message.role === 'user' ? (
+                    <div key={i} className="flex justify-end">
+                      <div className="bg-primary text-primary-foreground rounded-lg rounded-br-sm px-4 py-3 max-w-[85%]">
+                        <p className="text-sm">{message.content}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={i} className="flex gap-3">
+                      <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
+                        <Landmark className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div className="bg-secondary rounded-lg rounded-tl-sm px-4 py-3">
+                          <p className="text-sm text-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: message.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ))}
               </div>
             </ScrollArea>
 
-            {/* Input Area - Desktop */}
-            <div className="p-4 border-t border-border bg-white">
-              <form onSubmit={handleSubmit} className="flex gap-2">
-                <Input
-                  placeholder="추가 질문을 입력하세요..."
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  className="flex-1"
-                  disabled={isAnalyzing}
-                />
-                <Button 
-                  type="submit" 
-                  size="icon" 
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={isAnalyzing || !inputValue.trim()}
-                >
-                  {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </Button>
-              </form>
-              <p className="text-xs text-muted-foreground mt-2">
-                예: &quot;자기자본을 20억으로 늘리면 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
-              </p>
+            {/* Analysis Process Toggle + Input Area - Fixed at bottom */}
+            <div className="border-t border-border bg-white shrink-0">
+              {/* Analysis Process Toggle */}
+              {(chatMessages.length > 0 || isAnalyzing) && (
+                <div className="border-b border-border">
+                  <button 
+                    onClick={() => setShowSteps(!showSteps)}
+                    className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-secondary/50 transition-colors"
+                  >
+                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5" />
+                      분석 프로세스 {isAnalyzing ? '' : '(5.6s)'}
+                    </span>
+                    {showSteps ? (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                  <div 
+                    className={`overflow-hidden transition-all duration-200 ease-out ${showSteps ? 'max-h-[300px]' : 'max-h-0'}`}
+                  >
+                    <div className="px-4 pb-3 space-y-2">
+                      {displaySteps.map((step, i) => (
+                        <div key={i} className="flex items-center gap-3 text-xs">
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                            step.status === 'complete' ? 'bg-chart-2/10' :
+                            step.status === 'running' ? 'bg-blue-500/10' :
+                            'bg-muted'
+                          }`}>
+                            {step.status === 'complete' ? (
+                              <CheckCircle2 className="w-3 h-3 text-chart-2" />
+                            ) : step.status === 'running' ? (
+                              <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                            ) : (
+                              <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                            )}
+                          </div>
+                          <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
+                          <span className="text-muted-foreground font-mono">{step.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Input Area - Desktop */}
+              <div className="p-4">
+                <form onSubmit={handleSubmit} className="flex gap-2">
+                  <Input
+                    placeholder="추가 질문을 입력하세요..."
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    className="flex-1"
+                    disabled={isAnalyzing}
+                  />
+                  <Button 
+                    type="submit" 
+                    size="icon" 
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={isAnalyzing || !inputValue.trim()}
+                  >
+                    {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </Button>
+                </form>
+                <p className="text-xs text-muted-foreground mt-2">
+                  예: &quot;자기자본을 20억으로 늘리면 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Right Panel: Analysis Results - Desktop */}
-          <div className="flex-1 bg-background overflow-hidden">
-            <ScrollArea className="h-full">
+          {/* Right Panel: Analysis Results - Scrollable, offset by chat panel width */}
+          <div className="flex-1 bg-background overflow-hidden ml-[420px] xl:ml-[480px]">
+            <ScrollArea className="h-[calc(100vh-56px)]">
               <div className="p-4 lg:p-6 space-y-4">
                 <AnalysisResultsContent 
                   analysisData={displayData} 
@@ -1067,25 +1073,6 @@ export default function DemoAnalysisPage() {
               {/* Market Trend Section */}
               <MarketTrendSection />
 
-              {/* Data Sources */}
-              <Card className="border-border bg-white">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                    <Database className="w-3.5 h-3.5" />
-                    조회된 데이터 출처
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-1.5">
-                    {displayData.dataSources.map((source, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs font-normal">
-                        {source}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Report CTA */}
               <Card className="border-primary/20 bg-primary/5">
                 <CardContent className="p-4">
@@ -1103,6 +1090,25 @@ export default function DemoAnalysisPage() {
                         PDF 리포트 생성
                       </Button>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Data Sources */}
+              <Card className="border-border bg-white">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    <Database className="w-3.5 h-3.5" />
+                    조회된 데이터 출처
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1.5">
+                    {displayData.dataSources.map((source, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs font-normal">
+                        {source}
+                      </Badge>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -1171,7 +1177,7 @@ export default function DemoAnalysisPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
+                  <p className="text-xs text-muted-foreground mb-1">��입가 (억)</p>
                   <Input 
                     type="number"
                     step="0.1"
@@ -1524,6 +1530,9 @@ function AnalysisResultsContent({
         </TabsContent>
       </Tabs>
 
+      {/* Market Trend Section */}
+      <MarketTrendSection />
+
       {/* Report CTA */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="p-5">
@@ -1549,9 +1558,6 @@ function AnalysisResultsContent({
           </div>
         </CardContent>
       </Card>
-
-      {/* Market Trend Section */}
-      <MarketTrendSection />
 
       {/* Data Sources */}
       <Card className="border-border bg-white">
