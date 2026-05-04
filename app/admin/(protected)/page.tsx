@@ -11,31 +11,29 @@ import { DataLayerSection } from './components/data-layer-section'
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
     try {
-      const newData = await fetchAdminDashboardData()
-      if (newData) {
-        setData(newData)
+      const result = await fetchAdminDashboardData()
+      
+      // Always set data (even with default values)
+      if (result.data) {
+        setData(result.data)
         setLastRefresh(new Date())
-        setError(null)
-      } else {
-        // If no data and no existing data, show error
-        if (!data) {
-          setError('데이터를 불러올 수 없습니다. 백엔드 API 연결을 확인해주세요.')
-        }
       }
+      
+      // Track errors for display
+      setErrors(result.errors)
+      
     } catch (err) {
       console.error('[v0] Admin fetch error:', err)
-      if (!data) {
-        setError('데이터 로딩 중 오류가 발생했습니다.')
-      }
+      setErrors([err instanceof Error ? err.message : '알 수 없는 오류'])
     } finally {
       setIsLoading(false)
     }
-  }, [data])
+  }, [])
 
   useEffect(() => {
     // Initial fetch
@@ -58,16 +56,28 @@ export default function AdminDashboardPage() {
     )
   }
 
-  if (error && !data) {
+  if (errors.length > 0 && !data) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center max-w-md px-4">
-          <div className="text-destructive text-lg font-medium mb-2">오류 발생</div>
-          <div className="text-muted-foreground mb-4">{error}</div>
+        <div className="text-center max-w-lg px-4">
+          <div className="text-destructive text-lg font-medium mb-2">API 연결 오류</div>
+          <div className="text-muted-foreground mb-4 text-left bg-muted/50 rounded-lg p-4">
+            <p className="mb-2 font-medium">다음 API 호출에서 오류가 발생했습니다:</p>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              {errors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs">
+              • 401 오류: 로그인이 필요하거나 ADMIN_INTERNAL_KEY가 잘못되었습니다.<br/>
+              • 500 오류: 백엔드 서버 문제입니다.<br/>
+              • Timeout: 네트워크 연결을 확인하세요.
+            </p>
+          </div>
           <button
             onClick={() => {
               setIsLoading(true)
-              setError(null)
+              setErrors([])
               fetchData()
             }}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
