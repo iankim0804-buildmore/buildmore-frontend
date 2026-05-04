@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { getMockAdminData, type AdminDashboardData } from '@/lib/admin-mock-data'
+import { fetchAdminDashboardData, type AdminDashboardData } from '@/lib/api/admin'
 import { StatusBar } from './components/status-bar'
 import { SchedulerSection } from './components/scheduler-section'
 import { WikiSection } from './components/wiki-section'
@@ -12,11 +12,13 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
-  const fetchData = useCallback(() => {
-    // TODO: Replace with actual API call
-    const mockData = getMockAdminData()
-    setData(mockData)
-    setLastRefresh(new Date())
+  const fetchData = useCallback(async () => {
+    const newData = await fetchAdminDashboardData()
+    // Only update if we got data, otherwise keep existing state
+    if (newData) {
+      setData(newData)
+      setLastRefresh(new Date())
+    }
   }, [])
 
   useEffect(() => {
