@@ -87,9 +87,9 @@ export interface AdminData {
 }
 
 // Fetch wrapper with timeout and error handling
-async function fetchAdmin<T>(path: string): Promise<T | null> {
+async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 5000)
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10초 타임아웃
 
   try {
     const res = await fetch(`/api/admin${path}`, {
@@ -100,45 +100,71 @@ async function fetchAdmin<T>(path: string): Promise<T | null> {
     clearTimeout(timeoutId)
     
     if (!res.ok) {
-      return null
+      const errorText = await res.text().catch(() => '')
+      console.error(`[v0] API ${path} failed: ${res.status} ${res.statusText}`, errorText)
+      return { data: null, error: `${res.status}: ${res.statusText}` }
     }
     
     const data = await res.json()
-    return data as T
+    return { data: data as T, error: null }
   } catch (error) {
     clearTimeout(timeoutId)
-    console.error(`[fetchAdmin] Error fetching ${path}:`, error)
-    return null
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+    console.error(`[v0] API ${path} error:`, errorMsg)
+    return { data: null, error: errorMsg }
   }
 }
 
 // Individual fetch functions
 export async function fetchOverview(): Promise<AdminOverview | null> {
-  return fetchAdmin<AdminOverview>('/overview')
+  const result = await fetchAdmin<AdminOverview>('/overview')
+  return result.data
 }
 
 export async function fetchScheduler(): Promise<AdminScheduler | null> {
-  return fetchAdmin<AdminScheduler>('/scheduler')
+  const result = await fetchAdmin<AdminScheduler>('/scheduler')
+  return result.data
 }
 
 export async function fetchWiki(): Promise<AdminWiki | null> {
-  return fetchAdmin<AdminWiki>('/wiki')
+  const result = await fetchAdmin<AdminWiki>('/wiki')
+  return result.data
 }
 
 export async function fetchUsage(): Promise<AdminUsage | null> {
-  return fetchAdmin<AdminUsage>('/usage')
+  const result = await fetchAdmin<AdminUsage>('/usage')
+  return result.data
 }
 
-// Fetch all admin data at once
-export async function fetchAllAdminData(): Promise<AdminData> {
-  const [overview, scheduler, wiki, usage] = await Promise.all([
-    fetchOverview(),
-    fetchScheduler(),
-    fetchWiki(),
-    fetchUsage()
+export interface FetchResult {
+  data: AdminData
+  errors: string[]
+}
+
+// Fetch all admin data at once with error tracking
+export async function fetchAllAdminData(): Promise<FetchResult> {
+  const results = await Promise.all([
+    fetchAdmin<AdminOverview>('/overview'),
+    fetchAdmin<AdminScheduler>('/scheduler'),
+    fetchAdmin<AdminWiki>('/wiki'),
+    fetchAdmin<AdminUsage>('/usage')
   ])
 
-  return { overview, scheduler, wiki, usage }
+  const errors: string[] = []
+  if (results[0].error) errors.push(`Overview: ${results[0].error}`)
+  if (results[1].error) errors.push(`Scheduler: ${results[1].error}`)
+  if (results[2].error) errors.push(`Wiki: ${results[2].error}`)
+  if (results[3].error) errors.push(`Usage: ${results[3].error}`)
+
+  return {
+    data: {
+      overview: results[0].data,
+      scheduler: results[1].data,
+      wiki: results[2].data,
+      usage: results[3].data
+    },
+    errors
+  }
 }
 
 // ============================================
@@ -306,7 +332,7 @@ function mapGrade(grade: string): 'A' | 'B+' | 'B' | 'C' | 'D' {
   return 'D'
 }
 
-export function transformToFrontendData(data: AdminData): AdminDashboardData | null {
+export function transformToFrontendData(data: AdminData): AdminDashboardData {
   const now = new Date()
 
   // Transform overview to systemStatus
@@ -444,8 +470,14 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData | n
   }
 }
 
+export interface DashboardResult {
+  data: AdminDashboardData | null
+  errors: string[]
+}
+
 // Fetch and transform admin data for frontend use
-export async function fetchAdminDashboardData(): Promise<AdminDashboardData | null> {
-  const rawData = await fetchAllAdminData()
-  return transformToFrontendData(rawData)
+export async function fetchAdminDashboardData(): Promise<DashboardResult> {
+  const { data: rawData, errors } = await fetchAllAdminData()
+  const transformed = transformToFrontendData(rawData)
+  return { data: transformed, errors }
 }
