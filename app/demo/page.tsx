@@ -31,7 +31,6 @@ import {
   TrendingUp,
   Shield,
   FileBarChart,
-  Clock,
   Banknote,
   Calculator,
   Scale,
@@ -40,6 +39,7 @@ import {
   Edit3,
   X,
   Loader2,
+  Square,
 } from "lucide-react"
 import { MarketTrendSection } from "./components/market-trend-section"
 
@@ -166,7 +166,7 @@ interface ChatMessage {
 
 export default function DemoAnalysisPage() {
   const [inputValue, setInputValue] = useState("")
-  const [showSteps, setShowSteps] = useState(true)
+  const [showSteps, setShowSteps] = useState(false)
   const [apiStatus, setApiStatus] = useState<ApiStatus>('connecting')
   const [analysisData, setAnalysisData] = useState<DisplayAnalysis | null>(null)
   
@@ -188,6 +188,9 @@ export default function DemoAnalysisPage() {
   // Score highlight animation
   const [scoreHighlight, setScoreHighlight] = useState(false)
   const previousApiStatus = useRef<ApiStatus>('connecting')
+  
+  // AbortController for canceling analysis
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Fetch API data on mount
   const fetchApiData = useCallback(async () => {
@@ -225,6 +228,9 @@ export default function DemoAnalysisPage() {
   const handleRunAnalysis = useCallback(async (userMessage: string) => {
     if (!userMessage.trim()) return
     
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController()
+    
     // Add user message to chat
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setInputValue("")
@@ -239,9 +245,18 @@ export default function DemoAnalysisPage() {
     // Simulate step progression
     const stepDelay = 400
     for (let i = 0; i < analysisProcessSteps.length; i++) {
+      // Check if aborted
+      if (abortControllerRef.current?.signal.aborted) {
+        return
+      }
       await new Promise(resolve => setTimeout(resolve, stepDelay))
       setCurrentStep(i)
       setCompletedSteps(prev => [...prev, i])
+    }
+    
+    // Check if aborted before API call
+    if (abortControllerRef.current?.signal.aborted) {
+      return
     }
     
     // Make API call
@@ -263,6 +278,11 @@ export default function DemoAnalysisPage() {
       
       const response = await runAnalysis(payload)
       
+      // Check if aborted after API call
+      if (abortControllerRef.current?.signal.aborted) {
+        return
+      }
+      
       if (response.ok && response.data) {
         const adapted = adaptApiResponse(response.data, mockAnalysis)
         setAnalysisData(adapted)
@@ -283,6 +303,10 @@ export default function DemoAnalysisPage() {
         setChatMessages(prev => [...prev, { role: 'assistant', content: '분석 중 오류가 발생했습니다. Mock 데이터로 표시합니다.' }])
       }
     } catch (error) {
+      // Check if it's an abort error
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
       console.log('[v0] Analysis error:', error)
       setApiStatus('fallback')
       setChatMessages(prev => [...prev, { role: 'assistant', content: '분석 중 오류가 발생했습니다. Mock 데이터로 표시합니다.' }])
@@ -290,7 +314,20 @@ export default function DemoAnalysisPage() {
     
     setIsAnalyzing(false)
     setCurrentStep(-1)
+    abortControllerRef.current = null
   }, [dealConditions, apiStatus])
+
+  // Handle stop analysis
+  const handleStopAnalysis = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsAnalyzing(false)
+    setCurrentStep(-1)
+    setCompletedSteps([])
+    setApiStatus(previousApiStatus.current)
+  }, [])
 
   // Handle new analysis button
   const handleNewAnalysis = useCallback(() => {
@@ -299,7 +336,7 @@ export default function DemoAnalysisPage() {
     setAnalysisData(null)
     setChatMessages([])
     setInputValue("")
-    setShowSteps(true)
+    setShowSteps(false)
     setIsAnalyzing(false)
     setCurrentStep(-1)
     setCompletedSteps([])
@@ -584,8 +621,8 @@ export default function DemoAnalysisPage() {
         {/* Content Area - Different layout for mobile vs desktop */}
         {/* Desktop Layout - Below fixed header */}
         <div className="hidden lg:flex flex-1 flex-row overflow-hidden pt-14">
-          {/* Center Panel: Chat/Input - Fixed */}
-          <div className="w-[420px] xl:w-[480px] flex flex-col border-r border-border bg-white fixed top-14 bottom-0 left-60 z-20">
+          {/* Center Panel: Chat/Input - Fixed, 42% of remaining width */}
+          <div className="w-[calc((100vw-240px)*0.42)] flex flex-col border-r border-border bg-white fixed top-14 bottom-0 left-60 z-20">
             {/* Deal Conditions Card - Fixed at top */}
             <div className="p-4 border-b border-border bg-white shrink-0">
               <Card className="border-border">
@@ -732,50 +769,69 @@ export default function DemoAnalysisPage() {
             </ScrollArea>
 
             {/* Analysis Process Toggle + Input Area - Fixed at bottom */}
-            <div className="border-t border-border bg-white shrink-0">
-              {/* Analysis Process Toggle */}
+            <div className="border-t border-border bg-white shrink-0 relative">
+              {/* Analysis Process Panel - Slides up from bottom */}
               {(chatMessages.length > 0 || isAnalyzing) && (
-                <div className="border-b border-border">
-                  <button 
-                    onClick={() => setShowSteps(!showSteps)}
-                    className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-secondary/50 transition-colors"
-                  >
-                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5" />
-                      분석 프로세스 {isAnalyzing ? '' : '(5.6s)'}
-                    </span>
-                    {showSteps ? (
-                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                    )}
-                  </button>
-                  <div 
-                    className={`overflow-hidden transition-all duration-200 ease-out ${showSteps ? 'max-h-[300px]' : 'max-h-0'}`}
-                  >
-                    <div className="px-4 pb-3 space-y-2">
-                      {displaySteps.map((step, i) => (
-                        <div key={i} className="flex items-center gap-3 text-xs">
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                            step.status === 'complete' ? 'bg-chart-2/10' :
-                            step.status === 'running' ? 'bg-blue-500/10' :
-                            'bg-muted'
-                          }`}>
-                            {step.status === 'complete' ? (
-                              <CheckCircle2 className="w-3 h-3 text-chart-2" />
-                            ) : step.status === 'running' ? (
-                              <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                            ) : (
-                              <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-                            )}
-                          </div>
-                          <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
-                          <span className="text-muted-foreground font-mono">{step.time}</span>
+                <div 
+                  className={`absolute bottom-full left-0 right-0 bg-white border-t border-x border-border rounded-t-lg shadow-lg overflow-hidden transition-transform duration-200 ease-out origin-bottom ${showSteps ? 'translate-y-0' : 'translate-y-full'}`}
+                  style={{ transform: showSteps ? 'translateY(0)' : 'translateY(100%)' }}
+                >
+                  <div className="px-4 py-3 space-y-2 max-h-[300px] overflow-y-auto">
+                    {displaySteps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-3 text-xs">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                          step.status === 'complete' ? 'bg-chart-2/10' :
+                          step.status === 'running' ? 'bg-blue-500/10' :
+                          'bg-muted'
+                        }`}>
+                          {step.status === 'complete' ? (
+                            <CheckCircle2 className="w-3 h-3 text-chart-2" />
+                          ) : step.status === 'running' ? (
+                            <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
+                        <span className="text-muted-foreground font-mono">{step.time}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+              
+              {/* Toggle Button */}
+              {(chatMessages.length > 0 || isAnalyzing) && (
+                <button 
+                  onClick={() => setShowSteps(!showSteps)}
+                  className="flex items-center justify-between w-full px-4 py-2.5 hover:bg-secondary/50 transition-colors border-b border-border"
+                >
+                  <span className="text-xs font-medium text-muted-foreground flex items-center gap-2">
+                    {/* Animated Clock Icon */}
+                    <svg 
+                      className={`w-3.5 h-3.5 ${isAnalyzing ? 'text-green-500' : 'text-muted-foreground'}`}
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline 
+                        points="12 6 12 12 16 14" 
+                        className={isAnalyzing ? 'origin-[12px_12px] animate-spin' : ''}
+                        style={isAnalyzing ? { animationDuration: '1s' } : undefined}
+                      />
+                    </svg>
+                    분석 프로세스 {isAnalyzing ? '' : '(5.6s)'}
+                  </span>
+                  {showSteps ? (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
               )}
               
               {/* Input Area - Desktop */}
@@ -786,16 +842,26 @@ export default function DemoAnalysisPage() {
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     className="flex-1"
-                    disabled={isAnalyzing}
                   />
-                  <Button 
-                    type="submit" 
-                    size="icon" 
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    disabled={isAnalyzing || !inputValue.trim()}
-                  >
-                    {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </Button>
+                  {isAnalyzing ? (
+                    <Button 
+                      type="button" 
+                      size="icon" 
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={handleStopAnalysis}
+                    >
+                      <Square className="w-3.5 h-3.5" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      type="submit" 
+                      size="icon" 
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      disabled={!inputValue.trim()}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  )}
                 </form>
                 <p className="text-xs text-muted-foreground mt-2">
                   예: &quot;자기자본을 20억으로 늘리면 어떻게 될까?&quot; &quot;인근 실거래 사례를 더 보여줘&quot;
@@ -804,8 +870,8 @@ export default function DemoAnalysisPage() {
             </div>
           </div>
 
-          {/* Right Panel: Analysis Results - Scrollable, offset by chat panel width */}
-          <div className="flex-1 bg-background overflow-hidden ml-[420px] xl:ml-[480px]">
+          {/* Right Panel: Analysis Results - Scrollable, 58% of remaining width */}
+          <div className="flex-1 bg-background overflow-hidden ml-[calc((100vw-240px)*0.42)]">
             <ScrollArea className="h-[calc(100vh-56px)]">
               <div className="p-4 lg:p-6 space-y-4">
                 <AnalysisResultsContent 
