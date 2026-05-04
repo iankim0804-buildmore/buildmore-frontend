@@ -742,8 +742,8 @@ export default function DemoAnalysisPage() {
               </Card>
             </div>
 
-            {/* Chat Messages - Scrollable */}
-            <ScrollArea className="flex-1">
+            {/* Chat Messages - Scrollable, takes remaining space */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="p-4 space-y-4">
                 {chatMessages.map((message, i) => (
                   message.role === 'user' ? (
@@ -766,40 +766,10 @@ export default function DemoAnalysisPage() {
                   )
                 ))}
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Analysis Process Toggle + Input Area - Fixed at bottom */}
-            <div className="border-t border-border bg-white shrink-0 relative">
-              {/* Analysis Process Panel - Slides up from bottom */}
-              {(chatMessages.length > 0 || isAnalyzing) && (
-                <div 
-                  className={`absolute bottom-full left-0 right-0 bg-white border-t border-x border-border rounded-t-lg shadow-lg overflow-hidden transition-transform duration-200 ease-out origin-bottom ${showSteps ? 'translate-y-0' : 'translate-y-full'}`}
-                  style={{ transform: showSteps ? 'translateY(0)' : 'translateY(100%)' }}
-                >
-                  <div className="px-4 py-3 space-y-2 max-h-[300px] overflow-y-auto">
-                    {displaySteps.map((step, i) => (
-                      <div key={i} className="flex items-center gap-3 text-xs">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                          step.status === 'complete' ? 'bg-chart-2/10' :
-                          step.status === 'running' ? 'bg-blue-500/10' :
-                          'bg-muted'
-                        }`}>
-                          {step.status === 'complete' ? (
-                            <CheckCircle2 className="w-3 h-3 text-chart-2" />
-                          ) : step.status === 'running' ? (
-                            <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
-                          ) : (
-                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
-                          )}
-                        </div>
-                        <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
-                        <span className="text-muted-foreground font-mono">{step.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
+            <div className="border-t border-border bg-white shrink-0">
               {/* Toggle Button */}
               {(chatMessages.length > 0 || isAnalyzing) && (
                 <button 
@@ -832,6 +802,35 @@ export default function DemoAnalysisPage() {
                     <ChevronUp className="w-4 h-4 text-muted-foreground" />
                   )}
                 </button>
+              )}
+              
+              {/* Analysis Process Panel - Expands upward with max-height transition */}
+              {(chatMessages.length > 0 || isAnalyzing) && (
+                <div 
+                  className={`overflow-hidden border-b border-border transition-all ${showSteps ? 'max-h-[300px] ease-out duration-200' : 'max-h-0 ease-in duration-200'}`}
+                >
+                  <div className="px-4 py-3 space-y-2 overflow-y-auto max-h-[280px]">
+                    {displaySteps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-3 text-xs">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                          step.status === 'complete' ? 'bg-chart-2/10' :
+                          step.status === 'running' ? 'bg-blue-500/10' :
+                          'bg-muted'
+                        }`}>
+                          {step.status === 'complete' ? (
+                            <CheckCircle2 className="w-3 h-3 text-chart-2" />
+                          ) : step.status === 'running' ? (
+                            <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                          )}
+                        </div>
+                        <span className={`flex-1 ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'}`}>{step.step}</span>
+                        <span className="text-muted-foreground font-mono">{step.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
               
               {/* Input Area - Desktop */}
