@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { SystemStatus } from '@/lib/admin-mock-data'
+import type { FrontendSystemStatus } from '@/lib/api/admin'
 import {
   CheckCircle2,
   XCircle,
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 interface StatusBarProps {
-  systemStatus: SystemStatus
+  systemStatus: FrontendSystemStatus
   lastRefresh: Date
 }
 

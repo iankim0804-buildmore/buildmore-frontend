@@ -1,17 +1,17 @@
 'use client'
 
 import type {
-  WikiStats,
-  ProcessingQueue,
-  WikiUpdate,
-} from '@/lib/admin-mock-data'
+  FrontendWikiStats,
+  FrontendProcessingQueue,
+  FrontendWikiUpdate,
+} from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle, Database, FileText, Lightbulb, Scale, Clock } from 'lucide-react'
 
 interface WikiSectionProps {
-  wikiStats: WikiStats
-  processingQueue: ProcessingQueue
-  wikiUpdates: WikiUpdate[]
+  wikiStats: FrontendWikiStats
+  processingQueue: FrontendProcessingQueue
+  wikiUpdates: FrontendWikiUpdate[]
 }
 
 export function WikiSection({
@@ -19,9 +19,9 @@ export function WikiSection({
   processingQueue,
   wikiUpdates,
 }: WikiSectionProps) {
-  const progressPercent = Math.round(
-    (processingQueue.done / processingQueue.total) * 100
-  )
+  const progressPercent = processingQueue.total > 0 
+    ? Math.round((processingQueue.done / processingQueue.total) * 100) 
+    : 0
 
   return (
     <section>
