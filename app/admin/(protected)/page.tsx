@@ -8,6 +8,8 @@ import { WikiSection } from './components/wiki-section'
 import { UsageSection } from './components/usage-section'
 import { DataLayerSection } from './components/data-layer-section'
 import { DeltaSection } from './components/delta-section'
+import { DataCoverageSection } from './components/data-coverage-section'
+import { RoadmapSection } from './components/roadmap-section'
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
@@ -136,6 +138,12 @@ export default function AdminDashboardPage() {
 
         {/* Section 5: Delta Status */}
         <DeltaSection onRefresh={fetchData} />
+
+        {/* Section 6: Data Coverage (independent error boundary via component state) */}
+        <DataCoverageSection />
+
+        {/* Section 7: Development Roadmap (independent error boundary via component state) */}
+        <RoadmapSection />
       </main>
     </div>
   )
