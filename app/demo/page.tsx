@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { getHealth, getSampleAnalysis, runAnalysis } from "@/lib/api/analysis"
+import { getHealth, getSampleAnalysis, runAnalysis, analyzeProperty, type PropertyAnalyzeResponse } from "@/lib/api/analysis"
 import { isApiConfigured } from "@/lib/api/client"
 import { adaptApiResponse, type DisplayAnalysis } from "@/lib/api/adapters"
 import { Button } from "@/components/ui/button"
@@ -42,6 +42,7 @@ import {
   Square,
 } from "lucide-react"
 import { MarketTrendSection } from "./components/market-trend-section"
+import { PropertyInfoCard, type PropertyInfo } from "./components/property-info-card"
 
 // Deal condition type
 interface DealConditions {
@@ -191,6 +192,12 @@ export default function DemoAnalysisPage() {
   
   // AbortController for canceling analysis
   const abortControllerRef = useRef<AbortController | null>(null)
+  
+  // Property auto-lookup state
+  const [propertyInfo, setPropertyInfo] = useState<PropertyInfo | null>(null)
+  const [isLoadingProperty, setIsLoadingProperty] = useState(false)
+  const [propertyError, setPropertyError] = useState<string | null>(null)
+  const lastLookedUpAddress = useRef<string>('')
 
   // Fetch API data on mount
   const fetchApiData = useCallback(async () => {
@@ -223,6 +230,65 @@ export default function DemoAnalysisPage() {
   useEffect(() => {
     fetchApiData()
   }, [fetchApiData])
+
+  // Property auto-lookup function
+  const handlePropertyLookup = useCallback(async (address: string) => {
+    // Skip if already looked up this address
+    if (address === lastLookedUpAddress.current) return
+    
+    // Check if address contains Korean location keywords
+    const addressKeywords = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '구', '동', '로', '길']
+    const hasAddressKeyword = addressKeywords.some(keyword => address.includes(keyword))
+    
+    if (!hasAddressKeyword || address.length < 5) return
+    
+    lastLookedUpAddress.current = address
+    setIsLoadingProperty(true)
+    setPropertyError(null)
+    
+    try {
+      const response = await analyzeProperty(address)
+      
+      if (response.ok && response.data) {
+        setPropertyInfo(response.data as PropertyInfo)
+        
+        // Auto-fill deal conditions with retrieved data
+        if (response.data.main_use) {
+          setDealConditions(prev => ({
+            ...prev,
+            asset_type: response.data!.main_use || prev.asset_type,
+          }))
+          setEditConditions(prev => ({
+            ...prev,
+            asset_type: response.data!.main_use || prev.asset_type,
+          }))
+        }
+      } else {
+        setPropertyError(response.error || '물건정보 조회 실패')
+      }
+    } catch (error) {
+      setPropertyError('물건정보 조회 중 오류 발생')
+    }
+    
+    setIsLoadingProperty(false)
+  }, [])
+
+  // Trigger property lookup when address changes in edit mode
+  useEffect(() => {
+    if (editMode && editConditions.address !== lastLookedUpAddress.current) {
+      const timer = setTimeout(() => {
+        handlePropertyLookup(editConditions.address)
+      }, 500) // Debounce 500ms
+      return () => clearTimeout(timer)
+    }
+  }, [editConditions.address, editMode, handlePropertyLookup])
+
+  // Initial property lookup on mount
+  useEffect(() => {
+    if (dealConditions.address && !propertyInfo && !isLoadingProperty) {
+      handlePropertyLookup(dealConditions.address)
+    }
+  }, [dealConditions.address, propertyInfo, isLoadingProperty, handlePropertyLookup])
 
   // Run analysis with current deal conditions
   const handleRunAnalysis = useCallback(async (userMessage: string) => {
@@ -342,11 +408,19 @@ export default function DemoAnalysisPage() {
     setCompletedSteps([])
     setEditMode(false)
     
+    // Reset property state
+    setPropertyInfo(null)
+    setPropertyError(null)
+    lastLookedUpAddress.current = ''
+    
     // Re-fetch sample data
     fetchApiData()
     
+    // Trigger property lookup for default address
+    handlePropertyLookup(defaultDealConditions.address)
+    
     toast.success("새 분석이 시작되었습니다.")
-  }, [fetchApiData])
+  }, [fetchApiData, handlePropertyLookup])
 
   // Handle edit mode
   const handleStartEdit = () => {
@@ -739,6 +813,19 @@ export default function DemoAnalysisPage() {
                     </>
                   )}
                 </CardContent>
+                
+                {/* Property Info - Compact display in deal conditions card */}
+                {(isLoadingProperty || propertyInfo || propertyError) && (
+                  <div className="px-4 pb-4">
+                    <PropertyInfoCard
+                      address={dealConditions.address}
+                      propertyInfo={propertyInfo}
+                      isLoading={isLoadingProperty}
+                      error={propertyError}
+                      compact
+                    />
+                  </div>
+                )}
               </Card>
             </div>
 
@@ -879,6 +966,10 @@ export default function DemoAnalysisPage() {
                   setShowSteps={setShowSteps} 
                   scoreHighlight={scoreHighlight}
                   onPdfReport={handlePdfReport}
+                  propertyInfo={propertyInfo}
+                  isLoadingProperty={isLoadingProperty}
+                  propertyError={propertyError}
+                  address={dealConditions.address}
                 />
               </div>
             </ScrollArea>
@@ -1188,7 +1279,7 @@ export default function DemoAnalysisPage() {
                 <FileText className="w-3.5 h-3.5" />
                 PDF 리포트
               </Button>
-              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8" onClick={() => handleComingSoon("유사 사례")}>
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs h-8" onClick={() => handleComingSoon("��사 사례")}>
                 <Building2 className="w-3.5 h-3.5" />
                 유사 사례
               </Button>
@@ -1340,15 +1431,33 @@ function AnalysisResultsContent({
   setShowSteps,
   scoreHighlight,
   onPdfReport,
+  propertyInfo,
+  isLoadingProperty,
+  propertyError,
+  address,
 }: { 
   analysisData: AnalysisDisplayData
   showSteps: boolean
   setShowSteps: (v: boolean) => void
   scoreHighlight?: boolean
   onPdfReport?: () => void
+  propertyInfo?: PropertyInfo | null
+  isLoadingProperty?: boolean
+  propertyError?: string | null
+  address?: string
 }) {
   return (
     <>
+      {/* Property Basic Info - At the top of analysis results */}
+      {address && (propertyInfo || isLoadingProperty) && (
+        <PropertyInfoCard
+          address={address}
+          propertyInfo={propertyInfo || null}
+          isLoading={isLoadingProperty || false}
+          error={propertyError || null}
+        />
+      )}
+
       {/* Bankability Score Card */}
       <Card className={`border-border bg-white overflow-hidden transition-all duration-500 ${scoreHighlight ? 'ring-2 ring-primary/50 shadow-lg' : ''}`}>
         <div className="bg-primary/5 border-b border-border p-6">
