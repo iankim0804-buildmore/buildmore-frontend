@@ -43,7 +43,8 @@ import {
 } from "lucide-react"
 import { MarketTrendSection } from "./components/market-trend-section"
 import { PropertyInfoCard, type PropertyInfo } from "./components/property-info-card"
-import { InputsContainer } from "./components/inputs-container"
+import { InputControlBar, type NumericValues, type DropdownValues } from "./components/input-control-bar"
+import { getNearbyTransactions, type NearbyTransaction } from "@/lib/api/analysis"
 
 // Deal condition type
 interface DealConditions {
@@ -198,6 +199,26 @@ export default function DemoAnalysisPage() {
   const [propertyInfo, setPropertyInfo] = useState<PropertyInfo | null>(null)
   const [isLoadingProperty, setIsLoadingProperty] = useState(false)
   const [propertyError, setPropertyError] = useState<string | null>(null)
+  
+  // Nearby transactions state
+  const [nearbyTransactions, setNearbyTransactions] = useState<NearbyTransaction[]>([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  
+  // InputControlBar dropdown values state
+  const [dropdownValues, setDropdownValues] = useState<DropdownValues>({
+    rent_arrear_level: 'none',
+    eviction_difficulty: 'normal',
+    rent_increase_room: 'medium',
+    has_elevator: 'yes',
+    exterior_remodel: 'unnecessary',
+    facility_condition: 'normal',
+    lease_status: 'full',
+    parking_status: 'normal',
+    road_condition: 'normal',
+  })
+  
+  // Control bar loading state
+  const [isControlBarLoading, setIsControlBarLoading] = useState(false)
   const lastLookedUpAddress = useRef<string>('')
 
   // Fetch API data on mount
@@ -290,6 +311,104 @@ export default function DemoAnalysisPage() {
       handlePropertyLookup(dealConditions.address)
     }
   }, [dealConditions.address, propertyInfo, isLoadingProperty, handlePropertyLookup])
+
+  // Fetch nearby transactions when PNU is available
+  const fetchNearbyTransactions = useCallback(async (pnu: string) => {
+    if (!pnu) return
+    setIsLoadingTransactions(true)
+    try {
+      const response = await getNearbyTransactions(pnu, 500, 20)
+      if (response.ok && response.data) {
+        setNearbyTransactions(response.data.transactions)
+      }
+    } catch (error) {
+      console.log('[v0] Failed to fetch nearby transactions:', error)
+    }
+    setIsLoadingTransactions(false)
+  }, [])
+
+  // Fetch transactions when property info is loaded
+  useEffect(() => {
+    if (propertyInfo?.pnu) {
+      fetchNearbyTransactions(propertyInfo.pnu)
+    }
+  }, [propertyInfo?.pnu, fetchNearbyTransactions])
+
+  // Handle numeric value changes from InputControlBar (triggers full analysis)
+  const handleNumericChange = useCallback(async (values: NumericValues) => {
+    setIsControlBarLoading(true)
+    
+    // Update deal conditions
+    setDealConditions(prev => ({
+      ...prev,
+      deal_amount: values.deal_amount,
+      deposit: values.deposit,
+      monthly_rent: values.monthly_rent,
+      equity: values.equity,
+      interest_rate: values.interest_rate,
+    }))
+    
+    // Trigger analysis run
+    try {
+      const payload = {
+        address: dealConditions.address,
+        asset_type: dealConditions.asset_type,
+        deal_amount: values.deal_amount,
+        deposit: values.deposit,
+        monthly_rent: values.monthly_rent,
+        equity: values.equity,
+        investment_purpose: dealConditions.investment_purpose,
+        interest_rate: values.interest_rate,
+        vacancy_rate: dealConditions.vacancy_rate,
+        operating_expense_ratio: dealConditions.operating_expense_ratio,
+        remodeling_cost: dealConditions.remodeling_cost,
+      }
+      
+      const response = await runAnalysis(payload)
+      if (response.ok && response.data) {
+        const adapted = adaptApiResponse(response.data, mockAnalysis)
+        setAnalysisData(adapted)
+        setScoreHighlight(true)
+        setTimeout(() => setScoreHighlight(false), 1500)
+      }
+    } catch (error) {
+      console.log('[v0] Numeric change analysis failed:', error)
+    }
+    
+    setIsControlBarLoading(false)
+  }, [dealConditions])
+
+  // Handle dropdown value changes from InputControlBar (triggers preview)
+  const handleDropdownChange = useCallback(async (values: DropdownValues) => {
+    setDropdownValues(values)
+    setIsControlBarLoading(true)
+    
+    try {
+      // Call preview API
+      const response = await fetch('/api/user-inputs/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pnu: propertyInfo?.pnu,
+          base_score: analysisData?.score ?? 72,
+          ...values,
+        }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.new_score && analysisData) {
+          setAnalysisData(prev => prev ? { ...prev, score: data.new_score } : prev)
+          setScoreHighlight(true)
+          setTimeout(() => setScoreHighlight(false), 1500)
+        }
+      }
+    } catch (error) {
+      console.log('[v0] Dropdown preview failed:', error)
+    }
+    
+    setIsControlBarLoading(false)
+  }, [propertyInfo?.pnu, analysisData?.score])
 
   // Run analysis with current deal conditions
   const handleRunAnalysis = useCallback(async (userMessage: string) => {
@@ -628,227 +747,89 @@ export default function DemoAnalysisPage() {
 
       {/* Main Content - Offset by sidebar width on desktop */}
       <div className="flex-1 flex flex-col h-screen lg:ml-60">
-        {/* Top Header - Fixed */}
-        <header className="h-14 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 fixed top-0 left-0 right-0 lg:left-60 z-30">
-          <div className="flex items-center gap-4">
-            {/* Mobile Logo */}
-            <Link href="/" className="lg:hidden flex items-center gap-2">
-              <div className="w-7 h-7 bg-primary rounded flex items-center justify-center">
-                <Landmark className="w-4 h-4 text-primary-foreground" />
-              </div>
-            </Link>
-            <Link href="/" className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-              <ChevronRight className="w-4 h-4 rotate-180" />
-              <span>홈으로</span>
-            </Link>
-            <div className="hidden sm:block h-4 w-px bg-border" />
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground truncate max-w-[120px] sm:max-w-none">{dealConditions.address.split(' ').slice(-2).join(' ')}</span>
+        {/* Top Header - Landing page style with search */}
+        <header className="h-14 bg-white/95 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 fixed top-0 left-0 right-0 lg:left-60 z-30">
+          {/* Left: Navigation */}
+          <nav className="hidden md:flex items-center gap-6">
+            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">분석 기능</a>
+            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">프로세스</a>
+            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">리포트</a>
+            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">가격</a>
+          </nav>
+          
+          {/* Center: Address Search */}
+          <div className="flex-1 max-w-md mx-4">
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="주소 검색 (예: 마포구 신수동 27-2)"
+                value={dealConditions.address}
+                onChange={(e) => setDealConditions(prev => ({ ...prev, address: e.target.value }))}
+                className="pl-9 pr-4 h-9 text-sm"
+              />
             </div>
-            <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
-              {displayData.assetType}
-            </Badge>
-            <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
-              {displayData.dealAmount}
-            </Badge>
           </div>
+          
+          {/* Right: CTA and Status */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* API Status Indicator - Small and subtle */}
+            {/* API Status */}
             <Badge 
               variant="outline" 
               className={`text-[10px] px-1.5 py-0.5 ${
-                apiStatus === 'connecting' 
-                  ? 'border-yellow-500/30 text-yellow-600 bg-yellow-50' 
-                  : apiStatus === 'connected' 
-                    ? 'border-chart-2/30 text-chart-2 bg-chart-2/5' 
-                    : apiStatus === 'analyzing'
-                      ? 'border-blue-500/30 text-blue-600 bg-blue-50'
-                      : 'border-orange-400/30 text-orange-500 bg-orange-50'
+                apiStatus === 'connected' 
+                  ? 'border-chart-2/30 text-chart-2 bg-chart-2/5' 
+                  : apiStatus === 'analyzing'
+                    ? 'border-blue-500/30 text-blue-600 bg-blue-50'
+                    : 'border-orange-400/30 text-orange-500 bg-orange-50'
               }`}
             >
               <div className={`w-1 h-1 rounded-full mr-1 ${
-                apiStatus === 'connecting' 
-                  ? 'bg-yellow-500 animate-pulse' 
-                  : apiStatus === 'connected' 
-                    ? 'bg-chart-2' 
-                    : apiStatus === 'analyzing'
-                      ? 'bg-blue-500 animate-pulse'
-                      : 'bg-orange-400'
+                apiStatus === 'connected' 
+                  ? 'bg-chart-2' 
+                  : apiStatus === 'analyzing'
+                    ? 'bg-blue-500 animate-pulse'
+                    : 'bg-orange-400'
               }`} />
-              {apiStatus === 'connecting' ? 'API...' : apiStatus === 'connected' ? 'API' : apiStatus === 'analyzing' ? '분석 중' : 'Mock'}
+              {apiStatus === 'connected' ? 'API' : apiStatus === 'analyzing' ? '분석 중' : 'Mock'}
             </Badge>
-            <Badge className={`text-xs ${isAnalyzing ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : 'bg-chart-2/10 text-chart-2 border-chart-2/20'}`}>
-              <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isAnalyzing ? 'bg-blue-500 animate-pulse' : 'bg-chart-2'}`} />
-              {isAnalyzing ? '분석 중...' : '분석 완료'}
-            </Badge>
+            <Button variant="ghost" size="sm" className="text-muted-foreground hidden sm:flex">
+              로그인
+            </Button>
             <Button 
               size="sm" 
-              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 hidden sm:flex"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
               onClick={handlePdfReport}
             >
               <FileBarChart className="w-4 h-4" />
-              PDF 리포트 생성
+              <span className="hidden sm:inline">PDF 리포트</span>
             </Button>
           </div>
         </header>
 
-        {/* Inputs Container - Summary bar + drawer (sticky below header) */}
-        {analysisData && (
-          <InputsContainer
-            baseScore={analysisData.score}
-            dealAmount={dealConditions.deal_amount}
-            equity={dealConditions.equity}
-            interestRate={dealConditions.interest_rate}
-            loanPeriod={20}
-            onScoreUpdate={(newScore) => {
-              // Update display data with new score
-              if (analysisData) {
-                analysisData.score = newScore
-              }
+        {/* Input Control Bar - 36px height with numeric inputs and dropdowns */}
+        <div className="fixed top-14 left-0 right-0 lg:left-60 z-25">
+          <InputControlBar
+            onNumericChange={handleNumericChange}
+            onDropdownChange={handleDropdownChange}
+            isLoading={isControlBarLoading}
+            initialNumericValues={{
+              deal_amount: dealConditions.deal_amount,
+              deposit: dealConditions.deposit,
+              monthly_rent: dealConditions.monthly_rent,
+              equity: dealConditions.equity,
+              interest_rate: dealConditions.interest_rate * 100,
+              loan_period: 20,
             }}
-            pnu={propertyInfo?.pnu}
-            address={dealConditions.address}
+            initialDropdownValues={dropdownValues}
           />
-        )}
+        </div>
 
         {/* Content Area - Different layout for mobile vs desktop */}
-        {/* Desktop Layout - Below fixed header */}
-        <div className="hidden lg:flex flex-1 flex-row overflow-hidden pt-14">
+        {/* Desktop Layout - Below fixed header and control bar (56px + 52px = 108px) */}
+        <div className="hidden lg:flex flex-1 flex-row overflow-hidden pt-[108px]">
           {/* Center Panel: Chat/Input - Fixed, 42% of remaining width */}
-          <div className="w-[calc((100vw-240px)*0.42)] flex flex-col border-r border-border bg-white fixed top-14 bottom-0 left-60 z-20">
-            {/* Deal Conditions Card - Fixed at top */}
-            <div className="p-4 border-b border-border bg-white shrink-0">
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Calculator className="w-4 h-4 text-muted-foreground" />
-                      딜 조건
-                    </CardTitle>
-                    {!editMode ? (
-                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleStartEdit}>
-                        <Edit3 className="w-3 h-3 mr-1" />
-                        조건 수정
-                      </Button>
-                    ) : (
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleCancelEdit}>
-                          <X className="w-3 h-3 mr-1" />
-                          취소
-                        </Button>
-                        <Button size="sm" className="h-7 px-2 text-xs" onClick={handleApplyEdit}>
-                          적용
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                  {editMode ? (
-                    <>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">주소</p>
-                        <Input 
-                          value={editConditions.address}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, address: e.target.value }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">매입가 (억)</p>
-                        <Input 
-                          type="number"
-                          step="0.1"
-                          value={editConditions.deal_amount / 100000000}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, deal_amount: parseFloat(e.target.value) * 100000000 || 0 }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">예상 보증금 (억)</p>
-                        <Input 
-                          type="number"
-                          step="0.1"
-                          value={editConditions.deposit / 100000000}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, deposit: parseFloat(e.target.value) * 100000000 || 0 }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">예상 월세 (만원)</p>
-                        <Input 
-                          type="number"
-                          step="100"
-                          value={editConditions.monthly_rent / 10000}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, monthly_rent: parseFloat(e.target.value) * 10000 || 0 }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">자기자본 (억)</p>
-                        <Input 
-                          type="number"
-                          step="0.1"
-                          value={editConditions.equity / 100000000}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, equity: parseFloat(e.target.value) * 100000000 || 0 }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
-                        <Input 
-                          value={editConditions.investment_purpose}
-                          onChange={(e) => setEditConditions(prev => ({ ...prev, investment_purpose: e.target.value }))}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">주소</p>
-                        <p className="font-medium text-foreground">{dealConditions.address}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">매입가</p>
-                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.deal_amount)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">예상 보증금</p>
-                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.deposit)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">예상 월세</p>
-                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.monthly_rent)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">자기자본</p>
-                        <p className="font-medium text-foreground">{formatToKorean(dealConditions.equity)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">투자 목적</p>
-                        <p className="font-medium text-foreground">{dealConditions.investment_purpose}</p>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-                
-                {/* Property Info - Compact display in deal conditions card */}
-                {(isLoadingProperty || propertyInfo || propertyError) && (
-                  <div className="px-4 pb-4">
-                    <PropertyInfoCard
-                      address={dealConditions.address}
-                      propertyInfo={propertyInfo}
-                      isLoading={isLoadingProperty}
-                      error={propertyError}
-                      compact
-                    />
-                  </div>
-                )}
-              </Card>
-            </div>
-
+          <div className="w-[calc((100vw-240px)*0.42)] flex flex-col border-r border-border bg-white fixed top-[108px] bottom-0 left-60 z-20">
             {/* Chat Messages - Scrollable, takes remaining space */}
             <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="p-4 space-y-4">
@@ -978,7 +959,7 @@ export default function DemoAnalysisPage() {
 
           {/* Right Panel: Analysis Results - Scrollable, 58% of remaining width */}
           <div className="flex-1 bg-background overflow-hidden ml-[calc((100vw-240px)*0.42)]">
-            <ScrollArea className="h-[calc(100vh-56px)]">
+            <ScrollArea className="h-[calc(100vh-108px)]">
               <div className="p-4 lg:p-6 space-y-4">
                 <AnalysisResultsContent 
                   analysisData={displayData} 
@@ -990,6 +971,8 @@ export default function DemoAnalysisPage() {
                   isLoadingProperty={isLoadingProperty}
                   propertyError={propertyError}
                   address={dealConditions.address}
+                  nearbyTransactions={nearbyTransactions}
+                  isLoadingTransactions={isLoadingTransactions}
                 />
               </div>
             </ScrollArea>
@@ -1455,6 +1438,8 @@ function AnalysisResultsContent({
   isLoadingProperty,
   propertyError,
   address,
+  nearbyTransactions,
+  isLoadingTransactions,
 }: { 
   analysisData: AnalysisDisplayData
   showSteps: boolean
@@ -1465,6 +1450,8 @@ function AnalysisResultsContent({
   isLoadingProperty?: boolean
   propertyError?: string | null
   address?: string
+  nearbyTransactions?: NearbyTransaction[]
+  isLoadingTransactions?: boolean
 }) {
   return (
     <>
@@ -1698,22 +1685,49 @@ function AnalysisResultsContent({
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-chart-5" />
                 인근 실거래 비교
+                {isLoadingTransactions && (
+                  <span className="text-xs text-muted-foreground">(로딩 중...)</span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {analysisData.comparables.map((comp, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{comp.address}</p>
-                      <p className="text-xs text-muted-foreground">{comp.type} · {comp.date}</p>
+                {/* Show API transactions if available, otherwise fall back to mock data */}
+                {nearbyTransactions && nearbyTransactions.length > 0 ? (
+                  nearbyTransactions.slice(0, 10).map((tx, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{tx.address}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {tx.main_use || '근생'} · {tx.transaction_date} · {tx.distance_m}m
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-foreground">
+                          {tx.price >= 100000000 
+                            ? `${(tx.price / 100000000).toFixed(1)}억` 
+                            : `${(tx.price / 10000).toLocaleString()}만`}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {tx.price_per_m2 ? `${Math.round(tx.price_per_m2).toLocaleString()}원/m²` : '-'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-foreground">{comp.price}</p>
-                      <p className="text-xs text-muted-foreground">LTV {comp.ltv}</p>
+                  ))
+                ) : (
+                  analysisData.comparables.map((comp, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{comp.address}</p>
+                        <p className="text-xs text-muted-foreground">{comp.type} · {comp.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-foreground">{comp.price}</p>
+                        <p className="text-xs text-muted-foreground">LTV {comp.ltv}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <Button variant="outline" size="sm" className="w-full mt-4 gap-2">
                 <ExternalLink className="w-3.5 h-3.5" />

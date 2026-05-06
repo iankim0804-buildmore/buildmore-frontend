@@ -160,6 +160,71 @@ export interface PropertyAnalyzeResponse {
   [key: string]: unknown
 }
 
+// Nearby transactions types
+export interface NearbyTransaction {
+  pnu: string
+  address: string
+  distance_m: number
+  transaction_date: string
+  transaction_type: string
+  price: number
+  price_per_m2: number
+  land_area_m2?: number
+  building_area_m2?: number
+  floors?: number
+  built_year?: number
+  main_use?: string
+}
+
+export interface NearbyTransactionsResponse {
+  transactions: NearbyTransaction[]
+  center_pnu: string
+  radius_m: number
+  total_count: number
+}
+
+/**
+ * Get nearby transactions
+ * POST /api/nearby-transactions
+ */
+export async function getNearbyTransactions(
+  pnu: string,
+  radiusM: number = 500,
+  limit: number = 20
+): Promise<ApiResponse<NearbyTransactionsResponse>> {
+  try {
+    const response = await fetch('/api/nearby-transactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pnu, radius_m: radiusM, limit }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return {
+        data: null,
+        error: `인근 거래 조회 실패: ${errorText}`,
+        ok: false,
+      }
+    }
+
+    const data = await response.json()
+    return {
+      data: data as NearbyTransactionsResponse,
+      error: null,
+      ok: true,
+    }
+  } catch (error) {
+    return {
+      data: null,
+      error: `인근 거래 조회 오류: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      ok: false,
+    }
+  }
+}
+
 /**
  * Analyze property by address
  * POST /api/property/analyze
