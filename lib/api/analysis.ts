@@ -134,3 +134,70 @@ export async function runAnalysis(
 ): Promise<ApiResponse<AnalysisRunResponse>> {
   return apiPost<AnalysisRunResponse>('/api/analysis/run', payload)
 }
+
+// Property analyze types
+export interface PropertyAnalyzeResponse {
+  pnu?: string
+  lat?: number
+  lng?: number
+  land_area_m2?: number
+  building_area_m2?: number
+  total_floor_area_m2?: number
+  floors_above?: number
+  floors_below?: number
+  built_year?: number
+  structure?: string
+  main_use?: string
+  violation?: boolean
+  land_price_per_m2?: number
+  zoning?: string
+  bcrat?: number
+  vlrat?: number
+  current_base_rate?: number
+  estimated_loan_rate_min?: number
+  estimated_loan_rate_max?: number
+  errors?: string[]
+  [key: string]: unknown
+}
+
+/**
+ * Analyze property by address
+ * POST /api/property/analyze
+ * 
+ * This calls the internal Next.js API route which proxies to the backend
+ */
+export async function analyzeProperty(
+  address: string
+): Promise<ApiResponse<PropertyAnalyzeResponse>> {
+  try {
+    const response = await fetch('/api/property/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ address }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      return {
+        data: null,
+        error: `물건정보 조회 실패: ${errorText}`,
+        ok: false,
+      }
+    }
+
+    const data = await response.json()
+    return {
+      data: data as PropertyAnalyzeResponse,
+      error: null,
+      ok: true,
+    }
+  } catch (error) {
+    return {
+      data: null,
+      error: `물건정보 조회 오류: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      ok: false,
+    }
+  }
+}
