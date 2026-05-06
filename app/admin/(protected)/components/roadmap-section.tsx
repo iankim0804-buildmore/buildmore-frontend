@@ -41,85 +41,86 @@ function getCompletionBadge(completed: number, total: number) {
   return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">완료 {completed} / {total}</Badge>
 }
 
-// Collapsible Item Component
+// Helper to strip HTML comments and parse dates from text
+function parseItemText(text: string): { cleanText: string; parsedAddedDate: string | null; parsedDoneDate: string | null } {
+  let cleanText = text
+  let parsedAddedDate: string | null = null
+  let parsedDoneDate: string | null = null
+  
+  // Match HTML comments like <!-- added: 2026-05-05 --> or <!-- added: 2026-05-05, done: 2026-05-07 -->
+  const commentMatch = text.match(/<!--\s*(.*?)\s*-->/)
+  if (commentMatch) {
+    const commentContent = commentMatch[1]
+    
+    // Parse added date
+    const addedMatch = commentContent.match(/added:\s*(\d{4}-\d{2}-\d{2})/)
+    if (addedMatch) {
+      parsedAddedDate = addedMatch[1]
+    }
+    
+    // Parse done date
+    const doneMatch = commentContent.match(/done:\s*(\d{4}-\d{2}-\d{2})/)
+    if (doneMatch) {
+      parsedDoneDate = doneMatch[1]
+    }
+    
+    // Remove the HTML comment from text
+    cleanText = text.replace(/<!--.*?-->/g, '').trim()
+  }
+  
+  return { cleanText, parsedAddedDate, parsedDoneDate }
+}
+
+// Item Row Component (no expandable details - dates are inline)
 function RoadmapItemRow({ item }: { item: RoadmapItem }) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  // Parse text to extract dates and clean HTML comments
+  const { cleanText, parsedAddedDate, parsedDoneDate } = parseItemText(item.text)
   
-  const hasDetails = item.completed && (item.completed_date || item.done_date || item.sub_items.length > 0)
-  
-  // Get the effective done date (prefer done_date, fallback to completed_date)
-  const effectiveDoneDate = item.done_date || item.completed_date
+  // Use parsed dates, fallback to item properties
+  const addedDate = item.added_date || parsedAddedDate
+  const doneDate = item.done_date || item.completed_date || parsedDoneDate
   
   return (
-    <div className="space-y-0">
-      <div 
-        className={`flex items-start gap-2 py-1.5 ${hasDetails ? 'cursor-pointer hover:bg-sidebar/50 -mx-2 px-2 rounded' : ''}`}
-        onClick={() => hasDetails && setIsExpanded(!isExpanded)}
-      >
-        {/* Checkbox */}
-        <div className="mt-0.5 shrink-0">
-          {item.completed ? (
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          ) : (
-            <Square className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-        
-        {/* Text */}
-        <span className={`flex-1 text-sm ${item.completed ? 'text-muted-foreground line-through' : 'text-sidebar-foreground'}`}>
-          {item.text}
-        </span>
-        
-        {/* Date display */}
-        <div className="flex items-center gap-3 shrink-0">
-          {item.completed ? (
-            // Completed items: show "추가 YYYY-MM-DD  완료 YYYY-MM-DD"
-            <>
-              {item.added_date && (
-                <span className="text-xs text-muted-foreground">
-                  추가 {item.added_date}
-                </span>
-              )}
-              {effectiveDoneDate && (
-                <span className="text-xs text-muted-foreground">
-                  완료 {effectiveDoneDate}
-                </span>
-              )}
-            </>
-          ) : (
-            // Incomplete items: show "추가 YYYY-MM-DD" on the right
-            item.added_date && (
-              <span className="text-xs text-muted-foreground">
-                추가 {item.added_date}
-              </span>
-            )
-          )}
-        </div>
-        
-        {hasDetails && (
-          <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+    <div className="flex items-center gap-2 py-1.5">
+      {/* Checkbox */}
+      <div className="shrink-0">
+        {item.completed ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        ) : (
+          <Square className="h-4 w-4 text-muted-foreground" />
         )}
       </div>
       
-      {/* Expanded details */}
-      {isExpanded && hasDetails && (
-        <div className="ml-6 pb-2 space-y-1 animate-in slide-in-from-top-1 duration-200">
-          {effectiveDoneDate && (
-            <div className="text-xs text-muted-foreground">
-              완료일: {effectiveDoneDate}
-            </div>
-          )}
-          {item.sub_items.length > 0 && (
-            <div className="space-y-0.5">
-              {item.sub_items.map((subItem, idx) => (
-                <div key={idx} className="text-xs text-muted-foreground pl-2 border-l border-sidebar-border">
-                  {subItem.text}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Text */}
+      <span className={`flex-1 text-sm ${item.completed ? 'text-muted-foreground line-through' : 'text-sidebar-foreground'}`}>
+        {cleanText}
+      </span>
+      
+      {/* Date display - right aligned, nowrap */}
+      <div className="flex items-center gap-3 shrink-0 whitespace-nowrap">
+        {item.completed ? (
+          // Completed items: "등록 YYYY-MM-DD  완료 YYYY-MM-DD"
+          <>
+            {addedDate && (
+              <span className="text-[11px] text-muted-foreground">
+                등록 {addedDate}
+              </span>
+            )}
+            {doneDate && (
+              <span className="text-[11px] text-muted-foreground">
+                완료 {doneDate}
+              </span>
+            )}
+          </>
+        ) : (
+          // Incomplete items: "추가 YYYY-MM-DD"
+          addedDate && (
+            <span className="text-[11px] text-muted-foreground">
+              추가 {addedDate}
+            </span>
+          )
+        )}
+      </div>
     </div>
   )
 }
