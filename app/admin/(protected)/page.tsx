@@ -10,6 +10,7 @@ import { DataLayerSection } from './components/data-layer-section'
 import { DeltaSection } from './components/delta-section'
 import { DataCoverageSection } from './components/data-coverage-section'
 import { RoadmapSection } from './components/roadmap-section'
+import { DevLogSection } from './components/dev-log-section'
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
@@ -110,6 +111,9 @@ export default function AdminDashboardPage() {
 
       {/* Main Content */}
       <main className="mx-auto max-w-7xl space-y-8 px-4 pt-6 sm:px-6 lg:px-8">
+        {/* Section 0: Development Log (independent fetch, at top) */}
+        <DevLogSection />
+
         {/* Section 1: Scheduler Jobs */}
         <SchedulerSection
           jobs={data.schedulerJobs}
