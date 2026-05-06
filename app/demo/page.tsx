@@ -43,7 +43,7 @@ import {
 } from "lucide-react"
 import { MarketTrendSection } from "./components/market-trend-section"
 import { PropertyInfoCard, type PropertyInfo } from "./components/property-info-card"
-import { UserInputsSection } from "./components/user-inputs-section"
+import { InputsContainer } from "./components/inputs-container"
 
 // Deal condition type
 interface DealConditions {
@@ -692,6 +692,25 @@ export default function DemoAnalysisPage() {
             </Button>
           </div>
         </header>
+
+        {/* Inputs Container - Summary bar + drawer (sticky below header) */}
+        {analysisData && (
+          <InputsContainer
+            baseScore={analysisData.score}
+            dealAmount={dealConditions.deal_amount}
+            equity={dealConditions.equity}
+            interestRate={dealConditions.interest_rate}
+            loanPeriod={20}
+            onScoreUpdate={(newScore) => {
+              // Update display data with new score
+              if (analysisData) {
+                analysisData.score = newScore
+              }
+            }}
+            pnu={propertyInfo?.pnu}
+            address={dealConditions.address}
+          />
+        )}
 
         {/* Content Area - Different layout for mobile vs desktop */}
         {/* Desktop Layout - Below fixed header */}
@@ -1704,13 +1723,6 @@ function AnalysisResultsContent({
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* User Inputs Section - Field data entry form */}
-      <UserInputsSection
-        baseScore={analysisData.score}
-        pnu={propertyInfo?.pnu}
-        totalMonthlyRent={28000000}
-      />
 
       {/* Market Trend Section */}
       <MarketTrendSection />
