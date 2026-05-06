@@ -43,6 +43,7 @@ import {
 } from "lucide-react"
 import { MarketTrendSection } from "./components/market-trend-section"
 import { PropertyInfoCard, type PropertyInfo } from "./components/property-info-card"
+import { UserInputsSection } from "./components/user-inputs-section"
 
 // Deal condition type
 interface DealConditions {
@@ -1704,34 +1705,15 @@ function AnalysisResultsContent({
         </TabsContent>
       </Tabs>
 
+      {/* User Inputs Section - Field data entry form */}
+      <UserInputsSection
+        baseScore={analysisData.score}
+        pnu={propertyInfo?.pnu}
+        totalMonthlyRent={28000000}
+      />
+
       {/* Market Trend Section */}
       <MarketTrendSection />
-
-      {/* Report CTA */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center shrink-0">
-              <FileBarChart className="w-5 h-5 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-foreground mb-1">은행 제출용 리포트</h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                투자위원회 메모와 사업계획서 양식으로 확장할 수 있습니다.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5" onClick={onPdfReport}>
-                  <FileText className="w-3.5 h-3.5" />
-                  PDF 리포트 생성
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={onPdfReport}>
-                  Bank Package 문의
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Data Sources */}
       <Card className="border-border bg-white">
