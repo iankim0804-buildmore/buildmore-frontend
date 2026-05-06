@@ -14,6 +14,8 @@ interface RoadmapItem {
   text: string
   completed: boolean
   completed_date: string | null
+  added_date: string | null
+  done_date: string | null
   sub_items: RoadmapSubItem[]
 }
 
@@ -43,7 +45,10 @@ function getCompletionBadge(completed: number, total: number) {
 function RoadmapItemRow({ item }: { item: RoadmapItem }) {
   const [isExpanded, setIsExpanded] = useState(false)
   
-  const hasDetails = item.completed && (item.completed_date || item.sub_items.length > 0)
+  const hasDetails = item.completed && (item.completed_date || item.done_date || item.sub_items.length > 0)
+  
+  // Get the effective done date (prefer done_date, fallback to completed_date)
+  const effectiveDoneDate = item.done_date || item.completed_date
   
   return (
     <div className="space-y-0">
@@ -65,12 +70,32 @@ function RoadmapItemRow({ item }: { item: RoadmapItem }) {
           {item.text}
         </span>
         
-        {/* Completed date and expand icon */}
-        {item.completed && item.completed_date && (
-          <span className="text-xs text-muted-foreground shrink-0">
-            {item.completed_date}
-          </span>
-        )}
+        {/* Date display */}
+        <div className="flex items-center gap-3 shrink-0">
+          {item.completed ? (
+            // Completed items: show "추가 YYYY-MM-DD  완료 YYYY-MM-DD"
+            <>
+              {item.added_date && (
+                <span className="text-xs text-muted-foreground">
+                  추가 {item.added_date}
+                </span>
+              )}
+              {effectiveDoneDate && (
+                <span className="text-xs text-muted-foreground">
+                  완료 {effectiveDoneDate}
+                </span>
+              )}
+            </>
+          ) : (
+            // Incomplete items: show "추가 YYYY-MM-DD" on the right
+            item.added_date && (
+              <span className="text-xs text-muted-foreground">
+                추가 {item.added_date}
+              </span>
+            )
+          )}
+        </div>
+        
         {hasDetails && (
           <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         )}
@@ -79,9 +104,9 @@ function RoadmapItemRow({ item }: { item: RoadmapItem }) {
       {/* Expanded details */}
       {isExpanded && hasDetails && (
         <div className="ml-6 pb-2 space-y-1 animate-in slide-in-from-top-1 duration-200">
-          {item.completed_date && (
+          {effectiveDoneDate && (
             <div className="text-xs text-muted-foreground">
-              완료일: {item.completed_date}
+              완료일: {effectiveDoneDate}
             </div>
           )}
           {item.sub_items.length > 0 && (
