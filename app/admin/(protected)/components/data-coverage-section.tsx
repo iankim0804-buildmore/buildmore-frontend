@@ -1,54 +1,130 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Loader2, RefreshCw, Database } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Loader2, RefreshCw, CheckSquare, Square, ChevronDown, ChevronRight } from 'lucide-react'
 
 // Types
-interface DataCoverageItem {
-  name: string
+interface Metric {
   metric_key: string
-  source: string
-  current_count: number
-  target_count: number
-  current_periods: number
-  target_periods: number
-  coverage_pct: number
-  quality: string
+  metric_name_ko: string
+  unit: string
+  collection_frequency: string
+  data_source: string
+  is_available: boolean
+  priority: number
 }
 
-interface DataCoverageResponse {
-  total_coverage_pct: number
-  last_updated: string
-  items: DataCoverageItem[]
+interface Category {
+  category_code: string
+  category_name: string
+  total: number
+  available: number
+  rate: number
+  metrics: Metric[]
 }
 
-// Helper functions
-function getProgressBarColor(pct: number): string {
-  if (pct === 0) return 'bg-muted-foreground/30'
-  if (pct <= 30) return 'bg-red-500'
-  if (pct <= 60) return 'bg-amber-500'
-  if (pct <= 80) return 'bg-blue-500'
+interface MetricCatalogResponse {
+  overall: {
+    total: number
+    available: number
+    rate: number
+  }
+  categories: Category[]
+}
+
+// Helper: get progress bar color based on rate
+function getBarColor(rate: number): string {
+  if (rate === 0) return 'bg-muted-foreground/30'
+  if (rate <= 30) return 'bg-red-500'
+  if (rate <= 60) return 'bg-amber-500'
   return 'bg-emerald-500'
 }
 
-function getQualityBadge(quality: string) {
-  const lowerQuality = quality.toLowerCase()
-  if (lowerQuality.includes('충분')) {
-    return <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">충분</Badge>
-  }
-  if (lowerQuality.includes('보통')) {
-    return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">보통</Badge>
-  }
-  if (lowerQuality.includes('부족')) {
-    return <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20">부족</Badge>
-  }
-  return <Badge className="bg-muted text-muted-foreground border-muted">미적재</Badge>
+// Helper: get card top border color based on rate
+function getCardBorderColor(rate: number): string {
+  if (rate === 0) return 'border-t-muted-foreground/30'
+  if (rate <= 30) return 'border-t-red-500'
+  if (rate <= 60) return 'border-t-amber-500'
+  return 'border-t-emerald-500'
+}
+
+// Category Card Component
+function CategoryCard({ category }: { category: Category }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  return (
+    <Card 
+      className={`border-sidebar-border bg-sidebar-accent border-t-4 ${getCardBorderColor(category.rate)} overflow-hidden`}
+    >
+      {/* Card Header - Clickable */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full text-left p-4 hover:bg-sidebar/50 transition-colors"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium text-sm text-sidebar-foreground">
+            {category.category_name}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {category.available}/{category.total} <span className="font-medium">{category.rate}%</span>
+          </span>
+        </div>
+        
+        {/* Progress Bar */}
+        <div className="h-2 w-full overflow-hidden rounded-full bg-sidebar mb-2">
+          <div
+            className={`h-full transition-all duration-300 ${getBarColor(category.rate)}`}
+            style={{ width: `${Math.min(category.rate, 100)}%` }}
+          />
+        </div>
+        
+        {/* Toggle indicator */}
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          {isExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+          <span>지표 보기</span>
+        </div>
+      </button>
+      
+      {/* Expanded Metrics List */}
+      {isExpanded && (
+        <CardContent className="pt-0 pb-4 px-4 border-t border-sidebar-border">
+          <div className="space-y-1.5 mt-3">
+            {category.metrics
+              .sort((a, b) => a.priority - b.priority)
+              .map((metric) => (
+                <div 
+                  key={metric.metric_key}
+                  className={`flex items-center gap-2 text-xs ${metric.is_available ? 'text-sidebar-foreground' : 'text-muted-foreground'}`}
+                >
+                  {/* Checkbox Icon */}
+                  {metric.is_available ? (
+                    <CheckSquare className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <Square className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  )}
+                  
+                  {/* Metric Info */}
+                  <span className="flex-1 truncate">{metric.metric_name_ko}</span>
+                  <span className="shrink-0 text-muted-foreground">{metric.unit}</span>
+                  <span className="shrink-0 text-muted-foreground w-6 text-center">{metric.collection_frequency}</span>
+                  <span className="shrink-0 text-muted-foreground w-12 text-right">{metric.data_source}</span>
+                </div>
+              ))}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  )
 }
 
 export function DataCoverageSection() {
-  const [data, setData] = useState<DataCoverageResponse | null>(null)
+  const [data, setData] = useState<MetricCatalogResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,7 +133,7 @@ export function DataCoverageSection() {
     setError(null)
     
     try {
-      const res = await fetch('/api/admin/data-coverage', {
+      const res = await fetch('/api/admin/metric-catalog', {
         credentials: 'include'
       })
       
@@ -119,93 +195,50 @@ export function DataCoverageSection() {
 
   if (!data) return null
 
-  const totalPct = data.total_coverage_pct
+  const { overall, categories } = data
 
   return (
     <section>
-      {/* Header */}
+      {/* Section Header */}
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-sidebar-foreground">
-            원천 데이터 적재 현황
-          </h2>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-sidebar-foreground">
-            {totalPct.toFixed(1)}%
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Delta Engine 정교 작동 목표: 100%
-          </div>
-        </div>
+        <h2 className="text-lg font-semibold text-sidebar-foreground">
+          원천 데이터 적재 현황
+        </h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={fetchData}
+          disabled={isLoading}
+          className="h-8 gap-1.5 text-muted-foreground hover:text-sidebar-foreground"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          새로고침
+        </Button>
       </div>
 
-      {/* Overall Progress Bar */}
-      <Card className="mb-4 border-sidebar-border bg-sidebar-accent py-4">
-        <CardContent className="pb-0">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">전체 적재율</span>
-              <span className="font-medium text-sidebar-foreground">{totalPct.toFixed(1)}%</span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-sidebar">
-              <div
-                className={`h-full transition-all duration-300 ${getProgressBarColor(totalPct)}`}
-                style={{ width: `${Math.min(totalPct, 100)}%` }}
-              />
-            </div>
-            <div className="text-xs text-muted-foreground">
-              마지막 업데이트: {data.last_updated}
-            </div>
+      {/* Overall Progress Card */}
+      <Card className="mb-4 border-sidebar-border bg-sidebar-accent">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-sidebar-foreground">전체 적재율</span>
+            <span className="text-sm text-sidebar-foreground">
+              <span className="text-xl font-bold">{overall.rate}%</span>
+              <span className="text-muted-foreground ml-2">({overall.available}/{overall.total})</span>
+            </span>
+          </div>
+          <div className="h-3 w-full overflow-hidden rounded-full bg-sidebar">
+            <div
+              className={`h-full transition-all duration-300 ${getBarColor(overall.rate)}`}
+              style={{ width: `${Math.min(overall.rate, 100)}%` }}
+            />
           </div>
         </CardContent>
       </Card>
 
-      {/* Item Cards - 2 column grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {data.items.map((item) => (
-          <Card
-            key={item.metric_key}
-            className="border-sidebar-border bg-sidebar-accent py-4"
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium text-sidebar-foreground">
-                    {item.name}
-                  </CardTitle>
-                </div>
-                {getQualityBadge(item.quality)}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {item.source}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Progress bar */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="h-2 flex-1 mr-3 overflow-hidden rounded-full bg-sidebar">
-                    <div
-                      className={`h-full transition-all ${getProgressBarColor(item.coverage_pct)}`}
-                      style={{ width: `${Math.min(item.coverage_pct, 100)}%` }}
-                    />
-                  </div>
-                  <span className="shrink-0 font-medium text-sidebar-foreground">
-                    {item.coverage_pct === 0 ? '미적재' : `${item.coverage_pct.toFixed(1)}%`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{item.current_count.toLocaleString()} / {item.target_count.toLocaleString()}건</span>
-                <span className="text-sidebar-border">·</span>
-                <span>{item.current_periods} / {item.target_periods}개월</span>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Category Cards Grid - 3 columns */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {categories.map((category) => (
+          <CategoryCard key={category.category_code} category={category} />
         ))}
       </div>
     </section>

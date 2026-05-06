@@ -3,18 +3,22 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, RefreshCw, ChevronRight } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 
-// Types
+// Types based on new API response
 interface DevLogEntry {
   date: string
+  title: string
   content: string
+  is_latest: boolean
+  is_collapsed: boolean
 }
 
 interface RoadmapSection {
   title: string
   raw_content?: string
   items?: unknown[]
+  devlog_entries?: DevLogEntry[]
 }
 
 interface RoadmapResponse {
@@ -23,46 +27,24 @@ interface RoadmapResponse {
   sections: RoadmapSection[]
 }
 
-// Parse raw_content into date entries
-function parseDevLogContent(rawContent: string): DevLogEntry[] {
-  const entries: DevLogEntry[] = []
-  
-  // Split by date headers (### YYYY-MM-DD)
-  const dateRegex = /^###\s*(\d{4}-\d{2}-\d{2})/gm
-  const parts = rawContent.split(dateRegex)
-  
-  // parts[0] is content before first date (usually empty)
-  // parts[1] is first date, parts[2] is first content
-  // parts[3] is second date, parts[4] is second content, etc.
-  for (let i = 1; i < parts.length; i += 2) {
-    const date = parts[i]?.trim()
-    const content = parts[i + 1]?.trim()
-    
-    if (date && content) {
-      entries.push({ date, content })
-    }
-  }
-  
-  // Sort by date descending (most recent first)
-  entries.sort((a, b) => b.date.localeCompare(a.date))
-  
-  return entries
-}
-
 // Render markdown content with simple parsing
 function MarkdownContent({ content }: { content: string }) {
   const lines = content.split('\n')
   
   return (
-    <div className="space-y-2 text-sm">
+    <div className="space-y-1.5 text-sm leading-relaxed">
       {lines.map((line, idx) => {
         const trimmed = line.trim()
         if (!trimmed) return null
         
-        // Check for value highlight line (→ 서비스 가치: or → **가치**:)
+        // Skip HTML tags like <details>, <summary>
+        if (trimmed.startsWith('<') && trimmed.endsWith('>')) return null
+        if (trimmed.startsWith('</')) return null
+        
+        // Check for value highlight line (→ **가치**: or → 가치:)
         if (trimmed.startsWith('→')) {
           return (
-            <p key={idx} className="text-teal-600 font-medium mt-3">
+            <p key={idx} className="text-teal-600 font-medium mt-2 pl-2">
               {renderInlineMarkdown(trimmed)}
             </p>
           )
@@ -72,19 +54,10 @@ function MarkdownContent({ content }: { content: string }) {
         if (trimmed.startsWith('-') || trimmed.startsWith('·')) {
           const text = trimmed.slice(1).trim()
           return (
-            <div key={idx} className="flex items-start gap-2 pl-2">
-              <span className="text-muted-foreground mt-1.5">·</span>
+            <div key={idx} className="flex items-start gap-2">
+              <span className="text-muted-foreground">·</span>
               <span className="text-sidebar-foreground">{renderInlineMarkdown(text)}</span>
             </div>
-          )
-        }
-        
-        // Check for bold headers (**text:**)
-        if (trimmed.match(/^\*\*[^*]+\*\*:?$/)) {
-          return (
-            <p key={idx} className="font-semibold text-sidebar-foreground mt-3 first:mt-0">
-              {renderInlineMarkdown(trimmed)}
-            </p>
           )
         }
         
@@ -112,22 +85,24 @@ function renderInlineMarkdown(text: string): React.ReactNode {
   })
 }
 
-// Collapsible entry for older dates
+// Collapsible entry for older dates with triangle toggle
 function CollapsibleEntry({ entry }: { entry: DevLogEntry }) {
   const [isOpen, setIsOpen] = useState(false)
   
   return (
-    <div className="border-t border-sidebar-border">
+    <div className="border-t border-sidebar-border first:border-t-0">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full py-3 px-4 text-left hover:bg-sidebar/50 transition-colors"
+        className="flex items-center gap-3 w-full py-2.5 px-4 text-left hover:bg-sidebar/50 transition-colors cursor-pointer"
       >
-        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
-        <span className="text-sm font-medium text-sidebar-foreground">{entry.date}</span>
-        <span className="text-xs text-muted-foreground">보기</span>
+        <span className="text-muted-foreground text-xs select-none">
+          {isOpen ? '▼' : '▶'}
+        </span>
+        <span className="text-xs text-muted-foreground font-mono">{entry.date}</span>
+        <span className="text-sm text-sidebar-foreground">{entry.title}</span>
       </button>
       {isOpen && (
-        <div className="px-4 pb-4 animate-in slide-in-from-top-1 duration-200">
+        <div className="px-4 pb-4 pl-10 animate-in slide-in-from-top-1 duration-200">
           <MarkdownContent content={entry.content} />
         </div>
       )}
@@ -164,9 +139,9 @@ export function DevLogSection() {
       // Find the "개발 일지" section
       const devLogSection = result.sections.find(s => s.title === '개발 일지')
       
-      if (devLogSection?.raw_content) {
-        const parsed = parseDevLogContent(devLogSection.raw_content)
-        setEntries(parsed)
+      // Use devlog_entries if available (new API format)
+      if (devLogSection?.devlog_entries && devLogSection.devlog_entries.length > 0) {
+        setEntries(devLogSection.devlog_entries)
       } else {
         setEntries([])
       }
@@ -182,7 +157,7 @@ export function DevLogSection() {
     fetchData()
   }, [fetchData])
 
-  // Error state
+  // Error state - only show if there was an error
   if (error && entries.length === 0) {
     return (
       <section>
@@ -220,23 +195,14 @@ export function DevLogSection() {
     )
   }
 
-  // No data
+  // No devlog_entries - hide section entirely
   if (entries.length === 0) {
-    return (
-      <section>
-        <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground flex items-center gap-2">
-          <span>📔</span> 개발 일지
-        </h2>
-        <Card className="border-sidebar-border bg-sidebar-accent">
-          <CardContent className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">개발 일지 데이터가 없습니다.</p>
-          </CardContent>
-        </Card>
-      </section>
-    )
+    return null
   }
 
-  const [latestEntry, ...olderEntries] = entries
+  // Separate latest entry from older entries
+  const latestEntry = entries.find(e => e.is_latest)
+  const olderEntries = entries.filter(e => !e.is_latest)
 
   return (
     <section>
@@ -263,17 +229,22 @@ export function DevLogSection() {
 
       {/* Main Card */}
       <Card className="border-sidebar-border bg-sidebar-accent overflow-hidden">
-        {/* Latest Entry - Always expanded */}
-        <CardHeader className="pb-2 pt-4">
-          <div className="text-base font-semibold text-sidebar-foreground">
-            {latestEntry.date}
-          </div>
-        </CardHeader>
-        <CardContent className="pb-4">
-          <MarkdownContent content={latestEntry.content} />
-        </CardContent>
+        {/* Latest Entry - Always expanded with date and title */}
+        {latestEntry && (
+          <>
+            <CardHeader className="pb-2 pt-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground font-mono">{latestEntry.date}</span>
+                <span className="text-base font-semibold text-sidebar-foreground">{latestEntry.title}</span>
+              </div>
+            </CardHeader>
+            <CardContent className="pb-4">
+              <MarkdownContent content={latestEntry.content} />
+            </CardContent>
+          </>
+        )}
         
-        {/* Older Entries - Collapsible */}
+        {/* Older Entries - Collapsible toggles */}
         {olderEntries.length > 0 && (
           <div className="border-t border-sidebar-border bg-sidebar/30">
             {olderEntries.map((entry) => (
