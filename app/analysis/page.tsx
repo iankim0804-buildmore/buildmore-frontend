@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
-import { TagGroup } from "./components/TagGroup"
 import { KpiGroup } from "./components/KpiGroup"
 import {
   Plus,
@@ -600,14 +599,8 @@ export default function AnalysisPage() {
             <NewsTicker news={topNews} />
           </div>
           
-          {/* Tags + KPIs - right aligned group */}
-          <div className="ml-auto flex items-center gap-4 flex-shrink-0">
-            <TagGroup tags={[
-              { id: 'tag1', label: '합정 생활상권', color: 'blue' },
-              { id: 'tag2', label: '역세권', color: 'green' },
-              { id: 'tag3', label: '팝업/F&B', color: 'purple' },
-              { id: 'tag4', label: '주거 유입', color: 'amber' },
-            ]} />
+          {/* KPIs - right aligned */}
+          <div className="ml-auto flex-shrink-0">
             <KpiGroup noi={noi} dscr={dscr} ltv={ltv} cap={cap} />
           </div>
         </div>
