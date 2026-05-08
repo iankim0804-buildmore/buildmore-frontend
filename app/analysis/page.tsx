@@ -150,9 +150,16 @@ export default function AnalysisPage() {
   // ============================================================
   // B-4. KAKAO MAP HOOK
   // ============================================================
-  const { mapRef, isLoading: mapLoading, error: mapError } = useKakaoMap({
-    latitude: 37.547,
-    longitude: 126.921,
+  // address state는 아래에서 정의되므로 기본값 사용
+  const defaultAddress = '서울특별시 마포구 합정동 428-5'
+  const { 
+    mapRef, 
+    modalMapRef,
+    isLoading: mapLoading, 
+    error: mapError,
+    initModalMap 
+  } = useKakaoMap({
+    address: defaultAddress,
     zoom: 3,
   })
 
@@ -305,7 +312,7 @@ export default function AnalysisPage() {
   const [ltv, setLtv] = useState(0)
   const [cap, setCap] = useState(0)
   const [bankabilityScore, setBankabilityScore] = useState(0)
-  const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('가격협상')
+  const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('���격협상')
 
   // ============================================================
   // CALCULATION LOGIC
@@ -1219,7 +1226,7 @@ BuildMore 판단:
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <h3 className="text-[15px] font-bold text-gray-950 mb-2">DEAL SCORE</h3>
-                    <p className="text-xs leading-relaxed text-gray-600 break-keep">이 매물의 종합 딜 매력도를 평가한 점수입니다.</p>
+                    <p className="text-xs leading-relaxed text-gray-600 break-keep">이 매물의 종합 딜 매력도를 평가한 점���입니다.</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="inline-flex items-baseline">
@@ -1289,19 +1296,37 @@ BuildMore 판단:
               <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col h-full">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[15px] font-bold">지도</p>
-                  <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">{address.split(' ').slice(-2).join(' ')}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">{address.split(' ').slice(-2).join(' ')}</span>
+                    {!mapError && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMapModal(true)
+                          // 모달이 열린 후 지도 초기화
+                          setTimeout(() => initModalMap(), 100)
+                        }}
+                        className="p-1 hover:bg-muted rounded transition-colors"
+                        title="지도 확대"
+                      >
+                        <ZoomIn className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {mapError ? (
                   <div className="flex-1 bg-gray-50 border border-dashed border-gray-200 rounded-lg flex items-center justify-center px-3 py-4">
                     <div className="text-center">
                       <p className="text-xs font-semibold text-gray-800 mb-2">Kakao 지도를 불러오지 못했습니다.</p>
-                      <div className="text-[11px] text-gray-600 space-y-1 break-keep leading-relaxed">
-                        <p className="font-medium">확인해주세요:</p>
-                        <p>1. Replit Secrets에 Kakao JavaScript Key가 등록되어 있는지 확인</p>
-                        <p>2. 환경변수 이름이 KAKAO_MAP_API_KEY 또는 NEXT_PUBLIC_KAKAO_MAP_KEY와 일치하는지 확인</p>
-                        <p>3. Kakao Developers 콘솔의 Web 플랫폼에 현재 Replit 도메인이 등록되어 있는지 확인</p>
-                        <p>4. REST API Key나 Admin Key가 아니라 JavaScript Key를 사용해야 합니다</p>
-                      </div>
+                      <p className="text-[11px] text-gray-600 mb-2 break-keep leading-relaxed">{mapError}</p>
+                      <p className="text-[10px] text-gray-400">브라우저 콘솔(F12)에서 [kakao-map] 로그를 확인해주세요.</p>
+                    </div>
+                  </div>
+                ) : mapLoading ? (
+                  <div className="flex-1 bg-gray-100 rounded-lg flex items-center justify-center min-h-[140px]">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">지도 로딩 중...</p>
                     </div>
                   </div>
                 ) : (
@@ -1413,59 +1438,31 @@ BuildMore 판단:
               </button>
             </div>
             
-            {/* Map body */}
-            <div 
-              className="relative bg-gray-100"
-              style={{
-                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 30px, rgba(0,0,0,0.04) 30px, rgba(0,0,0,0.04) 31px), repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(0,0,0,0.04) 30px, rgba(0,0,0,0.04) 31px)'
-              }}
-            >
-              {/* Property markers */}
-              {mapProperties.map(prop => (
-                <button
-                  key={prop.id}
-                  onClick={() => setSelectedProperty(prop)}
-                  className={`absolute bg-white border-2 rounded-xl px-2.5 py-1.5 text-xs shadow-sm transition-all hover:shadow-md ${
-                    selectedProperty.id === prop.id ? 'border-foreground ring-2 ring-foreground/20' : 'border-border'
-                  }`}
-                  style={{ left: prop.position.left, top: prop.position.top }}
-                >
-                  <p className="font-medium">{prop.shortAddress}</p>
-                  <p className="text-muted-foreground">{prop.area} / {prop.price}억</p>
-                </button>
-              ))}
-              
-              {/* Selected pin */}
+            {/* Map body - Kakao Map */}
+            <div className="relative">
+              {/* Kakao Map Container */}
               <div 
-                className="absolute w-7 h-7 bg-foreground rounded-full rounded-br-none -rotate-45 pointer-events-none"
-                style={{ 
-                  left: `calc(${selectedProperty.position.left} + 40px)`, 
-                  top: `calc(${selectedProperty.position.top} + 10px)` 
-                }}
+                ref={modalMapRef}
+                className="w-full h-full bg-gray-100"
               />
               
-              {/* Pick card */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[280px] bg-white border border-border rounded-[14px] p-4 shadow-lg">
-                <p className="text-[22px] font-bold mb-1">{selectedProperty.shortAddress}</p>
+              {/* Overlay: Property Info Card */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[320px] bg-white border border-border rounded-[14px] p-4 shadow-lg z-10">
+                <p className="text-[22px] font-bold mb-1">{address.split(' ').slice(-2).join(' ')}</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  {selectedProperty.area} · {selectedProperty.price.toFixed(1)}억 · 월 {selectedProperty.rent}만
+                  {address}
                 </p>
-                <Button className="w-full" onClick={handleAnalyzeSelected}>
-                  분석
-                </Button>
-              </div>
-              
-              {/* Zoom controls */}
-              <div className="absolute right-4 bottom-4 flex flex-col gap-1">
-                <button className="w-9 h-9 bg-white border border-border rounded-lg flex items-center justify-center hover:bg-muted">
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <button className="w-9 h-9 bg-white border border-border rounded-lg flex items-center justify-center hover:bg-muted">
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <button className="w-9 h-9 bg-white border border-border rounded-lg flex items-center justify-center hover:bg-muted">
-                  <Crosshair className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowMapModal(false)}>
+                    닫기
+                  </Button>
+                  <Button className="flex-1" onClick={() => {
+                    setShowMapModal(false)
+                    handleRunAnalysis()
+                  }}>
+                    분석 실행
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
