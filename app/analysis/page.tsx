@@ -622,7 +622,7 @@ export default function AnalysisPage() {
                         step="0.1"
                         value={ltv}
                         onChange={(e) => setLoan((price * parseFloat(e.target.value)) / 100)}
-                        className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer"
+                        className="flex-1 h-2 bg-muted rounded-full appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #1a1a1a 0%, #1a1a1a ${ltv}%, #f5f5f5 ${ltv}%, #f5f5f5 100%)`,
                           outline: 'none'
@@ -676,7 +676,7 @@ export default function AnalysisPage() {
                         step="1"
                         value={vacancySensitivity}
                         onChange={(e) => setVacancySensitivity(parseInt(e.target.value))}
-                        className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+                        className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${vacancySensitivity}%, #f5f5f5 ${vacancySensitivity}%, #f5f5f5 100%)`,
                           outline: 'none'
@@ -808,7 +808,7 @@ export default function AnalysisPage() {
                 <p className="text-[48px] font-medium tracking-tight leading-none mb-3">
                   {bankabilityScore} <span className="text-xl text-muted-foreground">/ 100</span>
                 </p>
-                <div className="h-2.5 bg-muted rounded-full overflow-hidden mb-4">
+                <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
                   <div className="h-full bg-foreground transition-all" style={{ width: `${bankabilityScore}%` }} />
                 </div>
                 <div className="grid grid-cols-[74px_1fr] gap-y-3 text-[13px]">
@@ -843,16 +843,16 @@ export default function AnalysisPage() {
                       ? 'DSCR 기준 미달, 매입가 협상 권장'
                       : '공실률 과다, 재검토 필요'}
                 </p>
-                <div className="relative h-1 bg-muted rounded-full">
+                <div className="relative h-2 bg-muted rounded-full">
                   <div
-                    className="absolute w-3.5 h-3.5 bg-foreground rounded-full -top-1.5"
+                    className="absolute w-3.5 h-3.5 bg-foreground rounded-full -top-0.75"
                     style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
                 <div className="flex justify-between mt-2 text-[11px] text-muted-foreground">
-                  <span>낮은 값</span>
-                  <span className="text-muted-foreground">중간 값</span>
-                  <span className="text-muted-foreground">높은 값</span>
+                  <span>낮은 값 - 매수보류</span>
+                  <span>중간 값 - 가격협상</span>
+                  <span>높은 값 - 매수</span>
                 </div>
               </div>
 
