@@ -823,7 +823,7 @@ export default function AnalysisPage() {
           {/* ============================================================ */}
           {/* RIGHT CONTENT AREA */}
           {/* ============================================================ */}
-          <div className="relative flex flex-col h-full">
+          <div className="relative flex flex-col h-full overflow-hidden">
           <ScrollArea className="flex-1 p-3.5 pb-[280px]">
             <h1 className="text-[26px] font-extrabold text-foreground mb-4">분석 결과</h1>
 
@@ -968,7 +968,7 @@ export default function AnalysisPage() {
                     <div className="grid grid-cols-4 gap-3">
                       {[
                         { label: '매입가', value: `${price.toFixed(1)}억`, sub: '취득비용 포함' },
-                        { label: '자기자��', value: `${(price - loan).toFixed(1)}억`, sub: `LTV ${ltv.toFixed(1)}%` },
+                        { label: '자기자본', value: `${(price - loan).toFixed(1)}억`, sub: `LTV ${ltv.toFixed(1)}%` },
                         { label: '월 상환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
                         { label: 'CoC 수익률', value: `${(((noi - loan * 10000 * (rate / 100)) / ((price - loan) * 10000)) * 100).toFixed(1)}%`, sub: '세전 현금흐름 기준' },
                       ].map((card, i) => (
@@ -1330,7 +1330,7 @@ export default function AnalysisPage() {
           </ScrollArea>
           
           {/* Fixed CTA at bottom */}
-          <div className="absolute inset-x-3.5 bottom-3.5 z-30">
+          <div className="absolute bottom-0 left-0 right-0 z-30 mx-3.5 mb-3.5">
             <div className="bg-white rounded-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border border-border overflow-hidden">
               <AnalysisCTA />
             </div>
