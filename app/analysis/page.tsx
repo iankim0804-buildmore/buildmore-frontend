@@ -1079,21 +1079,26 @@ export default function AnalysisPage() {
               {/* DEAL SCORE */}
               <div className="bg-white border border-border rounded-[14px] p-3">
                 <p className="text-[15px] font-bold mb-2">DEAL SCORE</p>
-                <p className="text-[40px] font-medium tracking-tight leading-none mb-2">
-                  {bankabilityScore} <span className="text-lg text-muted-foreground">/ 100</span>
-                </p>
+                <div className="inline-flex items-baseline mb-3">
+                  <span className="text-[24px] font-bold text-gray-950 tabular-nums">
+                    {bankabilityScore}
+                  </span>
+                  <span className="ml-1 text-sm font-medium text-muted-foreground">
+                    / 100
+                  </span>
+                </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-foreground transition-all" style={{ width: `${bankabilityScore}%` }} />
                 </div>
                 <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[12px]">
                   <span className="text-muted-foreground font-bold">상권</span>
-                  <span>합정 생활상권 · 역세권 · 팝업/F&B</span>
+                  <span className="whitespace-normal break-keep leading-relaxed">합정 생활상권 · 역세권 · 팝업/F&B</span>
                   <span className="text-muted-foreground font-bold">입력값</span>
-                  <span>매입 {price.toFixed(1)}�� / 대출 {loan.toFixed(1)}억 / 금리 {rate.toFixed(1)}%</span>
+                  <span className="whitespace-normal break-keep leading-relaxed">매입 {price.toFixed(1)}억 / 대출 {loan.toFixed(1)}억 / 금리 {rate.toFixed(1)}%</span>
                   <span className="text-muted-foreground font-bold">분석엔진</span>
-                  <span>BuildMore v2.1</span>
+                  <span className="whitespace-normal break-keep leading-relaxed">BuildMore v2.1</span>
                   <span className="text-muted-foreground font-bold">설명</span>
-                  <p className="whitespace-normal break-keep leading-tight text-[11px]">
+                  <p className="whitespace-normal break-keep leading-relaxed text-[11px]">
                     {dscr >= 1 && bankabilityScore >= 68
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
