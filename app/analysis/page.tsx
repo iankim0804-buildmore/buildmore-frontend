@@ -1216,8 +1216,8 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
+                    <CTASection />
                   </div>
-                  <CTASection />
                 )}
 
                 {/* 건축조건 */}
@@ -1228,7 +1228,7 @@ export default function AnalysisPage() {
                         {
                           title: '증축',
                           rows: [
-                            ['법정 최대 연면적', '420㎡'],
+                            ['법정 최대 연면적', '420��'],
                             ['현재 연면적', `${gfa}㎡`],
                             ['추가 가능 면적', `${(420 - gfa)}㎡`, 'text-[#16a34a]'],
                             ['시공비', `${constructionCost}만원/㎡`],
