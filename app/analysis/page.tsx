@@ -585,7 +585,7 @@ export default function AnalysisPage() {
               {/* Panel A: 매입조건 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center border-b border-border">
-                  <span className="text-[13px] font-bold">A 매입조건</span>
+                  <span className="text-[13px] font-bold">매입조건</span>
                 </div>
                 <div className="p-3 space-y-3">
                   <div>
@@ -607,7 +607,7 @@ export default function AnalysisPage() {
                     <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
                       <span>급매</span>
                       <span>LTV {ltv.toFixed(1)}%</span>
-                      <span>AI 할인 5~10% 적용</span>
+                      <span>AI 할인 5~10% ��용</span>
                     </div>
                   </div>
                 </div>
@@ -616,7 +616,7 @@ export default function AnalysisPage() {
               {/* Panel B: 임대조건 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center border-b border-border">
-                  <span className="text-[13px] font-bold">B 임대조건</span>
+                  <span className="text-[13px] font-bold">임대조건</span>
                 </div>
                 <div className="p-3 space-y-3">
                   <div>
@@ -657,7 +657,7 @@ export default function AnalysisPage() {
               {/* Panel C: 건축물대장 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center justify-between border-b border-border">
-                  <span className="text-[13px] font-bold">C 건축물대장 표제부</span>
+                  <span className="text-[13px] font-bold">건축물대장 표제부</span>
                   <span className="text-[10px] text-muted-foreground">{today} 최신값</span>
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-2">
@@ -683,7 +683,7 @@ export default function AnalysisPage() {
               {/* Panel D: 건축조건 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center border-b border-border">
-                  <span className="text-[13px] font-bold">D 건축조건</span>
+                  <span className="text-[13px] font-bold">건축조건</span>
                 </div>
                 <div className="p-3 space-y-3">
                   <div className="grid grid-cols-4 gap-1.5">
@@ -736,7 +736,7 @@ export default function AnalysisPage() {
               {/* Panel E: 분석옵션 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center border-b border-border">
-                  <span className="text-[13px] font-bold">E 분석옵션</span>
+                  <span className="text-[13px] font-bold">분석옵션</span>
                 </div>
                 <div className="p-3 space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer">
