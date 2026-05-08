@@ -1502,10 +1502,10 @@ export default function AnalysisPage() {
                   <Crosshair className="w-4 h-4" />
                 </button>
               </div>
-                    </div>
-                    <CTASection />
-                  </div>
-                )}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
     </div>
   )
 }
