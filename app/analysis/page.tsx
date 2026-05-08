@@ -1220,7 +1220,7 @@ export default function AnalysisPage() {
                   </div>
                 )}
 
-                {/* 건축조건 */}
+                {/* ��축조건 */}
                 {activeTab === '건축조건' && (
                   <div className="p-5 whitespace-normal break-keep leading-relaxed">
                     <div className="grid grid-cols-3 gap-4">
@@ -1425,8 +1425,7 @@ export default function AnalysisPage() {
             </div>
           </ScrollArea>
         </div>
-      </div>
-      </div>
+      )}
 
       {/* ============================================================ */}
       {/* MAP MODAL */}
@@ -1503,7 +1502,7 @@ export default function AnalysisPage() {
                 </button>
               </div>
             </div>
-          </ScrollArea>
+          </div>
         </div>
       )}
     </div>
