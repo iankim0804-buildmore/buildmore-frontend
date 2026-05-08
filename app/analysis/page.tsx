@@ -304,6 +304,23 @@ export default function AnalysisPage() {
   )
 }
 
+  // Metric Card Component for consistent styling
+  const MetricCard = ({ 
+    label, 
+    value, 
+    sub 
+  }: { 
+    label: string
+    value: string | number
+    sub: string
+  }) => (
+    <div className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
+      <p className="text-sm font-medium text-[#666] break-keep mb-2">{label}</p>
+      <p className="text-[22px] font-bold whitespace-nowrap">{value}</p>
+      <p className="text-xs text-[#999] leading-relaxed mt-1 break-keep">{sub}</p>
+    </div>
+  )
+
   // Get today's date
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', '')
 
@@ -971,14 +988,10 @@ export default function AnalysisPage() {
                       {[
                         { label: '매입가', value: `${price.toFixed(1)}억`, sub: '취득비용 포함' },
                         { label: '자기자본', value: `${(price - loan).toFixed(1)}억`, sub: `LTV ${ltv.toFixed(1)}%` },
-                        { label: '월 ���환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
+                        { label: '월 상환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
                         { label: 'CoC 수익률', value: `${(((noi - loan * 10000 * (rate / 100)) / ((price - loan) * 10000)) * 100).toFixed(1)}%`, sub: '세전 현금흐름 기준' },
                       ].map((card, i) => (
-                        <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#a1a1aa] mb-2">{card.label}</p>
-                          <p className="text-[22px] font-bold whitespace-nowrap">{card.value}</p>
-                          <p className="text-[11.5px] text-[#a1a1aa] mt-1">{card.sub}</p>
-                        </div>
+                        <MetricCard key={i} label={card.label} value={card.value} sub={card.sub} />
                       ))}
                     </div>
 
@@ -992,15 +1005,15 @@ export default function AnalysisPage() {
                             {[
                               { label: '연간 임대수입 (PGI)', value: rent * 12, isOperating: false },
                               { label: '공실 손실', value: -(rent * 12 * (vacancyRate / 100)), isOperating: false },
-                              { label: '유효총수��� (EGI)', value: rent * 12 * (1 - vacancyRate / 100), isOperating: false },
+                              { label: '유효총수입 (EGI)', value: rent * 12 * (1 - vacancyRate / 100), isOperating: false },
                               { label: '운영비용 (OPEX)', value: -82, isOperating: false },
                               { label: '순영업수익 (NOI)', value: noi, isOperating: true },
                               { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
                               { label: '세전 현금흐름', value: noi - loan * 10000 * (rate / 100), isOperating: false },
                             ].map((row, i) => (
                               <tr key={i} className={row.isOperating ? 'bg-[#fafafa] font-bold border-t border-b border-[#e7e7ea]' : ''}>
-                                <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
-                                <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.value > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
+                                <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row.label}</td>
+                                <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row.value > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
                                   {row.value > 0 ? '+' : ''}{Math.round(row.value).toLocaleString('ko-KR')}만
                                 </td>
                               </tr>
@@ -1019,13 +1032,13 @@ export default function AnalysisPage() {
                               { label: '기준금리 (ECOS)', value: '3.50%' },
                               { label: '코픽스', value: '3.82%' },
                               { label: '금리 스프레드', value: `${(rate - 3.82).toFixed(2)}%p`, color: (rate - 3.82) > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
-                              { label: '매입단가 (㎡��)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
-                              { label: '마포구 ���균단가', value: '4,099만' },
+                              { label: '매입단가 (㎡)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
+                              { label: '마포구 평균단가', value: '4,099만' },
                               { label: '시세 대비', value: Math.round(price * 10000 / 420) <= 4099 ? '적정' : '고평가', color: Math.round(price * 10000 / 420) <= 4099 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
                             ].map((row, i) => (
                               <tr key={i}>
-                                <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
-                                <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                                <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row.label}</td>
+                                <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1041,15 +1054,15 @@ export default function AnalysisPage() {
                     {/* 상단 메트릭 4개 카드 */}
                     <div className="grid grid-cols-4 gap-3">
                       {[
-                        { label: 'NOI', value: `${Math.round(noi).toLocaleString('ko-KR')}만`, sub: '연간 순영업수익' },
+                        { label: 'NOI', value: `${Math.round(noi).toLocaleString('ko-KR')}만`, sub: '연간 순영업수익', valueColor: '' },
                         { label: 'DSCR', value: dscr.toFixed(2), sub: dscr >= 1.25 ? '✓ 안전' : '⚠ 위험', valueColor: dscr >= 1.25 ? 'text-[#16a34a]' : dscr < 1.0 ? 'text-[#dc2626]' : '' },
-                        { label: '잠재 NOI', value: `${Math.round(rent * 12 - 82).toLocaleString('ko-KR')}만`, sub: '공실 0% 기준' },
-                        { label: '공실률', value: `${vacancyRate}%`, sub: vacancyRate === 10 ? '긍정' : vacancyRate === 20 ? '적정' : '보수' },
+                        { label: '잠재 NOI', value: `${Math.round(rent * 12 - 82).toLocaleString('ko-KR')}만`, sub: '공실 0% 기준', valueColor: '' },
+                        { label: '공실률', value: `${vacancyRate}%`, sub: vacancyRate === 10 ? '긍정' : vacancyRate === 20 ? '적정' : '보수', valueColor: '' },
                       ].map((card, i) => (
                         <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#a1a1aa] mb-2">{card.label}</p>
-                          <p className={`text-[22px] font-bold whitespace-nowrap ${card.valueColor || ''}`}>{card.value}</p>
-                          <p className="text-[11.5px] text-[#a1a1aa] mt-1">{card.sub}</p>
+                          <p className="text-sm font-medium text-[#666] break-keep mb-2">{card.label}</p>
+                          <p className={`text-[22px] font-bold whitespace-nowrap ${card.valueColor}`}>{card.value}</p>
+                          <p className="text-xs text-[#999] leading-relaxed mt-1 break-keep">{card.sub}</p>
                         </div>
                       ))}
                     </div>
@@ -1068,11 +1081,11 @@ export default function AnalysisPage() {
                             { label: 'DSCR', value: dscr, note: 'NOI / DS', isHighlight: true, customValue: dscr.toFixed(2) },
                           ].map((row, i) => (
                             <tr key={i} className={row.isHighlight ? 'bg-[#fafafa] font-bold border-t border-b border-[#e7e7ea]' : ''}>
-                              <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
-                              <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.value > 0 && !row.customValue ? 'text-[#16a34a]' : row.value < 0 ? 'text-[#dc2626]' : ''}`}>
+                              <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row.label}</td>
+                              <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row.value > 0 && !row.customValue ? 'text-[#16a34a]' : row.value < 0 ? 'text-[#dc2626]' : ''}`}>
                                 {row.customValue ?? (row.value > 0 ? '+' : '') + Math.round(row.value).toLocaleString('ko-KR') + (row.customValue ? '' : '만')}
                               </td>
-                              <td className="py-2.5 px-3 text-xs text-[#a1a1aa] text-right">{row.note}</td>
+                              <td className="py-2.5 px-3 text-xs text-[#a1a1aa] text-right break-keep">{row.note}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1098,8 +1111,8 @@ export default function AnalysisPage() {
                                 { label: '현금흐름 변화', value: Math.round(stressCF - baseCF).toLocaleString('ko-KR') + '만', color: 'text-[#dc2626]' },
                               ].map((row, i) => (
                                 <tr key={i}>
-                                  <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
-                                  <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                                  <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row.label}</td>
+                                  <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
                                 </tr>
                               ))
                             })()}
@@ -1124,8 +1137,8 @@ export default function AnalysisPage() {
                                 { label: '현금흐름 변화', value: Math.round(stressCF - baseCF).toLocaleString('ko-KR') + '만', color: 'text-[#dc2626]' },
                               ].map((row, i) => (
                                 <tr key={i}>
-                                  <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
-                                  <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                                  <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row.label}</td>
+                                  <td className={`py-2.5 px-3 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
                                 </tr>
                               ))
                             })()}
@@ -1179,13 +1192,13 @@ export default function AnalysisPage() {
                         },
                       ].map((card, cardIdx) => (
                         <div key={cardIdx} className="border border-[#e7e7ea] rounded-[12px] p-4">
-                          <h4 className="font-semibold mb-3">{card.title}</h4>
-                          <table className="w-full text-xs">
+                          <h4 className="text-sm font-semibold mb-3 break-keep">{card.title}</h4>
+                          <table className="w-full text-sm">
                             <tbody>
                               {card.rows.map((row, i) => (
                                 <tr key={i} className="border-b border-[#f1f1f3] last:border-b-0">
-                                  <td className="py-2 px-2 text-[#666]">{row[0]}</td>
-                                  <td className={`py-2 px-2 text-right font-semibold whitespace-nowrap ${row[2] || ''}`}>{row[1]}</td>
+                                  <td className="py-2 px-2 text-[#666] break-keep">{row[0]}</td>
+                                  <td className={`py-2 px-2 text-right text-sm font-semibold tabular-nums whitespace-nowrap ${row[2] || ''}`}>{row[1]}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1228,13 +1241,13 @@ export default function AnalysisPage() {
                           {[
                             ['LTV', `${ltv.toFixed(1)}%`, ltv <= 60 ? '양호' : ltv <= 70 ? '주의' : '위험', ltv <= 60 ? 'bg-[#16a34a]' : ltv <= 70 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                             ['DSCR 안전마진', dscr.toFixed(2), dscr >= 1.25 ? '양호' : dscr >= 1.0 ? '주의' : '위험', dscr >= 1.25 ? 'bg-[#16a34a]' : dscr >= 1.0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
-                            ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '���험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
+                            ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '위험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
                             ['공실 민감도', `+10%p 시 NOI ${Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)).toLocaleString('ko-KR')}만`, Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? '주의' : '위험', Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
-                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
-                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
-                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                              <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-sm text-[#333] tabular-nums break-keep">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-sm font-medium text-[#3f3f46]">{row[2]}</span></span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1260,9 +1273,9 @@ export default function AnalysisPage() {
                             ['용적률 여유', `200% → 현재 ${Math.round(gfa / 210 * 100)}% 사용`, gfa < 350 ? '양호' : gfa < 400 ? '주의' : '위험', gfa < 350 ? 'bg-[#16a34a]' : gfa < 400 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
-                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
-                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
-                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                              <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-sm text-[#333] break-keep">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-sm font-medium text-[#3f3f46]">{row[2]}</span></span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1287,9 +1300,9 @@ export default function AnalysisPage() {
                             ['역세권 여부', '역세권 (합정역)', '양호', 'bg-[#16a34a]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
-                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
-                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
-                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                              <td className="py-2.5 px-3 text-sm text-[#666] break-keep">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-sm text-[#333] break-keep">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-sm font-medium text-[#3f3f46]">{row[2]}</span></span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1310,23 +1323,23 @@ export default function AnalysisPage() {
                   <table className="w-full whitespace-normal break-keep leading-relaxed">
                     <thead className="sticky top-0 bg-[#fafafb]">
                       <tr>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
-                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
+                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
                       </tr>
                     </thead>
                     <tbody>
                       {transactions.map((tx, i) => (
                         <tr key={i} className="border-b border-[#f1f1f3]">
-                          <td className="px-4 py-3 text-[13px]">{tx.date}</td>
-                          <td className="px-4 py-3 text-[13px]">{tx.location}</td>
-                          <td className="px-4 py-3 text-[13px]">{tx.area}</td>
-                          <td className="px-4 py-3 text-[13px] font-semibold">{tx.price}</td>
-                          <td className="px-4 py-3 text-[13px]">{tx.pricePerM2}</td>
-                          <td className="px-4 py-3 text-[13px]">{tx.type}</td>
+                          <td className="px-4 py-3 text-sm break-keep">{tx.date}</td>
+                          <td className="px-4 py-3 text-sm break-keep">{tx.location}</td>
+                          <td className="px-4 py-3 text-sm break-keep">{tx.area}</td>
+                          <td className="px-4 py-3 text-sm font-semibold tabular-nums">{tx.price}</td>
+                          <td className="px-4 py-3 text-sm tabular-nums">{tx.pricePerM2}</td>
+                          <td className="px-4 py-3 text-sm break-keep">{tx.type}</td>
                         </tr>
                       ))}
                     </tbody>
