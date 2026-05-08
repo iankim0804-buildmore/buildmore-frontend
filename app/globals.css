@@ -171,3 +171,14 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
+
+/* Remove number input spinner arrows */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}

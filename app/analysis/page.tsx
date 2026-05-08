@@ -110,9 +110,9 @@ export default function AnalysisPage() {
   const [showHistory, setShowHistory] = useState(false)
   
   // Panel A: 매입조건
-  const [price, setPrice] = useState(38.0)
-  const [loan, setLoan] = useState(22.0)
-  const [rate, setRate] = useState(4.8)
+  const [price, setPrice] = useState(38.00)
+  const [loan, setLoan] = useState(22.00)
+  const [rate, setRate] = useState(4.80)
   
   // Panel B: 임대조건
   const [rent, setRent] = useState(320)
@@ -261,6 +261,7 @@ export default function AnalysisPage() {
     min = 0,
     disabled = false,
     isLoan = false,
+    decimals = 0,
   }: { 
     value: number
     onChange: (v: number) => void
@@ -268,15 +269,22 @@ export default function AnalysisPage() {
     min?: number
     disabled?: boolean
     isLoan?: boolean
-  }) => (
+    decimals?: number
+  }) => {
+    const formatValue = (v: number) => {
+      if (decimals > 0) return v.toFixed(decimals)
+      return v
+    }
+    
+    return (
     <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
       <input
         type="number"
-        value={isLoan ? value.toFixed(2) : value}
+        value={formatValue(value)}
         onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
         disabled={disabled}
         className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
-        step={isLoan ? "0.01" : "any"}
+        step={decimals > 0 ? `0.${'0'.repeat(decimals - 1)}1` : "any"}
       />
       <button
         onClick={() => onChange(Math.max(min, value - step))}
@@ -294,6 +302,7 @@ export default function AnalysisPage() {
       </button>
     </div>
   )
+}
 
   // Get today's date
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', '')
@@ -603,15 +612,15 @@ export default function AnalysisPage() {
                 <div className="p-3 space-y-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">매입가격 (억원)</label>
-                    <NumField value={price} onChange={setPrice} step={0.1} />
+                    <NumField value={price} onChange={setPrice} step={0.01} decimals={2} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">대출금액 (억원)</label>
-                    <NumField value={loan} onChange={setLoan} step={0.1} isLoan={true} />
+                    <NumField value={loan} onChange={setLoan} step={0.01} isLoan={true} decimals={2} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">금리 (%)</label>
-                    <NumField value={rate} onChange={setRate} step={0.1} />
+                    <NumField value={rate} onChange={setRate} step={0.01} decimals={2} />
                   </div>
                   <div>
                     <div className="flex items-center justify-center gap-2">
@@ -688,7 +697,7 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              {/* Panel C: 건축물대장 */}
+              {/* Panel C: ���축물대장 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center justify-between border-b border-border">
                   <span className="text-[13px] font-bold">건축물대장 표제부</span>
@@ -824,7 +833,7 @@ export default function AnalysisPage() {
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
                         ? `DSCR ${dscr.toFixed(2)}x로 금융비용은 커버되나, 종합 점수 개선이 필요합니다.`
-                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 월세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancyRate / 100)))}만 이상 확보를 권장합니다.`
+                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 ��세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancyRate / 100)))}만 이상 확보를 권장합니다.`
                     }
                   </span>
                 </div>
@@ -845,7 +854,7 @@ export default function AnalysisPage() {
                 </p>
                 <div className="relative h-2 bg-muted rounded-full">
                   <div
-                    className="absolute w-3.5 h-3.5 bg-foreground rounded-full -top-0.75"
+                    className="absolute w-3.5 h-3.5 bg-foreground rounded-full top-1/2 -translate-y-1/2 -translate-x-1/2"
                     style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
@@ -964,7 +973,7 @@ export default function AnalysisPage() {
                       {[
                         { label: '매입가', value: `${price.toFixed(1)}억`, sub: '취득비용 포함' },
                         { label: '자기자본', value: `${(price - loan).toFixed(1)}억`, sub: `LTV ${ltv.toFixed(1)}%` },
-                        { label: '월 상환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
+                        { label: '월 ���환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
                         { label: 'CoC 수익률', value: `${(((noi - loan * 10000 * (rate / 100)) / ((price - loan) * 10000)) * 100).toFixed(1)}%`, sub: '세전 현금흐름 기준' },
                       ].map((card, i) => (
                         <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
@@ -1196,7 +1205,7 @@ export default function AnalysisPage() {
                 )}
 
                 {/* 리스크 */}
-                {activeTab === '리���크' && (
+                {activeTab === '리스크' && (
                   <div className="p-5 space-y-6">
                     {/* 리스크 등급 배지 */}
                     <div className="flex items-center gap-2">
@@ -1221,7 +1230,7 @@ export default function AnalysisPage() {
                           {[
                             ['LTV', `${ltv.toFixed(1)}%`, ltv <= 60 ? '양호' : ltv <= 70 ? '주의' : '위험', ltv <= 60 ? 'bg-[#16a34a]' : ltv <= 70 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                             ['DSCR 안전마진', dscr.toFixed(2), dscr >= 1.25 ? '양호' : dscr >= 1.0 ? '주의' : '위험', dscr >= 1.25 ? 'bg-[#16a34a]' : dscr >= 1.0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
-                            ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '위험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
+                            ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '���험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
                             ['공실 민감도', `+10%p 시 NOI ${Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)).toLocaleString('ko-KR')}만`, Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? '주의' : '위험', Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
