@@ -567,8 +567,6 @@ export default function AnalysisPage() {
               <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[11px] rounded">주거 유입</span>
             </div>
             
-            <div className="w-px h-8 bg-border" />
-            
             {/* KPIs */}
             <div className="grid grid-cols-4 gap-8 flex-1">
               <div className="text-center">
@@ -701,7 +699,7 @@ export default function AnalysisPage() {
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center justify-between border-b border-border">
                   <span className="text-[13px] font-bold">건축물대장 표제부</span>
-                  <span className="text-[10px] text-muted-foreground">{today} 최신값</span>
+                  <span className="text-[10px] text-muted-foreground">{today} 최���값</span>
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-2">
                   <div className="border border-border rounded-[10px] p-2">
@@ -828,14 +826,14 @@ export default function AnalysisPage() {
                   <span className="text-muted-foreground font-bold">분석엔진</span>
                   <span>BuildMore v2.1</span>
                   <span className="text-muted-foreground font-bold">설명</span>
-                  <span>
+                  <p className="whitespace-normal break-keep leading-relaxed">
                     {dscr >= 1 && bankabilityScore >= 68
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
                         ? `DSCR ${dscr.toFixed(2)}x로 금융비용은 커버되나, 종합 점수 개선이 필요합니다.`
-                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 ��세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancyRate / 100)))}만 이상 확보를 권장합니다.`
+                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 월세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancyRate / 100)))}만 이상 확보를 권장합니다.`
                     }
-                  </span>
+                  </p>
                 </div>
               </div>
 
@@ -967,7 +965,7 @@ export default function AnalysisPage() {
               <div className="bg-white">
                 {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
-                  <div className="p-5 space-y-6">
+                  <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 상단 메트릭 4개 카드 */}
                     <div className="grid grid-cols-4 gap-3">
                       {[
@@ -1039,7 +1037,7 @@ export default function AnalysisPage() {
 
                 {/* NOI · DSCR */}
                 {activeTab === 'NOI · DSCR' && (
-                  <div className="p-5 space-y-6">
+                  <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 상단 메트릭 4개 카드 */}
                     <div className="grid grid-cols-4 gap-3">
                       {[
@@ -1140,7 +1138,7 @@ export default function AnalysisPage() {
 
                 {/* 건축조건 */}
                 {activeTab === '건축조건' && (
-                  <div className="p-5">
+                  <div className="p-5 whitespace-normal break-keep leading-relaxed">
                     <div className="grid grid-cols-3 gap-4">
                       {[
                         {
@@ -1206,7 +1204,7 @@ export default function AnalysisPage() {
 
                 {/* 리스크 */}
                 {activeTab === '리스크' && (
-                  <div className="p-5 space-y-6">
+                  <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 리스크 등급 배지 */}
                     <div className="flex items-center gap-2">
                       <span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${bankabilityScore >= 70 ? 'bg-[#16a34a]' : bankabilityScore >= 50 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'}`} />
@@ -1309,7 +1307,7 @@ export default function AnalysisPage() {
 
                 {/* 실거래 비교 */}
                 {activeTab === '실거래 비교' && (
-                  <table className="w-full">
+                  <table className="w-full whitespace-normal break-keep leading-relaxed">
                     <thead className="sticky top-0 bg-[#fafafb]">
                       <tr>
                         <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
