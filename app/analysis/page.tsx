@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
+import { usePressAndHold } from "@/hooks/usePressAndHold"
 import {
   Plus,
   FolderOpen,
@@ -145,7 +146,7 @@ export default function AnalysisPage() {
   const [constructionCost, setConstructionCost] = useState(500)
   const [elevator, setElevator] = useState<'있음' | '없음' | '설치예정'>('있음')
   const [basement, setBasement] = useState('없음')
-  const [remodelingRange, setRemodelingRange] = useState('부분 리모델링')
+  const [remodelingRange, setRemodelingRange] = useState('부분 리모���링')
   
   // Panel E: 분석옵션
   const [financeScenario, setFinanceScenario] = useState(true)
@@ -295,27 +296,52 @@ export default function AnalysisPage() {
       return Math.round(v).toString()
     }
     
+    const clamp = (v: number) => {
+      if (typeof min === "number" && v < min) return min
+      return v
+    }
+    
+    const decrementPress = usePressAndHold({
+      onPress: () => onChange(clamp(value - step)),
+    })
+    
+    const incrementPress = usePressAndHold({
+      onPress: () => onChange(value + step),
+    })
+    
     return (
     <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
       <input
         type="number"
         value={formatValue(value)}
-        onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
+        onChange={(e) => onChange(clamp(parseFloat(e.target.value) || 0))}
         disabled={disabled}
         className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
         step={decimals > 0 ? `0.${'0'.repeat(decimals - 1)}1` : "any"}
       />
       <button
-        onClick={() => onChange(Math.max(min, value - step))}
+        type="button"
+        onMouseDown={decrementPress.start}
+        onMouseUp={decrementPress.stop}
+        onMouseLeave={decrementPress.stop}
+        onTouchStart={decrementPress.start}
+        onTouchEnd={decrementPress.stop}
+        onTouchCancel={decrementPress.stop}
         disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base active:bg-muted select-none"
       >
         −
       </button>
       <button
-        onClick={() => onChange(value + step)}
+        type="button"
+        onMouseDown={incrementPress.start}
+        onMouseUp={incrementPress.stop}
+        onMouseLeave={incrementPress.stop}
+        onTouchStart={incrementPress.start}
+        onTouchEnd={incrementPress.stop}
+        onTouchCancel={incrementPress.stop}
         disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base active:bg-muted select-none"
       >
         +
       </button>
@@ -595,7 +621,7 @@ export default function AnalysisPage() {
           </Button>
           
           {/* News ticker with gap and background */}
-          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
+          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-2 py-2 shadow-sm">
             <NewsTicker news={topNews} />
           </div>
           
@@ -1345,7 +1371,7 @@ export default function AnalysisPage() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 border-b border-border">
-              <p className="text-sm">지도에서 물건을 선택하고 &apos;분석&apos;을 클릭하세요</p>
+              <p className="text-sm">지도에서 물건을 선택하고 &apos;분석&apos;�� 클릭하세요</p>
               <button onClick={() => setShowMapModal(false)} className="p-2 hover:bg-muted rounded-lg">
                 <X className="w-5 h-5" />
               </button>
