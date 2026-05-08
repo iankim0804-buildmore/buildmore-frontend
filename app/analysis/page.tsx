@@ -552,7 +552,7 @@ export default function AnalysisPage() {
             </Button>
           </div>
           <p className="text-[10px] text-muted-foreground mt-2">
-            예: &quot;이 물건 DSCR이 낮은데 어떻게 하면 좋을까?&quot;
+            ��: &quot;이 물건 DSCR이 낮은데 어떻게 하면 좋을까?&quot;
           </p>
         </form>
       </div>
@@ -712,11 +712,11 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              {/* Panel C: ���축물대장 */}
+              {/* Panel C: 건축물대장 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center justify-between border-b border-border">
                   <span className="text-[13px] font-bold">건축물대장 표제부</span>
-                  <span className="text-[10px] text-muted-foreground">{today} 최���값</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">{today} · 최신값</span>
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-2">
                   <div className="border border-border rounded-[10px] p-2">
@@ -937,28 +937,6 @@ export default function AnalysisPage() {
               ))}
             </div>
 
-            {/* Report cards */}
-            <div className="grid grid-cols-3 gap-2.5 mb-3">
-              {[
-                { t: '일반 PDF 다운로드', s: '분석 결과 요약 리포트를 PDF로 다운로드합니다.', btn: '다운로드' },
-                { t: '심층 리포트 요청', s: '건축/금융/리스크 상세 분석을 포함한 심층 리포트를 받아보세요.', btn: '리포트 요청' },
-                { t: 'DEAL PACKAGE', s: '협상 전략, 금융 조건, 리스크 대응을 포함한 맞춤형 패키지를 제공합니다.', btn: '패키지 보기' },
-              ].map((item, i) => (
-                <div key={i} className="bg-white border border-border rounded-[14px] p-3.5 text-center">
-                  <p className="text-sm font-bold mb-1">{item.t}</p>
-                  <p className="text-xs text-muted-foreground mb-3">{item.s}</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full h-9"
-                    onClick={() => handleComingSoon(item.t)}
-                  >
-                    {item.btn}
-                  </Button>
-                </div>
-              ))}
-            </div>
-
             {/* Table */}
             <div className="bg-white border border-border rounded-2xl overflow-hidden">
               {/* Tabs */}
@@ -980,7 +958,7 @@ export default function AnalysisPage() {
               
               {/* Table content */}
               <div className="bg-white">
-                {/* 금융 ��석 */}
+                {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 상단 메트릭 4개 카드 */}
@@ -1211,7 +1189,7 @@ export default function AnalysisPage() {
                   </div>
                 )}
 
-                {/* 리스크 */}
+                {/* 리��크 */}
                 {activeTab === '리스크' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 리스크 등급 배지 */}
@@ -1308,7 +1286,7 @@ export default function AnalysisPage() {
                     {/* 경고 박스 */}
                     <div className="bg-[#fffbeb] border border-[#fef08a] rounded-[8px] p-3">
                       <p className="text-xs text-[#666] leading-relaxed">
-                        도로확폭 리스크: 인접도로가 4m 미만이면 도로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
+                        도로확폭 리스크: 인접도로가 4m 미만이면 ���로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
                       </p>
                     </div>
                   </div>
