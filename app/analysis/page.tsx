@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -25,6 +26,8 @@ import {
   Send,
   X,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   Map,
   Clock,
@@ -130,6 +133,11 @@ export default function AnalysisPage() {
   // ============================================================
   const dealAnalysis = useDealAnalysis()
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
+  
+  // ============================================================
+  // B-3. SIDEBAR STATE (New)
+  // ============================================================
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   // ============================================================
   // C. ANALYSIS PANEL STATE
@@ -295,7 +303,7 @@ export default function AnalysisPage() {
     // DEAL SIGNAL 점수 계산
     // 기본 점수: 63점
     // DSCR 패널티: (0.95 - DSCR) * 24 (DSCR 낮을수록 점수 감소)
-    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 높을수록 점수 감소)
+    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 높을수록 점수 감���)
     // 엘리베이터 미설치: -3점
     const vacancyPenalty = (vacancyRate - 10) * (vacancySensitivity / 100) * 1.2 // 공실률 10% 기준, 민감도 반영
     const scoreVal = Math.max(18, Math.min(88,
@@ -633,11 +641,14 @@ export default function AnalysisPage() {
       </header>
 
       {/* MAIN LAYOUT - Sidebar + Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* ============================================================ */}
-        {/* A. LEFT NAVIGATION SIDEBAR (160px) */}
+        {/* A. LEFT NAVIGATION SIDEBAR (160px - OVERLAY DRAWER) */}
         {/* ============================================================ */}
-        <aside className="w-40 flex-shrink-0 flex flex-col bg-card border-r border-border">
+        <aside className={cn(
+          "fixed left-0 top-[66px] z-40 h-[calc(100vh-66px)] w-40 flex flex-col bg-card border-r border-border transition-transform duration-300 ease-out",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}>
         {/* Nav Items */}
         <ScrollArea className="flex-1 py-3">
           <nav className="px-2 space-y-0.5">
@@ -737,11 +748,27 @@ export default function AnalysisPage() {
           <p className="text-muted-foreground/70 pt-1">v1.1.0</p>
         </div>
       </aside>
+      
+      {/* ============================================================ */}
+      {/* A-2. SIDEBAR HANDLE (TOGGLE DRAWER) */}
+      {/* ============================================================ */}
+      <button
+        type="button"
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="fixed left-0 top-1/2 z-50 -translate-y-1/2 rounded-r-lg border border-border bg-white px-1.5 py-6 shadow-sm hover:bg-muted transition-colors"
+        title={isSidebarOpen ? "사이드바 닫기" : "사이드바 열기"}
+      >
+        {isSidebarOpen ? (
+          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        )}
+      </button>
 
       {/* ============================================================ */}
       {/* B. CHAT AREA (flex-1) */}
       {/* ============================================================ */}
-      <div className="w-80 flex-shrink-0 flex flex-col bg-background border-r border-border">
+      <div className="flex-1 flex flex-col bg-background border-r border-border">
         {/* Chat header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
           <h2 className="text-sm font-medium text-foreground">대화</h2>
@@ -755,7 +782,7 @@ export default function AnalysisPage() {
             <div className="space-y-3 pr-4">
               {chatMessages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed ${
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-foreground text-background'
                       : 'bg-white border border-border text-foreground'
@@ -1049,9 +1076,9 @@ export default function AnalysisPage() {
 
             {/* Top 3 cards */}
             <div className="grid grid-cols-[1.7fr_0.8fr_0.95fr] gap-3 mb-3">
-              {/* BANKABILITY */}
+              {/* DEAL SCORE */}
               <div className="bg-white border border-border rounded-[14px] p-3">
-                <p className="text-[15px] font-bold mb-2">BANKABILITY</p>
+                <p className="text-[15px] font-bold mb-2">DEAL SCORE</p>
                 <p className="text-[40px] font-medium tracking-tight leading-none mb-2">
                   {bankabilityScore} <span className="text-lg text-muted-foreground">/ 100</span>
                 </p>
