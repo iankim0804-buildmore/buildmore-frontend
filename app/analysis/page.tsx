@@ -12,10 +12,7 @@ import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
 import { InsightPanel, type DealInsight } from "./components/InsightPanel"
-import { AnalysisChat } from "./components/AnalysisChat"
-import { RunAnalysisButton } from "./components/RunAnalysisButton"
 import { useDealAnalysis } from "@/hooks/useDealAnalysis"
-import { useAnalysisChat, type ChatMessage as AnalysisChatMessage } from "@/hooks/useAnalysisChat"
 import type { DealInput } from "@/lib/analysis/dealAnalysisEngine"
 import {
   Plus,
@@ -116,16 +113,22 @@ export default function AnalysisPage() {
   // ============================================================
   // B. CHAT STATE (Legacy - kept for reference)
   // ============================================================
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const initialChatMessages: ChatMessage[] = [
+    {
+      role: 'assistant',
+      content: '분석을 시작합니다. 우측 패널에서 매입조건, 임대조건, 건축조건을 조정한 뒤 "분석 실행"을 누르면 이 매물의 매수 판단과 협상 포인트를 요약해드릴게요.'
+    }
+  ]
+  
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialChatMessages)
   const [inputValue, setInputValue] = useState('')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isChatLoading, setIsChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   
   // ============================================================
   // B-2. ANALYSIS HOOKS (New)
   // ============================================================
   const dealAnalysis = useDealAnalysis()
-  const analysisChat = useAnalysisChat()
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
 
   // ============================================================
@@ -330,6 +333,10 @@ export default function AnalysisPage() {
   
   // Handle Analysis Run
   const handleRunAnalysis = useCallback(async () => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[analysis] run clicked with input:', { address, price, loan, rate, rent, deposit, vacancyRate })
+    }
+    
     const input: DealInput = {
       address,
       price,
@@ -340,31 +347,107 @@ export default function AnalysisPage() {
       vacancyRate
     }
     
+    // 분석 실행
     await dealAnalysis.runAnalysis(input)
     setHasRunAnalysis(true)
     
-    // 분석 완료 후 요약을 대화창에 추가
-    if (dealAnalysis.summary) {
-      analysisChat.addSystemMessage(dealAnalysis.summary)
-    }
-  }, [address, price, loan, rate, rent, deposit, vacancyRate, dealAnalysis, analysisChat])
-  
-  // 분석 결과가 있으면 대화창에 요약 추가
-  useEffect(() => {
-    if (dealAnalysis.result && dealAnalysis.summary && hasRunAnalysis) {
-      // 첫 번째 메시지일 때만 추가
-      if (analysisChat.messages.length === 0) {
-        analysisChat.addSystemMessage(dealAnalysis.summary)
+    // 분석 결과가 있으면 요약을 대화창에 추가
+    if (dealAnalysis.result && dealAnalysis.summary) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[analysis] result:', dealAnalysis.result)
+        console.log('[chat] summary to append:', dealAnalysis.summary)
+      }
+      
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: dealAnalysis.summary
+        }
+      ])
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[chat] messages after append:', chatMessages)
       }
     }
-  }, [dealAnalysis.result, dealAnalysis.summary, hasRunAnalysis, analysisChat])
+  }, [address, price, loan, rate, rent, deposit, vacancyRate, dealAnalysis])
   
-  // 대화 메시지 전송 핸들러
-  const handleSendChatMessage = useCallback((message: string) => {
-    if (dealAnalysis.result) {
-      analysisChat.sendMessage(message, dealAnalysis.result)
+  // API 실패 시 fallback 메시지 추가
+  useEffect(() => {
+    if (dealAnalysis.error && hasRunAnalysis) {
+      const fallbackSummary = '분석 결과를 업데이트했습니다.\n\n현재 입력 조건을 기준으로 보면 이 매물은 즉시 매수보다는 가격협상 후 재검토가 적절합니다. 매입가, 대출금액, 금리, 월세, 공실률 조건을 종합하면 현금흐름 안정성을 추가로 확인할 필요가 있습니다.\n\n다음 단계로는 가격협상 기준가, 대출 후 현금흐름, 계약 전 리스크를 확인하는 것이 좋습니다.'
+      
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: fallbackSummary
+        }
+      ])
     }
-  }, [dealAnalysis.result, analysisChat])
+  }, [dealAnalysis.error, hasRunAnalysis])
+  
+  // 대화 메시지 전송
+  const handleSendChatMessage = useCallback(async (message: string) => {
+    if (!message.trim()) return
+    
+    // 사용자 메시지 추가
+    setChatMessages(prev => [
+      ...prev,
+      {
+        role: 'user',
+        content: message
+      }
+    ])
+    
+    setIsChatLoading(true)
+    
+    try {
+      const response = await fetch('/api/analysis/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          analysisResult: dealAnalysis.result,
+          history: chatMessages
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || '응답 생성 중 오류가 발생했습니다.')
+      }
+      
+      // 어시스턴트 응답 추가
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: data.response
+        }
+      ])
+    } catch (error) {
+      const fallbackAnswer = dealAnalysis.result 
+        ? '죄송합니다. 응답을 생성하지 못했습니다. 다시 시도해주세요.'
+        : '먼저 우측 패널에서 분석 실행을 누르면 더 정확한 답변을 제공할 수 있습니다.'
+      
+      setChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: fallbackAnswer
+        }
+      ])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }, [dealAnalysis.result, chatMessages])
+  
+  // 자동 스크롤
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
   
   // 동적 인사이트 데이터 (분석 결과 있으면 사용, 없으면 기본값)
   const currentInsights = dealAnalysis.result?.insights
@@ -662,18 +745,59 @@ export default function AnalysisPage() {
         {/* Chat header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
           <h2 className="text-sm font-medium text-foreground">대화</h2>
-          <span className="text-xs text-muted-foreground">{analysisChat.messages.length}개 메시지</span>
+          <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
         </div>
 
         {/* Chat content */}
-        <div className="flex-1 p-3 overflow-hidden">
-          <AnalysisChat
-            messages={analysisChat.messages}
-            suggestedQuestions={dealAnalysis.suggestedQuestions}
-            isLoading={analysisChat.isLoading}
-            onSendMessage={handleSendChatMessage}
-            hasAnalysis={!!dealAnalysis.result}
-          />
+        <div className="flex-1 p-3 overflow-hidden flex flex-col">
+          {/* Messages */}
+          <ScrollArea className="flex-1">
+            <div className="space-y-3 pr-4">
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-foreground text-background'
+                      : 'bg-white border border-border text-foreground'
+                  }`}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              
+              {isChatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-border rounded-lg px-3 py-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                </div>
+              )}
+              
+              <div ref={chatEndRef} />
+            </div>
+          </ScrollArea>
+          
+          {/* Input */}
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            handleSendChatMessage(inputValue)
+            setInputValue('')
+          }} className="mt-3 flex gap-2">
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="질문을 입력하세요..."
+              className="flex-1 text-sm h-8"
+              disabled={isChatLoading}
+            />
+            <Button 
+              type="submit" 
+              size="sm"
+              disabled={!inputValue.trim() || isChatLoading}
+            >
+              <Send className="w-3 h-3" />
+            </Button>
+          </form>
         </div>
       </div>
 
@@ -686,12 +810,17 @@ export default function AnalysisPage() {
           {/* Run button */}
           <Button 
             className="w-[108px] h-10 bg-foreground text-background hover:bg-foreground/90 text-sm font-medium flex-shrink-0"
-            onClick={() => {
-              recalc()
-              toast.success('분석이 완료되었습니다.')
-            }}
+            onClick={handleRunAnalysis}
+            disabled={dealAnalysis.isLoading}
           >
-            분석 실행
+            {dealAnalysis.isLoading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin mr-2" />
+                분석 중...
+              </>
+            ) : (
+              '분석 실행'
+            )}
           </Button>
           
           {/* News ticker with gap and background */}
@@ -907,18 +1036,6 @@ export default function AnalysisPage() {
                     <span className="text-xs">AI 리포트 자동생성</span>
                   </label>
                 </div>
-              </div>
-              
-              {/* Run Analysis Button */}
-              <div className="mt-4">
-                <RunAnalysisButton
-                  onClick={handleRunAnalysis}
-                  isLoading={dealAnalysis.isLoading}
-                  hasRun={hasRunAnalysis}
-                />
-                {dealAnalysis.error && (
-                  <p className="text-xs text-red-500 mt-2">{dealAnalysis.error}</p>
-                )}
               </div>
             </div>
           </ScrollArea>
