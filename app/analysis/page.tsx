@@ -117,7 +117,8 @@ export default function AnalysisPage() {
   // Panel B: 임대조건
   const [rent, setRent] = useState(320)
   const [deposit, setDeposit] = useState(5000)
-  const [vacancy, setVacancy] = useState(20)
+  const [vacancyRate, setVacancyRate] = useState(20) // 공실률: 긍정 10 / 적정 20 / 보수 30
+  const [vacancySensitivity, setVacancySensitivity] = useState(20) // 공실민감도: 게이지바 별도 값
   
   // Panel C: 건축물대장 (read-only from API, using defaults)
   const buildingData = { permitYear: 2000, approvalYear: 2001, registerArea: 420, maxGfa: 420 }
@@ -156,13 +157,13 @@ export default function AnalysisPage() {
   // CALCULATION LOGIC
   // ============================================================
   const recalc = useCallback(() => {
-    const noiVal = Math.max(0, rent * 12 * (1 - vacancy / 100) - 82)
+    const noiVal = Math.max(0, rent * 12 * (1 - vacancyRate / 100) - 82)
     const annualDebt = loan * 10000 * (rate / 100)
     const dscrVal = annualDebt ? noiVal / annualDebt : 0
     const ltvVal = price ? (loan / price) * 100 : 0
     const capVal = price ? (noiVal / (price * 10000)) * 100 : 0
     const scoreVal = Math.max(18, Math.min(88,
-      Math.round(63 - (0.95 - dscrVal) * 24 - Math.max(0, vacancy - 10) * 0.7 - (elevator === '설치예정' ? 3 : 0))
+      Math.round(63 - (0.95 - dscrVal) * 24 - Math.max(0, vacancyRate - 10) * 0.7 - (elevator === '설치예정' ? 3 : 0))
     ))
     
     setNoi(noiVal)
@@ -173,12 +174,12 @@ export default function AnalysisPage() {
     
     if (scoreVal >= 68 && dscrVal >= 0.9) {
       setDealSignal('매수보류')
-    } else if (scoreVal <= 35 || vacancy >= 30) {
+    } else if (scoreVal <= 35 || vacancyRate >= 30) {
       setDealSignal('매수')
     } else {
       setDealSignal('가격협상')
     }
-  }, [price, loan, rate, rent, vacancy, elevator])
+  }, [price, loan, rate, rent, vacancyRate, elevator])
 
   useEffect(() => {
     recalc()
@@ -549,25 +550,22 @@ export default function AnalysisPage() {
             <div className="w-px h-8 bg-border" />
             
             {/* KPIs */}
-            <div className="grid grid-cols-[1fr_1px_1fr_1px_1fr_1px_1fr] items-center gap-x-5">
+            <div className="grid grid-cols-4 gap-8 flex-1">
               <div className="text-center">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">NOI</p>
-                <p className="text-[17px] font-semibold">{noi.toLocaleString('ko-KR')}만</p>
+                <p className="text-[17px] font-semibold tabular-nums">{noi.toLocaleString('ko-KR')}만</p>
               </div>
-              <div className="w-px h-8 bg-border justify-self-center" />
               <div className="text-center">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">DSCR</p>
-                <p className={`text-[17px] font-semibold ${dscr < 1 ? 'text-red-600' : ''}`}>{dscr.toFixed(2)}x</p>
+                <p className={`text-[17px] font-semibold tabular-nums ${dscr < 1 ? 'text-red-600' : ''}`}>{dscr.toFixed(2)}x</p>
               </div>
-              <div className="w-px h-8 bg-border justify-self-center" />
               <div className="text-center">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">LTV</p>
-                <p className="text-[17px] font-semibold">{ltv.toFixed(1)}%</p>
+                <p className="text-[17px] font-semibold tabular-nums">{ltv.toFixed(1)}%</p>
               </div>
-              <div className="w-px h-8 bg-border justify-self-center" />
               <div className="text-center">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">CAP</p>
-                <p className="text-[17px] font-semibold">{cap.toFixed(1)}%</p>
+                <p className="text-[17px] font-semibold tabular-nums">{cap.toFixed(1)}%</p>
               </div>
             </div>
           </div>
@@ -642,38 +640,39 @@ export default function AnalysisPage() {
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">공실률</label>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {([30, 20, 10] as const).map(v => (
+                      {([10, 20, 30] as const).map(v => (
                         <button
                           key={v}
-                          onClick={() => setVacancy(v)}
+                          onClick={() => setVacancyRate(v)}
                           className={`h-[32px] rounded-lg text-xs border transition-colors ${
-                            vacancy === v 
+                            vacancyRate === v 
                               ? 'bg-foreground text-background border-foreground' 
                               : 'bg-white border-border hover:bg-muted'
                           }`}
                         >
-                          {v === 30 ? '보수 30' : v === 20 ? '적정 20' : '긍정 10'}
+                          {v === 10 ? '긍정 10' : v === 20 ? '적정 20' : '보수 30'}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div>
+                    <label className="text-[11px] text-muted-foreground mb-1 block">공실민감도</label>
                     <div className="flex items-center justify-center gap-2">
                       <input
                         type="range"
                         min="0"
                         max="100"
                         step="1"
-                        value={vacancy}
-                        onChange={(e) => setVacancy(parseInt(e.target.value))}
+                        value={vacancySensitivity}
+                        onChange={(e) => setVacancySensitivity(parseInt(e.target.value))}
                         className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
                         style={{
-                          background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${vacancy}%, #f5f5f5 ${vacancy}%, #f5f5f5 100%)`,
+                          background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${vacancySensitivity}%, #f5f5f5 ${vacancySensitivity}%, #f5f5f5 100%)`,
                           outline: 'none'
                         }}
                       />
                     </div>
-                    <p className="text-center text-[12px] font-semibold text-foreground mt-2">공실민감도 {vacancy}%</p>
+                    <p className="text-center text-[12px] font-semibold text-foreground mt-2">공실민감도 {vacancySensitivity}%</p>
                   </div>
                 </div>
               </div>
@@ -814,7 +813,7 @@ export default function AnalysisPage() {
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
                         ? `DSCR ${dscr.toFixed(2)}x로 금융비용은 커버되나, 종합 점수 개선이 필요합니다.`
-                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 월세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancy / 100)))}만 이상 확보를 권장합니다.`
+                        : `DSCR ${dscr.toFixed(2)}x — 금융비용 미달. 매입가 협상 또는 월세 ${Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancyRate / 100)))}만 이상 확보를 권장합니다.`
                     }
                   </span>
                 </div>
@@ -823,7 +822,7 @@ export default function AnalysisPage() {
               {/* DEAL SIGNAL */}
               <div className="bg-white border border-border rounded-[14px] p-4">
                 <p className="text-[15px] font-bold mb-3">DEAL SIGNAL</p>
-                <p className={`text-[28px] font-bold mb-2 ${dealSignal === '매수보류' ? 'text-red-600' : dealSignal === '가격협상' ? 'text-amber-600' : ''}`}>
+                <p className="text-[28px] font-bold mb-2 text-black">
                   {dealSignal}
                 </p>
                 <p className="text-[13px] text-muted-foreground mb-4">
@@ -840,9 +839,9 @@ export default function AnalysisPage() {
                   />
                 </div>
                 <div className="flex justify-between mt-2 text-[11px] text-muted-foreground">
-                  <span>매수보류</span>
-                  <span className="text-amber-600">가격협상</span>
-                  <span className="text-red-600">매수</span>
+                  <span>낮은 값</span>
+                  <span className="text-muted-foreground">중간 값</span>
+                  <span className="text-muted-foreground">높은 값</span>
                 </div>
               </div>
 
@@ -890,7 +889,7 @@ export default function AnalysisPage() {
                 { k: '연간 커버리지', v: `${dscr.toFixed(2)}x`, s: 'NOI / 연간 금융비용', pop: '현재 NOI가 연간 금융비용을 충분히 커버하지 못합니다.' },
                 { k: '상권 강점', v: '합정 생활상권', s: '역세권 + 주거 유입 안정', pop: '합정역 접근성, 주거 기반 유입, 팝업·F&B 수요가 겹치는 상권입니다.' },
                 { k: '밸류애드', v: '조건부 가능', s: '용적 여력 제한적', pop: '리모델링을 통한 효율 개선과 임차인 업종 재구성으로 수익성 개선 여지가 있습니다.' },
-                { k: '핵심 리스크', v: '공실 · 도로확폭', s: `공실률 ${vacancy}%, 도로확폭 4m`, pop: '인접도로가 4m 미만이면 도로확폭 대상이 될 수 있습니다.', red: true },
+                { k: '핵심 리스크', v: '공실 · 도로확폭', s: `공실률 ${vacancyRate}%, 도로확폭 4m`, pop: '인접도로가 4m 미만이면 도로확폭 대상이 될 수 있습니다.', red: true },
               ].map((item, i) => (
                 <div key={i} className="bg-white border border-border rounded-[14px] p-3.5 hover:shadow-md transition-shadow group relative">
                   <p className="text-[11px] text-muted-foreground font-bold uppercase mb-1">{item.k}</p>
@@ -974,8 +973,8 @@ export default function AnalysisPage() {
                           <tbody>
                             {[
                               { label: '연간 임대수입 (PGI)', value: rent * 12, isOperating: false },
-                              { label: '공실 손실', value: -(rent * 12 * (vacancy / 100)), isOperating: false },
-                              { label: '유효총수��� (EGI)', value: rent * 12 * (1 - vacancy / 100), isOperating: false },
+                              { label: '공실 손실', value: -(rent * 12 * (vacancyRate / 100)), isOperating: false },
+                              { label: '유효총수��� (EGI)', value: rent * 12 * (1 - vacancyRate / 100), isOperating: false },
                               { label: '운영비용 (OPEX)', value: -82, isOperating: false },
                               { label: '순영업수익 (NOI)', value: noi, isOperating: true },
                               { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
@@ -1002,7 +1001,7 @@ export default function AnalysisPage() {
                               { label: '기준금리 (ECOS)', value: '3.50%' },
                               { label: '코픽스', value: '3.82%' },
                               { label: '금리 스프레드', value: `${(rate - 3.82).toFixed(2)}%p`, color: (rate - 3.82) > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
-                              { label: '매입단가 (㎡당)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
+                              { label: '매입단가 (㎡��)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
                               { label: '마포구 ���균단가', value: '4,099만' },
                               { label: '시세 대비', value: Math.round(price * 10000 / 420) <= 4099 ? '적정' : '고평가', color: Math.round(price * 10000 / 420) <= 4099 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
                             ].map((row, i) => (
@@ -1027,7 +1026,7 @@ export default function AnalysisPage() {
                         { label: 'NOI', value: `${Math.round(noi).toLocaleString('ko-KR')}만`, sub: '연간 순영업수익' },
                         { label: 'DSCR', value: dscr.toFixed(2), sub: dscr >= 1.25 ? '✓ 안전' : '⚠ 위험', valueColor: dscr >= 1.25 ? 'text-[#16a34a]' : dscr < 1.0 ? 'text-[#dc2626]' : '' },
                         { label: '잠재 NOI', value: `${Math.round(rent * 12 - 82).toLocaleString('ko-KR')}만`, sub: '공실 0% 기준' },
-                        { label: '공실률', value: `${vacancy}%`, sub: vacancy === 10 ? '긍정' : vacancy === 20 ? '적정' : '보수' },
+                        { label: '공실률', value: `${vacancyRate}%`, sub: vacancyRate === 10 ? '긍정' : vacancyRate === 20 ? '적정' : '보수' },
                       ].map((card, i) => (
                         <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
                           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#a1a1aa] mb-2">{card.label}</p>
@@ -1043,8 +1042,8 @@ export default function AnalysisPage() {
                         <tbody>
                           {[
                             { label: 'PGI (잠재 총임대수입)', value: rent * 12, note: `월 ${rent}만 × 12` },
-                            { label: '공실 손실', value: -(rent * 12 * (vacancy / 100)), note: `공실률 ${vacancy}%` },
-                            { label: 'EGI (유효총수입)', value: rent * 12 * (1 - vacancy / 100), note: '' },
+                            { label: '공실 손실', value: -(rent * 12 * (vacancyRate / 100)), note: `공실률 ${vacancyRate}%` },
+                            { label: 'EGI (유효총수입)', value: rent * 12 * (1 - vacancyRate / 100), note: '' },
                             { label: 'OPEX (운영비용)', value: -82, note: '고정' },
                             { label: 'NOI', value: noi, note: '', isHighlight: true },
                             { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), note: '연간 금융비용' },
@@ -1096,7 +1095,7 @@ export default function AnalysisPage() {
                         <table className="w-full text-sm">
                           <tbody>
                             {(() => {
-                              const stressVacancy = Math.min(100, vacancy + 10)
+                              const stressVacancy = Math.min(100, vacancyRate + 10)
                               const stressNoi = Math.max(0, rent * 12 * (1 - stressVacancy / 100) - 82)
                               const stressDscr = stressNoi / (loan * 10000 * (rate / 100))
                               const stressCF = stressNoi - loan * 10000 * (rate / 100)
@@ -1212,7 +1211,7 @@ export default function AnalysisPage() {
                             ['LTV', `${ltv.toFixed(1)}%`, ltv <= 60 ? '양호' : ltv <= 70 ? '주의' : '위험', ltv <= 60 ? 'bg-[#16a34a]' : ltv <= 70 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                             ['DSCR 안전마진', dscr.toFixed(2), dscr >= 1.25 ? '양호' : dscr >= 1.0 ? '주의' : '위험', dscr >= 1.25 ? 'bg-[#16a34a]' : dscr >= 1.0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                             ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '위험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
-                            ['공실 민감도', `+10%p 시 NOI ${Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)).toLocaleString('ko-KR')}만`, Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)) > 0 ? '주의' : '위험', Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)) > 0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                            ['공실 민감도', `+10%p 시 NOI ${Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)).toLocaleString('ko-KR')}만`, Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? '주의' : '위험', Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancyRate + 10) / 100) - 82)) > 0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
                               <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
@@ -1266,7 +1265,7 @@ export default function AnalysisPage() {
                         <tbody>
                           {[
                             ['상권 유형', '합정 생활상권', '양호', 'bg-[#16a34a]'],
-                            ['공실 트렌드', `${vacancy}%`, vacancy <= 10 ? '양호' : vacancy <= 20 ? '주의' : '위험', vacancy <= 10 ? 'bg-[#16a34a]' : vacancy <= 20 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                            ['공실 트렌드', `${vacancyRate}%`, vacancyRate <= 10 ? '양호' : vacancyRate <= 20 ? '주의' : '위험', vacancyRate <= 10 ? 'bg-[#16a34a]' : vacancyRate <= 20 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
                             ['역세권 여부', '역세권 (합정역)', '양호', 'bg-[#16a34a]'],
                           ].map((row, i) => (
                             <tr key={i} className="border-b border-[#f1f1f3]">
