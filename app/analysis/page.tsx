@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
-import { usePressAndHold } from "@/hooks/usePressAndHold"
+import { InsightPanel, type DealInsight } from "./components/InsightPanel"
 import {
   Plus,
   FolderOpen,
@@ -146,7 +146,7 @@ export default function AnalysisPage() {
   const [constructionCost, setConstructionCost] = useState(500)
   const [elevator, setElevator] = useState<'있음' | '없음' | '설치예정'>('있음')
   const [basement, setBasement] = useState('없음')
-  const [remodelingRange, setRemodelingRange] = useState('부분 리모���링')
+  const [remodelingRange, setRemodelingRange] = useState('부분 리모델링')
   
   // Panel E: 분석옵션
   const [financeScenario, setFinanceScenario] = useState(true)
@@ -159,9 +159,119 @@ export default function AnalysisPage() {
   const [selectedProperty, setSelectedProperty] = useState<MapProperty>(mapProperties[3])
   
   // Table tabs
-  const [activeTab, setActiveTab] = useState('실거래 비교')
-  const tabs = ['금융 분석', 'NOI · DSCR', '건축조건', '리스크', '실거래 비교']
+  const [activeTab, setActiveTab] = useState('매수 판단')
+  const tabs = ['매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션']
   
+
+  // Deal Insights 데이터
+  const dealInsights: Record<string, DealInsight> = {
+    buyDecision: {
+      id: "buyDecision",
+      title: "매수 판단",
+      verdict: "가격협상 후 재검토",
+      summary:
+        "현재 이 매물은 즉시 매수보다는 가격협상 후 재검토가 적절한 딜입니다. 금융 부담은 높지만 상권 특성은 긍정적으로 해석됩니다.",
+      reasons: [
+        "입력된 매입가 대비 수익성이 보수적 기준에 미달합니다.",
+        "대출 부담이 임대수익 대비 높아 보유 안정성이 낮습니다.",
+        "상권 특성은 긍정적이지만 가격에 선반영되었을 가능성이 있습니다.",
+      ],
+      actions: [
+        "즉시 매수보다는 가격협상 후 재검토하세요.",
+        "매입가 조정 가능성을 먼저 확인하세요.",
+        "대출금액과 금리 조건을 보수적으로 재검토하세요.",
+      ],
+      evidenceLabel:
+        "근거 지표: 매입가 · 대출금액 · 금리 · NOI · DSCR · LTV · 상권특성",
+      ctaText: "정확한 매수 가능 가격과 협상 기준가는 딜 브리핑에서 확인할 수 있습니다.",
+      severity: "warning",
+    },
+    negotiation: {
+      id: "negotiation",
+      title: "가격협상 포인트",
+      verdict: "협상 여지 있음",
+      summary:
+        "현재 조건에서는 매입가에 협상 여지가 있습니다. 공실률, 대출 부담, 수익성, 도로 조건은 가격 조정 근거로 활용될 수 있습니다.",
+      reasons: [
+        "대출비용을 반영하면 실질 현금흐름이 약해집니다.",
+        "공실률이 높아질 경우 NOI가 빠르게 감소할 수 있습니다.",
+        "도로 조건과 건축 조건은 매입가 할인 근거가 될 수 있습니다.",
+      ],
+      actions: [
+        "협상 전 기준 매수가 범위를 설정하세요.",
+        "공실률과 대출 부담을 가격 조정 근거로 활용하세요.",
+        "감액 요청이 아니라 수치 기반 협상 논리로 접근하세요.",
+      ],
+      evidenceLabel:
+        "근거 지표: 공실률 · 금융비용 · 현금흐름 · 도로조건 · 실거래 비교",
+      ctaText: "딜 브리핑에서는 적정 매수가 범위와 협상 논리를 리포트 형태로 제공합니다.",
+      severity: "warning",
+    },
+    cashflow: {
+      id: "cashflow",
+      title: "현금흐름 안정성",
+      verdict: "보수적 관리 필요",
+      summary:
+        "현재 대출 조건에서는 현금흐름 안정성이 낮은 편입니다. 금리 상승이나 공실 발생 시 보유 부담이 커질 수 있습니다.",
+      reasons: [
+        "대출 상환 부담이 임대수익 대비 높습니다.",
+        "공실률이 상승하면 현금흐름이 빠르게 악화될 수 있습니다.",
+        "금리 조건에 민감한 구조입니다.",
+      ],
+      actions: [
+        "대출금액을 낮춘 시나리오를 검토하세요.",
+        "공실률 보수 시나리오를 적용하세요.",
+        "금리 상승 시에도 버틸 수 있는지 확인하세요.",
+      ],
+      evidenceLabel:
+        "근거 지표: NOI · DSCR · LTV · 금리 · 공실률 · 월 상환액",
+      ctaText: "금리·공실·대출비율별 현금흐름 시나리오는 유료 딜 브리핑에서 확인할 수 있습니다.",
+      severity: "danger",
+    },
+    upside: {
+      id: "upside",
+      title: "업사이드 가능성",
+      verdict: "개선 여지 있음",
+      summary:
+        "현재 수익성만 보면 보수적 접근이 필요하지만, 상권과 임대 수요 측면에서는 개선 여지가 있습니다.",
+      reasons: [
+        "주소지가 가진 상권 특성은 임대수요 측면에서 긍정적입니다.",
+        "리모델링 또는 업종 재구성을 통해 임대료 개선 가능성이 있습니다.",
+        "건축 조건에 따라 밸류애드 여지가 존재할 수 있습니다.",
+      ],
+      actions: [
+        "현재 임차인 구조와 임대료 수준을 확인하세요.",
+        "리모델링 또는 업종 변경 가능성을 검토하세요.",
+        "업사이드가 이미 매입가에 반영되어 있는지 확인하세요.",
+      ],
+      evidenceLabel:
+        "근거 지표: 상권특성 · 임대수요 · 건축조건 · 리모델링 가능성",
+      ctaText: "딜 클로징 패키지에서는 이 매물의 밸류애드 전략과 실행 체크리스트를 제공합니다.",
+      severity: "neutral",
+    },
+    riskAction: {
+      id: "riskAction",
+      title: "리스크와 다음 액션",
+      verdict: "실사 확인 필요",
+      summary:
+        "이 매물의 핵심 리스크는 공실, 금융 부담, 도로 및 건축 조건입니다. 해당 리스크는 가격 조정과 실사 확인 항목으로 전환해야 합니다.",
+      reasons: [
+        "공실률이 높아지면 수익성이 크게 낮아질 수 있습니다.",
+        "금융비용 부담이 커서 보수적인 대출 구조가 필요합니다.",
+        "도로와 건축 조건은 향후 매각가와 임대수요에 영향을 줄 수 있습니다.",
+      ],
+      actions: [
+        "매입가 조정 가능성을 확인하세요.",
+        "임대차 계약서와 실제 공실 가능성을 확인하세요.",
+        "도로폭, 건축 가능 여부, 리모델링 제약을 확인하세요.",
+        "실거래 비교를 통해 가격 상한선을 설정하세요.",
+      ],
+      evidenceLabel:
+        "근거 지표: 공실률 · 대출부담 · 도로조건 · 건축조건 · 실거래 비교",
+      ctaText: "계약 전 확인해야 할 실사 항목과 협상 전략은 딜 클로징 패키지에서 정리됩니다.",
+      severity: "warning",
+    },
+  }
   // Calculated values
   const [noi, setNoi] = useState(0)
   const [dscr, setDscr] = useState(0)
@@ -296,52 +406,27 @@ export default function AnalysisPage() {
       return Math.round(v).toString()
     }
     
-    const clamp = (v: number) => {
-      if (typeof min === "number" && v < min) return min
-      return v
-    }
-    
-    const decrementPress = usePressAndHold({
-      onPress: () => onChange(clamp(value - step)),
-    })
-    
-    const incrementPress = usePressAndHold({
-      onPress: () => onChange(value + step),
-    })
-    
     return (
     <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
       <input
         type="number"
         value={formatValue(value)}
-        onChange={(e) => onChange(clamp(parseFloat(e.target.value) || 0))}
+        onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
         disabled={disabled}
         className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
         step={decimals > 0 ? `0.${'0'.repeat(decimals - 1)}1` : "any"}
       />
       <button
-        type="button"
-        onMouseDown={decrementPress.start}
-        onMouseUp={decrementPress.stop}
-        onMouseLeave={decrementPress.stop}
-        onTouchStart={decrementPress.start}
-        onTouchEnd={decrementPress.stop}
-        onTouchCancel={decrementPress.stop}
+        onClick={() => onChange(Math.max(min, value - step))}
         disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base active:bg-muted select-none"
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
       >
         −
       </button>
       <button
-        type="button"
-        onMouseDown={incrementPress.start}
-        onMouseUp={incrementPress.stop}
-        onMouseLeave={incrementPress.stop}
-        onTouchStart={incrementPress.start}
-        onTouchEnd={incrementPress.stop}
-        onTouchCancel={incrementPress.stop}
+        onClick={() => onChange(value + step)}
         disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base active:bg-muted select-none"
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
       >
         +
       </button>
@@ -621,7 +706,7 @@ export default function AnalysisPage() {
           </Button>
           
           {/* News ticker with gap and background */}
-          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-2 py-2 shadow-sm">
+          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
             <NewsTicker news={topNews} />
           </div>
           
@@ -977,10 +1062,32 @@ export default function AnalysisPage() {
               </div>
               
               {/* Tab content */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-white">
-                {/* 금융 분석 */}
-                {activeTab === '금융 분석' && (
-                  <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
+              <div className="flex-1 min-h-0 overflow-y-auto bg-white p-5">
+                {/* 매수 판단 */}
+                {activeTab === '매수 판단' && (
+                  <InsightPanel insight={dealInsights.buyDecision} />
+                )}
+
+                {/* 가격협상 포인트 */}
+                {activeTab === '가격협상 포인트' && (
+                  <InsightPanel insight={dealInsights.negotiation} />
+                )}
+
+                {/* 현금흐름 안정성 */}
+                {activeTab === '현금흐름 안정성' && (
+                  <InsightPanel insight={dealInsights.cashflow} />
+                )}
+
+                {/* 업사이드 가능성 */}
+                {activeTab === '업사이드 가능성' && (
+                  <InsightPanel insight={dealInsights.upside} />
+                )}
+
+                {/* 리스크와 다음 액션 */}
+                {activeTab === '리스크와 다음 액션' && (
+                  <InsightPanel insight={dealInsights.riskAction} />
+                )}
+              </div>
                     {/* 상단 메트릭 4개 카드 */}
                     <div className="grid grid-cols-4 gap-3">
                       {[
@@ -1371,7 +1478,7 @@ export default function AnalysisPage() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 border-b border-border">
-              <p className="text-sm">지도에서 물건을 선택하고 &apos;분석&apos;�� 클릭하세요</p>
+              <p className="text-sm">지도에서 물건을 선택하고 &apos;분석&apos;을 클릭하세요</p>
               <button onClick={() => setShowMapModal(false)} className="p-2 hover:bg-muted rounded-lg">
                 <X className="w-5 h-5" />
               </button>
