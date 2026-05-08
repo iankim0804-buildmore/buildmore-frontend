@@ -580,7 +580,7 @@ export default function AnalysisPage() {
           {/* ============================================================ */}
           {/* LEFT SIDEBAR - 5 PANELS */}
           {/* ============================================================ */}
-          <ScrollArea className="bg-[#fbfbfb] p-3.5">
+          <ScrollArea className="bg-[#fbfbfb] p-3.5 h-full overflow-y-auto">
             <div className="space-y-3">
               {/* Panel A: 매입조건 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
