@@ -1387,8 +1387,8 @@ export default function AnalysisPage() {
                         도로확폭 리스크: 인접도로가 4m 미만이면 도로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
                       </p>
                     </div>
+                    <CTASection />
                   </div>
-                  <CTASection />
                 )}
 
                 {/* 실거래 비교 */}
