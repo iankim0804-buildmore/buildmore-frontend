@@ -51,8 +51,15 @@ interface MapProperty {
 }
 
 interface ChatMessage {
+  id?: string
   role: 'user' | 'assistant'
   content: string
+  createdAt?: Date
+  suggestedQuestions?: Array<{
+    id: string
+    label: string
+    prompt: string
+  }>
 }
 
 // ============================================================
@@ -351,10 +358,6 @@ export default function AnalysisPage() {
   
   // Handle Analysis Run
   const handleRunAnalysis = useCallback(async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[analysis] run clicked with input:', { address, price, loan, rate, rent, deposit, vacancyRate })
-    }
-    
     const input: DealInput = {
       address,
       price,
@@ -364,59 +367,144 @@ export default function AnalysisPage() {
       deposit,
       vacancyRate
     }
-    
-    // 분석 실행
-    await dealAnalysis.runAnalysis(input)
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[analysis] run clicked with input:', input)
+    }
+
+    // 분석 시작 - 로딩 상태 표시
     setHasRunAnalysis(true)
-    
-    // 분석 결과가 있으면 요약을 대화창에 추가
-    if (dealAnalysis.result && dealAnalysis.summary) {
+
+    try {
+      // 분석 실행
+      await dealAnalysis.runAnalysis(input)
+
       if (process.env.NODE_ENV === 'development') {
         console.log('[analysis] result:', dealAnalysis.result)
-        console.log('[chat] summary to append:', dealAnalysis.summary)
       }
-      
-      setChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: dealAnalysis.summary
-        }
-      ])
-      
+
+      // 분석 결과가 있으면 요약을 대화창에 추가
+      let summary = dealAnalysis.summary
+
+      // summary가 없으면 fallback 생성
+      if (!summary) {
+        summary = generateAnalysisSummary(input)
+      }
+
       if (process.env.NODE_ENV === 'development') {
-        console.log('[chat] messages after append:', chatMessages)
+        console.log('[chat] summary to append:', summary)
       }
+
+      const suggestedQuestions = [
+        {
+          id: "negotiation-price",
+          label: "얼마까지 가격협상해야 할까?",
+          prompt:
+            "현재 입력 조건과 주소지 특성을 기준으로, 이 매물은 얼마까지 가격협상해야 하는지 협상 논리와 함께 분석해줘.",
+        },
+        {
+          id: "cashflow-risk",
+          label: "대출 후 버틸 수 있는 구조일까?",
+          prompt:
+            "현재 대출금액과 금리, 월세 조건을 기준으로 이 매물이 대출 이후에도 안정적으로 버틸 수 있는 구조인지 분석해줘.",
+        },
+        {
+          id: "closing-checklist",
+          label: "계약 전 반드시 확인할 리스크는?",
+          prompt:
+            "이 매물을 계약하기 전에 반드시 확인해야 할 리스크와 실사 체크리스트를 우선순위별로 정리해줘.",
+        },
+      ]
+
+      const newMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: summary,
+        createdAt: new Date(),
+        suggestedQuestions,
+      }
+
+      setChatMessages((prev) => {
+        const updated = [...prev, newMessage]
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[chat] messages after append:', updated)
+        }
+        return updated
+      })
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[analysis] error:', error)
+      }
+
+      // API 실패 시 fallback 메시지
+      const fallbackSummary = generateAnalysisSummary(input)
+
+      const suggestedQuestions = [
+        {
+          id: "negotiation-price",
+          label: "얼마까지 가격협상해야 할까?",
+          prompt:
+            "현재 입력 조건과 주소지 특성을 기준으로, 이 매물은 얼마까지 가격협상해야 하는지 협상 논리와 함께 분석해줘.",
+        },
+        {
+          id: "cashflow-risk",
+          label: "대출 후 버틸 수 있는 구조일까?",
+          prompt:
+            "현재 대출금액과 금리, 월세 조건을 기준으로 이 매물이 대출 이후에도 안정적으로 버틸 수 있는 구조인지 분석해줘.",
+        },
+        {
+          id: "closing-checklist",
+          label: "계약 전 반드시 확인할 리스크는?",
+          prompt:
+            "이 매물을 계약하기 전에 반드시 확인해야 할 리스크와 실사 체크리스트를 우선순위별로 정리해줘.",
+        },
+      ]
+
+      const newMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: fallbackSummary,
+        createdAt: new Date(),
+        suggestedQuestions,
+      }
+
+      setChatMessages((prev) => [...prev, newMessage])
     }
   }, [address, price, loan, rate, rent, deposit, vacancyRate, dealAnalysis])
-  
-  // API 실패 시 fallback 메시지 추가
-  useEffect(() => {
-    if (dealAnalysis.error && hasRunAnalysis) {
-      const fallbackSummary = '분석 결과를 업데이트했습니다.\n\n현재 입력 조건을 기준으로 보면 이 매물은 즉시 매수보다는 가격협상 후 재검토가 적절합니다. 매입가, 대출금액, 금리, 월세, 공실률 조건을 종합하면 현금흐름 안정성을 추가로 확인할 필요가 있습니다.\n\n다음 단계로는 가격협상 기준가, 대출 후 현금흐름, 계약 전 리스크를 확인하는 것이 좋습니다.'
-      
-      setChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: fallbackSummary
-        }
-      ])
-    }
-  }, [dealAnalysis.error, hasRunAnalysis])
+
+  // 분석 요약 생성 함수
+  const generateAnalysisSummary = (input: DealInput): string => {
+    const vacancyLoss = input.rent * 12 * (vacancyRate / 100)
+    const effectiveIncome = input.rent * 12 - vacancyLoss
+    const annualInterestCost = input.loan * 10000 * (input.rate / 100)
+    const dscr = annualInterestCost > 0 ? effectiveIncome / annualInterestCost : 0
+    const ltv = input.price > 0 ? (input.loan / input.price) * 100 : 0
+
+    return `${input.address} 기준으로 분석을 업데이트했습니다.
+
+현재 입력 조건은 매입가 ${input.price.toFixed(1)}억, 대출금 ${input.loan.toFixed(1)}억, 금리 ${input.rate.toFixed(1)}%, 월세 ${input.rent}만원, 보증금 ${(input.deposit / 10000).toFixed(1)}억입니다. 이 조건에서는 LTV가 ${ltv.toFixed(1)}% 수준이고, 임대수익 대비 금융 부담이 ${dscr < 1 ? '높은' : '적정한'} 편입니다.
+
+주소지는 생활상권과 역세권 특성이 있어 임대수요 측면에서는 긍정적입니다. 다만 현재 매입가와 대출 조건을 함께 보면 즉시 매수보다는 가격협상 후 재검토가 적절합니다.
+
+BuildMore 판단:
+이 매물은 "나쁜 매물"이라기보다, 현재 가격 그대로 들어가기에는 금융 안정성과 현금흐름 부담이 있는 딜입니다. 협상 기준가를 먼저 잡고, 공실률과 금리 민감도를 반영한 보수 시나리오를 확인하는 것이 좋습니다.`
+  }
+
+  // 이전 useEffect 제거 (더 이상 필요 없음)
   
   // 대화 메시지 전송
   const handleSendChatMessage = useCallback(async (message: string) => {
     if (!message.trim()) return
     
     // 사용자 메시지 추가
-    setChatMessages(prev => [
-      ...prev,
-      {
-        role: 'user',
-        content: message
-      }
-    ])
+    const userMsg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: message,
+      createdAt: new Date(),
+    }
+    
+    setChatMessages(prev => [...prev, userMsg])
     
     setIsChatLoading(true)
     
@@ -427,7 +515,7 @@ export default function AnalysisPage() {
         body: JSON.stringify({
           message,
           analysisResult: dealAnalysis.result,
-          history: chatMessages
+          history: [userMsg]
         })
       })
       
@@ -438,29 +526,48 @@ export default function AnalysisPage() {
       }
       
       // 어시스턴트 응답 추가
-      setChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.response
-        }
-      ])
+      const assistantMsg: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: data.response,
+        createdAt: new Date(),
+      }
+      
+      setChatMessages(prev => [...prev, assistantMsg])
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[chat] LLM response appended:', data.response)
+      }
     } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[chat] LLM error, using fallback:', error)
+      }
+      
       const fallbackAnswer = dealAnalysis.result 
         ? '죄송합니다. 응답을 생성하지 못했습니다. 다시 시도해주세요.'
         : '먼저 우측 패널에서 분석 실행을 누르면 더 정확한 답변을 제공할 수 있습니다.'
       
-      setChatMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: fallbackAnswer
-        }
-      ])
+      const fallbackMsg: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: fallbackAnswer,
+        createdAt: new Date(),
+      }
+      
+      setChatMessages(prev => [...prev, fallbackMsg])
     } finally {
       setIsChatLoading(false)
     }
-  }, [dealAnalysis.result, chatMessages])
+  }, [dealAnalysis.result])
+
+  // 추천 질문 클릭 핸들러
+  const handleSuggestedQuestionClick = async (question: {
+    id: string
+    label: string
+    prompt: string
+  }) => {
+    await handleSendChatMessage(question.prompt)
+  }
   
   // 자동 스크롤
   useEffect(() => {
@@ -791,14 +898,35 @@ export default function AnalysisPage() {
           <ScrollArea className="flex-1">
             <div className="space-y-3 pr-4">
               {chatMessages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-foreground text-background'
-                      : 'bg-white border border-border text-foreground'
-                  }`}>
-                    {msg.content}
+                <div key={msg.id || idx} className="space-y-2">
+                  <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-foreground text-background'
+                        : 'bg-white border border-border text-foreground'
+                    }`}>
+                      {msg.content}
+                    </div>
                   </div>
+                  
+                  {/* Suggested Questions (Assistant messages only) */}
+                  {msg.role === 'assistant' && msg.suggestedQuestions && msg.suggestedQuestions.length > 0 && (
+                    <div className="flex justify-start">
+                      <div className="flex flex-wrap gap-2">
+                        {msg.suggestedQuestions.map((question) => (
+                          <button
+                            key={question.id}
+                            type="button"
+                            onClick={() => handleSuggestedQuestionClick(question)}
+                            disabled={isChatLoading}
+                            className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {question.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               
