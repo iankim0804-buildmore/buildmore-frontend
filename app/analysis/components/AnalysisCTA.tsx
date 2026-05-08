@@ -1,8 +1,8 @@
 export const AnalysisCTA = () => {
   return (
-    <div className="border-t border-[#e4e4e7] bg-white rounded-b-2xl">
+    <div className="border-t border-[#e4e4e7] bg-white">
       {/* 상단 헤드라인 바 */}
-      <div className="bg-[#09090b] px-5 py-3.5 flex items-center gap-3">
+      <div className="bg-[#09090b] px-5 py-2 flex items-center gap-3">
         <div className="w-2 h-2 rounded-full bg-[#f59e0b] flex-shrink-0" />
         <p className="text-[13px] text-[#f5f5f5] font-medium break-keep">이 매물, 협상 여지 있음 — 지금 딜 브리핑을 받으면 근거 있는 가격을 제시할 수 있습니다</p>
       </div>

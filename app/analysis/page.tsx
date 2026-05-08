@@ -553,8 +553,8 @@ export default function AnalysisPage() {
               <Send className="w-4 h-4" />
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2">
-            ��: &quot;이 물건 DSCR이 낮은데 어떻게 하면 좋을까?&quot;
+          <p className="text-[11px] text-gray-500 whitespace-normal break-keep leading-relaxed">
+            예: 이 물건 DSCR이 낮은데 어떻게 접근하면 좋을까?
           </p>
         </form>
       </div>
@@ -958,8 +958,8 @@ export default function AnalysisPage() {
                 ))}
               </div>
               
-              {/* Table content - scrollable */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-white">
+              {/* Tab content - scrollable with padding for fixed CTA */}
+              <div className="flex-1 min-h-0 overflow-y-auto bg-white pb-[240px]">
                 {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
@@ -1025,7 +1025,6 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
-                    <AnalysisCTA />
                   </div>
                 )}
 
@@ -1123,7 +1122,6 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
-                    <AnalysisCTA />
                   </div>
                 )}
 
@@ -1293,7 +1291,6 @@ export default function AnalysisPage() {
                         도로확폭 리스크: 인접도로가 4m 미만이면 ���로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
                       </p>
                     </div>
-                    <AnalysisCTA />
                   </div>
                 )}
 
@@ -1324,9 +1321,13 @@ export default function AnalysisPage() {
                         ))}
                       </tbody>
                     </table>
-                    <AnalysisCTA />
                   </div>
                 )}
+              </div>
+              
+              {/* Fixed CTA at bottom */}
+              <div className="sticky bottom-3 z-30 px-5">
+                <AnalysisCTA />
               </div>
             </div>
           </ScrollArea>
