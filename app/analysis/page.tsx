@@ -375,7 +375,7 @@ export default function AnalysisPage() {
                   </button>
                 ))}
                 <button
-                  onClick={() => handleComingSoon('검색 기록 관리')}
+                  onClick={() => handleComingSoon('검색 기록 ��리')}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -530,41 +530,10 @@ export default function AnalysisPage() {
                 <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   분석 중...
-                  </div>
-                )}
-
-                {/* 실거래 비교 */}
-                {activeTab === '실거래 비교' && (
-                  <div className="space-y-0">
-                    <table className="w-full whitespace-normal break-keep leading-relaxed">
-                      <thead className="sticky top-0 bg-[#fafafb]">
-                        <tr>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
-                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {transactions.map((tx, i) => (
-                          <tr key={i} className="border-b border-[#f1f1f3]">
-                            <td className="px-4 py-3 text-sm break-keep">{tx.date}</td>
-                            <td className="px-4 py-3 text-sm break-keep">{tx.location}</td>
-                            <td className="px-4 py-3 text-sm break-keep">{tx.area}</td>
-                            <td className="px-4 py-3 text-sm font-semibold tabular-nums">{tx.price}</td>
-                            <td className="px-4 py-3 text-sm tabular-nums">{tx.pricePerM2}</td>
-                            <td className="px-4 py-3 text-sm break-keep">{tx.type}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
+                </div>
               </div>
-            </div>
+            )}
+            <div ref={chatEndRef} />
           </ScrollArea>
         </div>
       )}
