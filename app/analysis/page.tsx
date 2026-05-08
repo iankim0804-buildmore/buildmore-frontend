@@ -127,6 +127,8 @@ export default function AnalysisPage() {
   const [gfa, setGfa] = useState(420)
   const [constructionCost, setConstructionCost] = useState(500)
   const [elevator, setElevator] = useState<'있음' | '없음' | '설치예정'>('있음')
+  const [basement, setBasement] = useState('없음')
+  const [remodelingRange, setRemodelingRange] = useState('부분 리모델링')
   
   // Panel E: 분석옵션
   const [financeScenario, setFinanceScenario] = useState(true)
@@ -246,20 +248,23 @@ export default function AnalysisPage() {
     step, 
     min = 0,
     disabled = false,
+    isLoan = false,
   }: { 
     value: number
     onChange: (v: number) => void
     step: number
     min?: number
     disabled?: boolean
+    isLoan?: boolean
   }) => (
     <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
       <input
         type="number"
-        value={value}
+        value={isLoan ? value.toFixed(2) : value}
         onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
         disabled={disabled}
         className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
+        step={isLoan ? "0.01" : "any"}
       />
       <button
         onClick={() => onChange(Math.max(min, value - step))}
@@ -285,16 +290,79 @@ export default function AnalysisPage() {
   // RENDER
   // ============================================================
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* ============================================================ */}
-      {/* A. LEFT NAVIGATION SIDEBAR (160px) */}
+      {/* TOPBAR (66px) - FULL WIDTH */}
       {/* ============================================================ */}
-      <aside className="w-40 flex-shrink-0 flex flex-col bg-card border-r border-border">
+      <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_400px] items-center flex-shrink-0">
         {/* Logo */}
-        <div className="h-14 flex items-center px-4 border-b border-border">
-          <Link href="/" className="text-foreground font-bold text-sm">BuildMore</Link>
+        <div className="text-[22px] font-extrabold text-foreground tracking-tight">BUILDMORE</div>
+        
+        {/* Address search */}
+        <div className="flex justify-center">
+          <div className="relative w-[420px]">
+            <Input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              onFocus={() => setShowHistory(true)}
+              className="h-[42px] pr-20 text-sm"
+              placeholder="주소를 입력하세요"
+            />
+            <button
+              type="button"
+              onClick={() => setShowHistory(!showHistory)}
+              className="absolute right-12 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMapModal(true)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs border border-border rounded hover:bg-muted"
+            >
+              지도
+            </button>
+            
+            {/* History dropdown */}
+            {showHistory && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
+                {addressHistory.map((addr, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleAddressSelect(addr)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted text-left"
+                  >
+                    <span className="truncate">{addr}</span>
+                    <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground flex-shrink-0" />
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleComingSoon('검색 기록 관리')}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  검색 기록 관리
+                </button>
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* Pills */}
+        <div className="flex justify-end gap-1 flex-nowrap">
+          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">제2종일반주거</span>
+          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 건폐율 60%</span>
+          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 용적률 200%</span>
+          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">대지 210㎡</span>
+        </div>
+      </header>
 
+      {/* MAIN LAYOUT - Sidebar + Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ============================================================ */}
+        {/* A. LEFT NAVIGATION SIDEBAR (160px) */}
+        {/* ============================================================ */}
+        <aside className="w-40 flex-shrink-0 flex flex-col bg-card border-r border-border">
         {/* Nav Items */}
         <ScrollArea className="flex-1 py-3">
           <nav className="px-2 space-y-0.5">
@@ -455,72 +523,8 @@ export default function AnalysisPage() {
       {/* C. ANALYSIS PANEL (remaining width) */}
       {/* ============================================================ */}
       <div className="flex-1 flex flex-col bg-[#f8f8f9] overflow-hidden">
-        {/* TOPBAR (66px) */}
-        <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_360px] items-center">
-          {/* Logo */}
-          <div className="text-[22px] font-extrabold text-foreground tracking-tight">BUILDMORE</div>
-          
-          {/* Address search */}
-          <div className="flex justify-center">
-            <div className="relative w-[420px]">
-              <Input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                onFocus={() => setShowHistory(true)}
-                className="h-[42px] pr-20 text-sm"
-                placeholder="주소를 입력하세요"
-              />
-              <button
-                type="button"
-                onClick={() => setShowHistory(!showHistory)}
-                className="absolute right-12 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowMapModal(true)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs border border-border rounded hover:bg-muted"
-              >
-                지도
-              </button>
-              
-              {/* History dropdown */}
-              {showHistory && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
-                  {addressHistory.map((addr, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleAddressSelect(addr)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted text-left"
-                    >
-                      <span className="truncate">{addr}</span>
-                      <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground flex-shrink-0" />
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => handleComingSoon('검색 기록 관리')}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    검색 기록 관리
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Pills */}
-          <div className="flex justify-end gap-1.5 flex-nowrap">
-            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">제2종일반주거</span>
-            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">법정 건폐율 60%</span>
-            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">법정 용적률 200%</span>
-            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">대지 210㎡</span>
-          </div>
-        </header>
-
         {/* KPI STRIP (72px) */}
-        <div className="h-[72px] bg-white border-b border-border px-5 grid grid-cols-[160px_1fr_180px] items-center">
+        <div className="h-[72px] bg-white border-b border-border px-5 grid grid-cols-[160px_1fr_180px] items-center flex-shrink-0">
           {/* Run button */}
           <Button 
             className="w-[108px] h-10 bg-foreground text-background hover:bg-foreground/90 text-sm font-medium"
@@ -594,7 +598,7 @@ export default function AnalysisPage() {
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">대출금액 (억원)</label>
-                    <NumField value={loan} onChange={setLoan} step={0.1} />
+                    <NumField value={loan} onChange={setLoan} step={0.1} isLoan={true} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">금리 (%)</label>
@@ -999,7 +1003,7 @@ export default function AnalysisPage() {
                               { label: '코픽스', value: '3.82%' },
                               { label: '금리 스프레드', value: `${(rate - 3.82).toFixed(2)}%p`, color: (rate - 3.82) > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
                               { label: '매입단가 (㎡당)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
-                              { label: '마포구 평균단가', value: '4,099만' },
+                              { label: '마포구 ���균단가', value: '4,099만' },
                               { label: '시세 대비', value: Math.round(price * 10000 / 420) <= 4099 ? '적정' : '고평가', color: Math.round(price * 10000 / 420) <= 4099 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
                             ].map((row, i) => (
                               <tr key={i}>
@@ -1315,6 +1319,7 @@ export default function AnalysisPage() {
             </div>
           </ScrollArea>
         </div>
+      </div>
       </div>
 
       {/* ============================================================ */}
