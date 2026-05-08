@@ -25,12 +25,12 @@ export const NewsTicker = ({ news }: NewsTickerProps) => {
   }, [news.length])
 
   return (
-    <div className="flex items-center justify-center min-w-0">
+    <div className="flex items-center justify-center min-w-0 flex-1">
       <a
         href={currentNews.url}
         target="_blank"
         rel="noreferrer"
-        className="block text-sm text-gray-700 hover:text-gray-900 truncate px-3"
+        className="block text-[13px] text-foreground hover:text-foreground/80 truncate whitespace-nowrap"
       >
         {currentNews.title}
       </a>

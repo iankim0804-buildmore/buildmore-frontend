@@ -19,11 +19,11 @@ const colorMap = {
 
 export const TagGroup = ({ tags }: TagGroupProps) => {
   return (
-    <div className="flex items-center gap-1.5 overflow-hidden">
+    <div className="flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
       {tags.map((tag) => (
         <span
           key={tag.id}
-          className={`px-2 py-0.5 text-[11px] rounded flex-shrink-0 ${colorMap[tag.color]}`}
+          className={`px-2.5 py-1 text-[10px] font-medium rounded-full flex-shrink-0 ${colorMap[tag.color]}`}
         >
           {tag.label}
         </span>

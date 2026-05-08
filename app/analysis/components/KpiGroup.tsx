@@ -9,24 +9,24 @@ interface KpiGroupProps {
 
 export const KpiGroup = ({ noi, dscr, ltv, cap }: KpiGroupProps) => {
   return (
-    <div className="grid grid-cols-4 gap-4 justify-self-end flex-shrink-0">
+    <div className="grid grid-cols-4 gap-6 justify-self-end flex-shrink-0">
       <div className="text-center">
-        <p className="text-[11px] text-muted-foreground uppercase tracking-wide">NOI</p>
-        <p className="text-[17px] font-semibold tabular-nums">{noi.toLocaleString('ko-KR')}만</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">NOI</p>
+        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{noi.toLocaleString('ko-KR')}만</p>
       </div>
       <div className="text-center">
-        <p className="text-[11px] text-muted-foreground uppercase tracking-wide">DSCR</p>
-        <p className={`text-[17px] font-semibold tabular-nums ${dscr < 1 ? 'text-red-600' : ''}`}>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">DSCR</p>
+        <p className={`mt-0.5 text-sm font-semibold tabular-nums ${dscr < 1 ? 'text-red-600' : 'text-foreground'}`}>
           {dscr.toFixed(2)}x
         </p>
       </div>
       <div className="text-center">
-        <p className="text-[11px] text-muted-foreground uppercase tracking-wide">LTV</p>
-        <p className="text-[17px] font-semibold tabular-nums">{ltv.toFixed(1)}%</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">LTV</p>
+        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{ltv.toFixed(1)}%</p>
       </div>
       <div className="text-center">
-        <p className="text-[11px] text-muted-foreground uppercase tracking-wide">CAP</p>
-        <p className="text-[17px] font-semibold tabular-nums">{cap.toFixed(1)}%</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">CAP</p>
+        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{cap.toFixed(1)}%</p>
       </div>
     </div>
   )

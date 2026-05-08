@@ -279,6 +279,7 @@ export default function AnalysisPage() {
     disabled = false,
     isLoan = false,
     decimals = 0,
+    displayDecimals,
   }: { 
     value: number
     onChange: (v: number) => void
@@ -287,10 +288,12 @@ export default function AnalysisPage() {
     disabled?: boolean
     isLoan?: boolean
     decimals?: number
+    displayDecimals?: number
   }) => {
+    const displayDecimal = displayDecimals !== undefined ? displayDecimals : decimals
     const formatValue = (v: number) => {
-      if (decimals > 0) return v.toFixed(decimals)
-      return v
+      if (displayDecimal > 0) return v.toFixed(displayDecimal)
+      return Math.round(v).toString()
     }
     
     return (
@@ -580,7 +583,7 @@ export default function AnalysisPage() {
       {/* ============================================================ */}
       <div className="flex-1 flex flex-col bg-[#f8f8f9] overflow-hidden">
         {/* KPI STRIP (72px) */}
-        <div className="h-[72px] bg-white border-b border-border px-5 flex items-center justify-between flex-shrink-0">
+        <div className="h-[72px] bg-white border-b border-border px-5 flex items-center gap-4 flex-shrink-0">
           {/* Run button */}
           <Button 
             className="w-[108px] h-10 bg-foreground text-background hover:bg-foreground/90 text-sm font-medium flex-shrink-0"
@@ -592,8 +595,10 @@ export default function AnalysisPage() {
             분석 실행
           </Button>
           
-          {/* News ticker - flex-1 with min-w-0 to prevent overflow */}
-          <NewsTicker news={topNews} />
+          {/* News ticker with gap and background */}
+          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
+            <NewsTicker news={topNews} />
+          </div>
           
           {/* Tags + KPIs - right aligned group */}
           <div className="ml-auto flex items-center gap-4 flex-shrink-0">
@@ -622,11 +627,11 @@ export default function AnalysisPage() {
                 <div className="p-3 space-y-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">매입가격 (억원)</label>
-                    <NumField value={price} onChange={setPrice} step={0.01} decimals={2} />
+                    <NumField value={price} onChange={setPrice} step={0.1} decimals={1} displayDecimals={1} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">대출금액 (억원)</label>
-                    <NumField value={loan} onChange={setLoan} step={0.01} isLoan={true} decimals={2} />
+                    <NumField value={loan} onChange={setLoan} step={0.1} isLoan={true} decimals={1} displayDecimals={1} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">금리 (%)</label>
@@ -665,7 +670,7 @@ export default function AnalysisPage() {
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">보증금 (만원)</label>
-                    <NumField value={deposit} onChange={setDeposit} step={500} />
+                    <NumField value={deposit} onChange={setDeposit} step={100} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">공실률</label>
@@ -971,7 +976,7 @@ export default function AnalysisPage() {
 
                     {/* 2단 레이아웃 */}
                     <div className="grid grid-cols-2 gap-4">
-                      {/* 좌측 - 현금흐름 */}
+                      {/* 좌측 - 현금흐�� */}
                       <div>
                         <h4 className="text-sm font-semibold mb-3">현금흐름</h4>
                         <table className="w-full text-xs">
