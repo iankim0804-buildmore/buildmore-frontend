@@ -162,8 +162,15 @@ export default function AnalysisPage() {
     const dscrVal = annualDebt ? noiVal / annualDebt : 0
     const ltvVal = price ? (loan / price) * 100 : 0
     const capVal = price ? (noiVal / (price * 10000)) * 100 : 0
+    
+    // DEAL SIGNAL 점수 계산
+    // 기본 점수: 63점
+    // DSCR 패널티: (0.95 - DSCR) * 24 (DSCR 낮을수록 점수 감소)
+    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 높을수록 점수 감소)
+    // 엘리베이터 미설치: -3점
+    const vacancyPenalty = (vacancyRate - 10) * (vacancySensitivity / 100) * 1.2 // 공실률 10% 기준, 민감도 반영
     const scoreVal = Math.max(18, Math.min(88,
-      Math.round(63 - (0.95 - dscrVal) * 24 - Math.max(0, vacancyRate - 10) * 0.7 - (elevator === '설치예정' ? 3 : 0))
+      Math.round(63 - (0.95 - dscrVal) * 24 - Math.max(0, vacancyPenalty) - (elevator === '설치예정' ? 3 : 0))
     ))
     
     setNoi(noiVal)
@@ -172,14 +179,18 @@ export default function AnalysisPage() {
     setCap(capVal)
     setBankabilityScore(scoreVal)
     
-    if (scoreVal >= 68 && dscrVal >= 0.9) {
-      setDealSignal('매수보류')
-    } else if (scoreVal <= 35 || vacancyRate >= 30) {
+    // 점수 기반 dealSignal 판정
+    // <33: 매수보류 (낮은 점수 = 높은 리스크)
+    // 33-66: 가격협상 (중간 점수)
+    // >66: 매수 (높은 점수 = 좋은 조건)
+    if (scoreVal >= 66) {
       setDealSignal('매수')
-    } else {
+    } else if (scoreVal >= 33) {
       setDealSignal('가격협상')
+    } else {
+      setDealSignal('매수보류')
     }
-  }, [price, loan, rate, rent, vacancyRate, elevator])
+  }, [price, loan, rate, rent, vacancyRate, vacancySensitivity, elevator])
 
   useEffect(() => {
     recalc()
