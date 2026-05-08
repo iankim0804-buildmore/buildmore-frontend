@@ -145,7 +145,7 @@ export default function AnalysisPage() {
   const [gfa, setGfa] = useState(420)
   const [constructionCost, setConstructionCost] = useState(500)
   const [elevator, setElevator] = useState<'있음' | '없음' | '설치예정'>('있음')
-  const [basement, setBasement] = useState('없음')
+  const [basement, setBasement] = useState('없���')
   const [remodelingRange, setRemodelingRange] = useState('부분 리모델링')
   
   // Panel E: 분석옵션
@@ -922,15 +922,15 @@ export default function AnalysisPage() {
             {/* Top 3 cards */}
             <div className="grid grid-cols-[1.7fr_0.8fr_0.95fr] gap-3 mb-3">
               {/* BANKABILITY */}
-              <div className="bg-white border border-border rounded-[14px] p-4">
-                <p className="text-[15px] font-bold mb-3">BANKABILITY</p>
-                <p className="text-[48px] font-medium tracking-tight leading-none mb-3">
-                  {bankabilityScore} <span className="text-xl text-muted-foreground">/ 100</span>
+              <div className="bg-white border border-border rounded-[14px] p-3">
+                <p className="text-[15px] font-bold mb-2">BANKABILITY</p>
+                <p className="text-[40px] font-medium tracking-tight leading-none mb-2">
+                  {bankabilityScore} <span className="text-lg text-muted-foreground">/ 100</span>
                 </p>
-                <div className="h-2 bg-muted rounded-full overflow-hidden mb-4">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-foreground transition-all" style={{ width: `${bankabilityScore}%` }} />
                 </div>
-                <div className="grid grid-cols-[74px_1fr] gap-y-3 text-[13px]">
+                <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[12px]">
                   <span className="text-muted-foreground font-bold">상권</span>
                   <span>합정 생활상권 · 역세권 · 팝업/F&B</span>
                   <span className="text-muted-foreground font-bold">입력값</span>
@@ -938,7 +938,7 @@ export default function AnalysisPage() {
                   <span className="text-muted-foreground font-bold">분석엔진</span>
                   <span>BuildMore v2.1</span>
                   <span className="text-muted-foreground font-bold">설명</span>
-                  <p className="whitespace-normal break-keep leading-relaxed">
+                  <p className="whitespace-normal break-keep leading-tight text-[11px]">
                     {dscr >= 1 && bankabilityScore >= 68
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
@@ -950,25 +950,25 @@ export default function AnalysisPage() {
               </div>
 
               {/* DEAL SIGNAL */}
-              <div className="bg-white border border-border rounded-[14px] p-4">
-                <p className="text-[15px] font-bold mb-3">DEAL SIGNAL</p>
-                <p className="text-[28px] font-bold mb-2 text-black">
+              <div className="bg-white border border-border rounded-[14px] p-3">
+                <p className="text-[15px] font-bold mb-2">DEAL SIGNAL</p>
+                <p className="text-[24px] font-bold mb-1.5 text-black">
                   {dealSignal}
                 </p>
-                <p className="text-[13px] text-muted-foreground mb-4">
+                <p className="text-[12px] text-muted-foreground mb-3">
                   {dealSignal === '매수보류'
                     ? 'DSCR 및 수익률 양호'
                     : dealSignal === '가격협상'
                       ? 'DSCR 기준 미달, 매입가 협상 권장'
                       : '공실률 과다, 재검토 필요'}
                 </p>
-                <div className="relative h-2 bg-muted rounded-full">
+                <div className="relative h-1.5 bg-muted rounded-full">
                   <div
-                    className="absolute w-3.5 h-3.5 bg-foreground rounded-full top-1/2 -translate-y-1/2 -translate-x-1/2"
+                    className="absolute w-3 h-3 bg-foreground rounded-full top-1/2 -translate-y-1/2 -translate-x-1/2"
                     style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
-                <div className="flex justify-between mt-2 text-[11px] text-muted-foreground">
+                <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
                   <span>보류</span>
                   <span>가격협상</span>
                   <span>매수</span>
@@ -976,37 +976,37 @@ export default function AnalysisPage() {
               </div>
 
               {/* Map */}
-              <div className="bg-white border border-border rounded-[14px] p-4">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-white border border-border rounded-[14px] p-3">
+                <div className="flex items-center justify-between mb-2">
                   <p className="text-[15px] font-bold">지도</p>
-                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full">합정동 428-5</span>
+                  <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">합정동 428-5</span>
                 </div>
                 <div 
-                  className="h-[200px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg relative cursor-pointer"
+                  className="h-[160px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg relative cursor-pointer"
                   onClick={() => setShowMapModal(true)}
                   style={{
                     backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(0,0,0,0.03) 20px, rgba(0,0,0,0.03) 21px), repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(0,0,0,0.03) 20px, rgba(0,0,0,0.03) 21px)'
                   }}
                 >
                   {/* Bubbles */}
-                  <div className="absolute left-[18%] top-[18%] bg-white border border-border rounded-xl px-2 py-1 text-[10px] shadow-sm">
+                  <div className="absolute left-[18%] top-[18%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
                     420㎡ / 52.0억
                   </div>
-                  <div className="absolute left-[64%] top-[16%] bg-white border border-border rounded-xl px-2 py-1 text-[10px] shadow-sm">
+                  <div className="absolute left-[64%] top-[16%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
                     160㎡ / 26.8억
                   </div>
-                  <div className="absolute left-[70%] top-[56%] bg-white border border-border rounded-xl px-2 py-1 text-[10px] shadow-sm">
+                  <div className="absolute left-[70%] top-[56%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
                     230㎡ / 31.5억
                   </div>
-                  <div className="absolute left-[22%] top-[52%] bg-white border border-border rounded-xl px-2 py-1 text-[10px] shadow-sm">
+                  <div className="absolute left-[22%] top-[52%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
                     210㎡ / 31.5억
                   </div>
-                  <div className="absolute left-[48%] top-[70%] bg-white border border-border rounded-xl px-2 py-1 text-[10px] shadow-sm">
+                  <div className="absolute left-[48%] top-[70%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
                     350㎡ / 47.0억
                   </div>
                   {/* Pin */}
                   <div 
-                    className="absolute w-4 h-4 bg-foreground rounded-full rounded-br-none -rotate-45"
+                    className="absolute w-3 h-3 bg-foreground rounded-full rounded-br-none -rotate-45"
                     style={{ left: '54%', top: '42%' }}
                   />
                 </div>
