@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
+import { AnalysisCTA } from "./components/AnalysisCTA"
 import {
   Plus,
   FolderOpen,
@@ -530,9 +531,10 @@ export default function AnalysisPage() {
                 <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   분석 중...
-                </div>
-              </div>
-            )}
+                    </div>
+                    <AnalysisCTA />
+                  </div>
+                )}
             <div ref={chatEndRef} />
           </div>
         </ScrollArea>
@@ -938,9 +940,9 @@ export default function AnalysisPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white border border-border rounded-2xl overflow-hidden">
+            <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col h-full min-h-0">
               {/* Tabs */}
-              <div className="h-[46px] flex border-b border-border">
+              <div className="h-[46px] flex border-b border-border flex-shrink-0">
                 {tabs.map(tab => (
                   <button
                     key={tab}
@@ -956,8 +958,8 @@ export default function AnalysisPage() {
                 ))}
               </div>
               
-              {/* Table content */}
-              <div className="bg-white">
+              {/* Table content - scrollable */}
+              <div className="flex-1 min-h-0 overflow-y-auto bg-white">
                 {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
@@ -1023,6 +1025,7 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
+                    <AnalysisCTA />
                   </div>
                 )}
 
@@ -1120,6 +1123,7 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
+                    <AnalysisCTA />
                   </div>
                 )}
 
@@ -1289,35 +1293,39 @@ export default function AnalysisPage() {
                         도로확폭 리스크: 인접도로가 4m 미만이면 ���로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
                       </p>
                     </div>
+                    <AnalysisCTA />
                   </div>
                 )}
 
                 {/* 실거래 비교 */}
                 {activeTab === '실거래 비교' && (
-                  <table className="w-full whitespace-normal break-keep leading-relaxed">
-                    <thead className="sticky top-0 bg-[#fafafb]">
-                      <tr>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((tx, i) => (
-                        <tr key={i} className="border-b border-[#f1f1f3]">
-                          <td className="px-4 py-2.5 text-xs break-keep">{tx.date}</td>
-                          <td className="px-4 py-2.5 text-xs break-keep">{tx.location}</td>
-                          <td className="px-4 py-2.5 text-xs break-keep">{tx.area}</td>
-                          <td className="px-4 py-2.5 text-xs font-semibold tabular-nums">{tx.price}</td>
-                          <td className="px-4 py-2.5 text-xs tabular-nums">{tx.pricePerM2}</td>
-                          <td className="px-4 py-2.5 text-xs break-keep">{tx.type}</td>
+                  <div className="whitespace-normal break-keep leading-relaxed">
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-[#fafafb]">
+                        <tr>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {transactions.map((tx, i) => (
+                          <tr key={i} className="border-b border-[#f1f1f3]">
+                            <td className="px-4 py-2.5 text-xs break-keep">{tx.date}</td>
+                            <td className="px-4 py-2.5 text-xs break-keep">{tx.location}</td>
+                            <td className="px-4 py-2.5 text-xs break-keep">{tx.area}</td>
+                            <td className="px-4 py-2.5 text-xs font-semibold tabular-nums">{tx.price}</td>
+                            <td className="px-4 py-2.5 text-xs tabular-nums">{tx.pricePerM2}</td>
+                            <td className="px-4 py-2.5 text-xs break-keep">{tx.type}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <AnalysisCTA />
+                  </div>
                 )}
               </div>
             </div>
