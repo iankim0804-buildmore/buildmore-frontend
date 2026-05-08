@@ -1087,28 +1087,37 @@ export default function AnalysisPage() {
             {/* Top 3 cards */}
             <div className="grid grid-cols-[1.7fr_0.8fr_0.95fr] gap-3 mb-3">
               {/* DEAL SCORE */}
-              <div className="bg-white border border-border rounded-[14px] p-3">
-                <p className="text-[15px] font-bold mb-2">DEAL SCORE</p>
-                <div className="inline-flex items-baseline mb-3">
-                  <span className="text-2xl font-semibold leading-tight text-gray-950 tabular-nums">
-                    {bankabilityScore}
-                  </span>
-                  <span className="ml-1 text-sm font-medium text-muted-foreground">
-                    / 100
-                  </span>
+              <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div>
+                    <h3 className="text-[15px] font-bold text-gray-950 mb-2">DEAL SCORE</h3>
+                    <p className="text-xs leading-relaxed text-gray-600 break-keep">이 매물의 종합 딜 매력도를 평가한 점수입니다.</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="inline-flex items-baseline">
+                      <span className="text-5xl font-black leading-none tracking-tight tabular-nums text-gray-950">
+                        {bankabilityScore}
+                      </span>
+                      <span className="ml-1 text-base font-semibold text-gray-500">
+                        /100
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-foreground transition-all" style={{ width: `${bankabilityScore}%` }} />
                 </div>
-                <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[13px]">
+                <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[13px] mb-3">
                   <span className="text-muted-foreground font-bold">상권</span>
                   <span className="whitespace-normal break-keep leading-relaxed">합정 생활상권 · 역세권 · 팝업/F&B</span>
                   <span className="text-muted-foreground font-bold">입력값</span>
                   <span className="whitespace-normal break-keep leading-relaxed">매입 {price.toFixed(1)}억 / 대출 {loan.toFixed(1)}억 / 금리 {rate.toFixed(1)}%</span>
                   <span className="text-muted-foreground font-bold">분석엔진</span>
                   <span className="whitespace-normal break-keep leading-relaxed">BuildMore v2.1</span>
-                  <span className="text-muted-foreground font-bold">설명</span>
-                  <p className="whitespace-normal break-keep leading-relaxed text-xs">
+                </div>
+                <div className="border-t border-gray-100 pt-2">
+                  <p className="text-xs font-semibold text-gray-500 mb-1">설명</p>
+                  <p className="whitespace-normal break-keep leading-relaxed text-xs text-gray-600">
                     {dscr >= 1 && bankabilityScore >= 68
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
@@ -1120,48 +1129,57 @@ export default function AnalysisPage() {
               </div>
 
               {/* DEAL SIGNAL */}
-              <div className="bg-white border border-border rounded-[14px] p-3">
-                <p className="text-[15px] font-bold mb-2">DEAL SIGNAL</p>
-                <p className="text-2xl font-semibold leading-tight text-black mb-1.5">
+              <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col h-full">
+                <p className="text-[15px] font-bold mb-3">DEAL SIGNAL</p>
+                <p className="text-2xl font-semibold leading-tight text-black mb-3">
                   {dealSignal}
                 </p>
-                <p className="text-[13px] text-muted-foreground mb-3">
-                  {dealSignal === '매수보류'
-                    ? 'DSCR 및 수익률 양호'
-                    : dealSignal === '가격협상'
-                      ? 'DSCR 기준 미달, 매입가 협상 권장'
-                      : '공실률 과다, 재검토 필요'}
-                </p>
-                <div className="relative h-1.5 bg-muted rounded-full">
+                <div className="relative h-1.5 bg-muted rounded-full mb-2">
                   <div
                     className="absolute w-3 h-3 bg-foreground rounded-full top-1/2 -translate-y-1/2 -translate-x-1/2"
                     style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
-                <div className="flex justify-between mt-1.5 text-[11px] text-muted-foreground">
+                <div className="flex justify-between mb-auto text-[11px] text-muted-foreground">
                   <span>보류</span>
                   <span>가격협상</span>
                   <span>매수</span>
                 </div>
+                <div className="mt-auto border-t border-gray-100 pt-2">
+                  <p className="text-xs font-semibold text-gray-500 mb-1">설명</p>
+                  <p className="text-xs leading-relaxed text-gray-600 break-keep">
+                    {dealSignal === '매수보류'
+                      ? 'DSCR 및 수익률 양호'
+                      : dealSignal === '가격협상'
+                        ? 'DSCR 기준 미달, 매입가 협상 권장'
+                        : '공실률 과다, 재검토 필요'}
+                  </p>
+                </div>
               </div>
 
               {/* Map */}
-              <div className="bg-white border border-border rounded-[14px] p-3">
-                <div className="flex items-center justify-between mb-2">
+              <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-[15px] font-bold">지도</p>
                   <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">{address.split(' ').slice(-2).join(' ')}</span>
                 </div>
                 {mapError ? (
-                  <div className="h-[160px] bg-gray-100 rounded-lg flex items-center justify-center text-center px-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">지도 데이터를 불러오지 못했습니다.</p>
-                      <p className="text-[11px] text-gray-400">Kakao 지도 API 키 또는 주소 좌표를 확인해주세요.</p>
+                  <div className="flex-1 bg-gray-50 border border-dashed border-gray-200 rounded-lg flex items-center justify-center px-3 py-4">
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-gray-800 mb-2">Kakao 지도를 불러오지 못했습니다.</p>
+                      <div className="text-[11px] text-gray-600 space-y-1 break-keep leading-relaxed">
+                        <p className="font-medium">확인해주세요:</p>
+                        <p>1. Replit Secrets에 Kakao JavaScript Key가 등록되어 있는지 확인</p>
+                        <p>2. 환경변수 이름이 KAKAO_MAP_API_KEY 또는 NEXT_PUBLIC_KAKAO_MAP_KEY와 일치하는지 확인</p>
+                        <p>3. Kakao Developers 콘솔의 Web 플랫폼에 현재 Replit 도메인이 등록되어 있는지 확인</p>
+                        <p>4. REST API Key나 Admin Key가 아니라 JavaScript Key를 사용해야 합니다</p>
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div 
                     ref={mapRef}
-                    className="h-[160px] bg-gray-100 rounded-lg overflow-hidden"
+                    className="flex-1 bg-gray-100 rounded-lg overflow-hidden min-h-[140px]"
                   />
                 )}
               </div>

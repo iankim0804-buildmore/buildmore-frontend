@@ -21,10 +21,17 @@ export const useKakaoMap = (options: MapInitOptions) => {
         const response = await fetch('/api/config/kakao-map-key')
         if (!response.ok) throw new Error('Failed to fetch Kakao Map key')
         const data = await response.json()
-        setKakaoMapKey(data.kakaoMapKey)
+        if (data.kakaoMapKey) {
+          setKakaoMapKey(data.kakaoMapKey)
+          console.log('[kakao-map] API key fetched successfully')
+        } else {
+          setError('Kakao Map API key가 환경변수에 설정되지 않았습니다. Replit Secrets에서 KAKAO_MAP_API_KEY를 확인해주세요.')
+          console.warn('[kakao-map] No API key in response:', data)
+        }
       } catch (err) {
+        const errorMsg = 'Kakao Map API key를 불러올 수 없습니다. Replit Secrets 설정을 확인해주세요.'
+        setError(errorMsg)
         console.warn('[kakao-map] Failed to fetch API key:', err)
-        setError('Kakao Map API key를 불러올 수 없습니다.')
       }
     }
 
