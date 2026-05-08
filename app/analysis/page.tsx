@@ -560,7 +560,8 @@ export default function AnalysisPage() {
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  </div>
+                )}
 
               </div>
             </div>
