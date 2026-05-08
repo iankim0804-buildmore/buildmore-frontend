@@ -797,7 +797,7 @@ export default function AnalysisPage() {
           {/* ============================================================ */}
           {/* RIGHT CONTENT AREA */}
           {/* ============================================================ */}
-          <ScrollArea className="p-3.5">
+          <ScrollArea className="p-3.5 h-full">
             <h1 className="text-[26px] font-extrabold text-foreground mb-4">분석 결과</h1>
 
             {/* Top 3 cards */}
@@ -850,9 +850,9 @@ export default function AnalysisPage() {
                   />
                 </div>
                 <div className="flex justify-between mt-2 text-[11px] text-muted-foreground">
-                  <span>낮은 값 - 매수보류</span>
-                  <span>중간 값 - 가격협상</span>
-                  <span>높은 값 - 매수</span>
+                  <span>보류</span>
+                  <span>가격협상</span>
+                  <span>매수</span>
                 </div>
               </div>
 
@@ -1196,7 +1196,7 @@ export default function AnalysisPage() {
                 )}
 
                 {/* 리스크 */}
-                {activeTab === '리스크' && (
+                {activeTab === '리���크' && (
                   <div className="p-5 space-y-6">
                     {/* 리스크 등급 배지 */}
                     <div className="flex items-center gap-2">
