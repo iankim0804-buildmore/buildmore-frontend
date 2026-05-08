@@ -321,6 +321,74 @@ export default function AnalysisPage() {
     </div>
   )
 
+  // CTA Section Component
+  const CTASection = () => {
+    const getHookMessage = () => {
+      if (dealSignal === '매수') {
+        return 'GO 시그널 확인 — 지금 바로 클로징 준비를 시작하세요'
+      } else if (dealSignal === '매수보류') {
+        return '리스크 요인 발견 — 딜 브리핑으로 대응 전략을 받아보세요'
+      } else {
+        return '이 매물, 협상 여지 있음 — 지금 딜 브리핑을 받으면 근거 있는 가격을 제시할 수 있습니다'
+      }
+    }
+
+    return (
+      <div className="border-t border-[#e4e4e7] mt-8">
+        {/* Hook Banner */}
+        <div className="bg-[#09090b] px-4 py-2.5 flex items-center gap-3">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#d97706] flex-shrink-0" />
+          <p className="text-xs text-[#e4e4e7] break-keep">{getHookMessage()}</p>
+        </div>
+
+        {/* CTA Grid */}
+        <div className="grid grid-cols-[1fr_1.15fr_1.15fr] bg-white">
+          {/* Column 1: FREE - PDF 저장 */}
+          <div className="border-r border-[#e4e4e7] p-4 flex flex-col gap-3">
+            <div className="inline-flex w-fit">
+              <span className="text-xs font-medium text-[#737373] border border-[#d4d4d8] rounded-full px-2 py-1 bg-transparent">무료</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-[#09090b]">이 분석 저장하기</h4>
+              <p className="text-xs text-[#a1a1a6] mt-1 leading-relaxed break-keep">협상 자리에 들고 가세요. 지금 분석 결과를 PDF로 저장합니다.</p>
+            </div>
+            <button className="w-full h-[34px] border border-[#d4d4d8] bg-transparent rounded-[6px] text-xs font-semibold text-[#09090b] hover:bg-[#fafafa] transition-colors mt-auto">
+              PDF 저장
+            </button>
+          </div>
+
+          {/* Column 2: MID - 딜 브리핑 */}
+          <div className="border-r border-[#e4e4e7] p-4 flex flex-col gap-3">
+            <div className="inline-flex w-fit">
+              <span className="text-xs font-medium text-[#737373] border border-[#d4d4d8] rounded-full px-2 py-1 bg-transparent">유료</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-[#09090b]">딜 브리핑 받기</h4>
+              <p className="text-xs text-[#a1a1a6] mt-1 leading-relaxed break-keep">금융·리스크·밸류애드 완전 분석, 48시간 내 전달.</p>
+            </div>
+            <button className="w-full h-[34px] bg-[#09090b] text-white rounded-[6px] text-xs font-semibold hover:bg-[#1a1a1e] transition-colors mt-auto">
+              브리핑 신청 →
+            </button>
+          </div>
+
+          {/* Column 3: PREMIUM - 딜 클로징 */}
+          <div className="relative p-4 flex flex-col gap-3 border-l-2 border-[#d97706]">
+            <div className="inline-flex w-fit">
+              <span className="text-xs font-medium bg-[#fffbeb] text-[#b45309] border border-[#d97706] rounded-full px-2 py-1">★ 가장 많이 선택</span>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-[#09090b]">딜 클로징 패키지</h4>
+              <p className="text-xs text-[#a1a1a6] mt-1 leading-relaxed break-keep">협상 전략부터 금융 구조까지, 당신의 딜 메이커.</p>
+            </div>
+            <button className="w-full h-[34px] bg-[#d97706] text-white rounded-[6px] text-xs font-semibold hover:bg-[#b45309] transition-colors mt-auto">
+              패키지 보기 →
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Get today's date
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', '')
 
@@ -530,9 +598,10 @@ export default function AnalysisPage() {
                 <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   분석 중...
-                </div>
-              </div>
-            )}
+                    </div>
+                    <CTASection />
+                  </div>
+                )}
             <div ref={chatEndRef} />
           </div>
         </ScrollArea>
@@ -980,7 +1049,7 @@ export default function AnalysisPage() {
               
               {/* Table content */}
               <div className="bg-white">
-                {/* 금융 분석 */}
+                {/* 금융 ��석 */}
                 {activeTab === '금융 분석' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
                     {/* 상단 메트릭 4개 카드 */}
@@ -1045,6 +1114,7 @@ export default function AnalysisPage() {
                         </table>
                       </div>
                     </div>
+                    <CTASection />
                   </div>
                 )}
 
@@ -1147,6 +1217,7 @@ export default function AnalysisPage() {
                       </div>
                     </div>
                   </div>
+                  <CTASection />
                 )}
 
                 {/* 건축조건 */}
@@ -1206,13 +1277,14 @@ export default function AnalysisPage() {
                           <div className="mt-3 pt-3 border-t border-[#f1f1f3] flex items-center gap-1.5">
                             <span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${elevator === '있음' ? 'bg-[#16a34a]' : elevator === '설치예정' ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'}`} />
                             <span className="text-[11px] text-[#666]">
-                              {elevator === '있음' ? '엘리베이터 있음' : elevator === '설치예정' ? '엘리베이터 설치예정 (+4,500만 반영)' : '엘리베이터 없음'}
+                              {elevator === '있음' ? '엘리베이터 있음' : elevator === '설���예정' ? '엘리베이터 설치예정 (+4,500만 반영)' : '엘리베이터 없음'}
                             </span>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
+                  <CTASection />
                 )}
 
                 {/* 리스크 */}
@@ -1316,6 +1388,7 @@ export default function AnalysisPage() {
                       </p>
                     </div>
                   </div>
+                  <CTASection />
                 )}
 
                 {/* 실거래 비교 */}
@@ -1344,6 +1417,7 @@ export default function AnalysisPage() {
                       ))}
                     </tbody>
                   </table>
+                  <CTASection />
                 )}
               </div>
             </div>
@@ -1426,10 +1500,10 @@ export default function AnalysisPage() {
                   <Crosshair className="w-4 h-4" />
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+                    </div>
+                    <CTASection />
+                  </div>
+                )}
     </div>
   )
 }
