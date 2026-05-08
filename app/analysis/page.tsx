@@ -14,6 +14,7 @@ import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
 import { InsightPanel, type DealInsight } from "./components/InsightPanel"
 import { useDealAnalysis } from "@/hooks/useDealAnalysis"
+import { useKakaoMap } from "@/hooks/useKakaoMap"
 import type { DealInput } from "@/lib/analysis/dealAnalysisEngine"
 import {
   Plus,
@@ -138,6 +139,15 @@ export default function AnalysisPage() {
   // B-3. SIDEBAR STATE (New)
   // ============================================================
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  
+  // ============================================================
+  // B-4. KAKAO MAP HOOK
+  // ============================================================
+  const { mapRef, isLoading: mapLoading, error: mapError } = useKakaoMap({
+    latitude: 37.547,
+    longitude: 126.921,
+    zoom: 3,
+  })
 
   // ============================================================
   // C. ANALYSIS PANEL STATE
@@ -1080,7 +1090,7 @@ export default function AnalysisPage() {
               <div className="bg-white border border-border rounded-[14px] p-3">
                 <p className="text-[15px] font-bold mb-2">DEAL SCORE</p>
                 <div className="inline-flex items-baseline mb-3">
-                  <span className="text-[24px] font-bold text-gray-950 tabular-nums">
+                  <span className="text-2xl font-semibold leading-tight text-gray-950 tabular-nums">
                     {bankabilityScore}
                   </span>
                   <span className="ml-1 text-sm font-medium text-muted-foreground">
@@ -1090,7 +1100,7 @@ export default function AnalysisPage() {
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
                   <div className="h-full bg-foreground transition-all" style={{ width: `${bankabilityScore}%` }} />
                 </div>
-                <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[12px]">
+                <div className="grid grid-cols-[74px_1fr] gap-y-2 text-[13px]">
                   <span className="text-muted-foreground font-bold">상권</span>
                   <span className="whitespace-normal break-keep leading-relaxed">합정 생활상권 · 역세권 · 팝업/F&B</span>
                   <span className="text-muted-foreground font-bold">입력값</span>
@@ -1098,7 +1108,7 @@ export default function AnalysisPage() {
                   <span className="text-muted-foreground font-bold">분석엔진</span>
                   <span className="whitespace-normal break-keep leading-relaxed">BuildMore v2.1</span>
                   <span className="text-muted-foreground font-bold">설명</span>
-                  <p className="whitespace-normal break-keep leading-relaxed text-[11px]">
+                  <p className="whitespace-normal break-keep leading-relaxed text-xs">
                     {dscr >= 1 && bankabilityScore >= 68
                       ? 'DSCR 및 수익률이 양호합니다. 현재 조건으로 매수를 검토할 수 있습니다.'
                       : dscr >= 1
@@ -1112,10 +1122,10 @@ export default function AnalysisPage() {
               {/* DEAL SIGNAL */}
               <div className="bg-white border border-border rounded-[14px] p-3">
                 <p className="text-[15px] font-bold mb-2">DEAL SIGNAL</p>
-                <p className="text-[24px] font-bold mb-1.5 text-black">
+                <p className="text-2xl font-semibold leading-tight text-black mb-1.5">
                   {dealSignal}
                 </p>
-                <p className="text-[12px] text-muted-foreground mb-3">
+                <p className="text-[13px] text-muted-foreground mb-3">
                   {dealSignal === '매수보류'
                     ? 'DSCR 및 수익률 양호'
                     : dealSignal === '가격협상'
@@ -1128,7 +1138,7 @@ export default function AnalysisPage() {
                     style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
-                <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
+                <div className="flex justify-between mt-1.5 text-[11px] text-muted-foreground">
                   <span>보류</span>
                   <span>가격협상</span>
                   <span>매수</span>
@@ -1139,37 +1149,21 @@ export default function AnalysisPage() {
               <div className="bg-white border border-border rounded-[14px] p-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[15px] font-bold">지도</p>
-                  <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">합정동 428-5</span>
+                  <span className="px-2 py-0.5 bg-muted text-[10px] rounded-full">{address.split(' ').slice(-2).join(' ')}</span>
                 </div>
-                <div 
-                  className="h-[160px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg relative cursor-pointer"
-                  onClick={() => setShowMapModal(true)}
-                  style={{
-                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(0,0,0,0.03) 20px, rgba(0,0,0,0.03) 21px), repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(0,0,0,0.03) 20px, rgba(0,0,0,0.03) 21px)'
-                  }}
-                >
-                  {/* Bubbles */}
-                  <div className="absolute left-[18%] top-[18%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
-                    420㎡ / 52.0억
+                {mapError ? (
+                  <div className="h-[160px] bg-gray-100 rounded-lg flex items-center justify-center text-center px-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">지도 데이터를 불러오지 못했습니다.</p>
+                      <p className="text-[11px] text-gray-400">Kakao 지도 API 키 또는 주소 좌표를 확인해주세요.</p>
+                    </div>
                   </div>
-                  <div className="absolute left-[64%] top-[16%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
-                    160㎡ / 26.8억
-                  </div>
-                  <div className="absolute left-[70%] top-[56%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
-                    230㎡ / 31.5억
-                  </div>
-                  <div className="absolute left-[22%] top-[52%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
-                    210㎡ / 31.5억
-                  </div>
-                  <div className="absolute left-[48%] top-[70%] bg-white border border-border rounded-xl px-2 py-0.5 text-[9px] shadow-sm">
-                    350㎡ / 47.0억
-                  </div>
-                  {/* Pin */}
+                ) : (
                   <div 
-                    className="absolute w-3 h-3 bg-foreground rounded-full rounded-br-none -rotate-45"
-                    style={{ left: '54%', top: '42%' }}
+                    ref={mapRef}
+                    className="h-[160px] bg-gray-100 rounded-lg overflow-hidden"
                   />
-                </div>
+                )}
               </div>
             </div>
 
