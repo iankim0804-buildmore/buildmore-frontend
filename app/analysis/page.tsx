@@ -12,6 +12,11 @@ import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
 import { InsightPanel, type DealInsight } from "./components/InsightPanel"
+import { AnalysisChat } from "./components/AnalysisChat"
+import { RunAnalysisButton } from "./components/RunAnalysisButton"
+import { useDealAnalysis } from "@/hooks/useDealAnalysis"
+import { useAnalysisChat, type ChatMessage as AnalysisChatMessage } from "@/hooks/useAnalysisChat"
+import type { DealInput } from "@/lib/analysis/dealAnalysisEngine"
 import {
   Plus,
   FolderOpen,
@@ -109,15 +114,19 @@ export default function AnalysisPage() {
   const [apiStatus, setApiStatus] = useState<'connected' | 'connecting'>('connecting')
   
   // ============================================================
-  // B. CHAT STATE
+  // B. CHAT STATE (Legacy - kept for reference)
   // ============================================================
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { role: 'user', content: '합정동 428-5 근생을 38억에 매입해서 임대하려고 해. 금융적으로 괜찮을까?' },
-    { role: 'assistant', content: '분석을 시작합니다. 우측 패널에서 상세한 금융 분석 결과를 확인하실 수 있습니다.\n\n현재 DSCR이 0.91로 금융비용 커버리지가 다소 부족합니다. 매입가 협상이나 임대조건 개선을 권장드립니다.' },
-  ])
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  
+  // ============================================================
+  // B-2. ANALYSIS HOOKS (New)
+  // ============================================================
+  const dealAnalysis = useDealAnalysis()
+  const analysisChat = useAnalysisChat()
+  const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
 
   // ============================================================
   // C. ANALYSIS PANEL STATE
@@ -318,6 +327,47 @@ export default function AnalysisPage() {
     const timer = setTimeout(() => setApiStatus('connected'), 1500)
     return () => clearTimeout(timer)
   }, [])
+  
+  // Handle Analysis Run
+  const handleRunAnalysis = useCallback(async () => {
+    const input: DealInput = {
+      address,
+      price,
+      loan,
+      rate,
+      rent,
+      deposit,
+      vacancyRate
+    }
+    
+    await dealAnalysis.runAnalysis(input)
+    setHasRunAnalysis(true)
+    
+    // 분석 완료 후 요약을 대화창에 추가
+    if (dealAnalysis.summary) {
+      analysisChat.addSystemMessage(dealAnalysis.summary)
+    }
+  }, [address, price, loan, rate, rent, deposit, vacancyRate, dealAnalysis, analysisChat])
+  
+  // 분석 결과가 있으면 대화창에 요약 추가
+  useEffect(() => {
+    if (dealAnalysis.result && dealAnalysis.summary && hasRunAnalysis) {
+      // 첫 번째 메시지일 때만 추가
+      if (analysisChat.messages.length === 0) {
+        analysisChat.addSystemMessage(dealAnalysis.summary)
+      }
+    }
+  }, [dealAnalysis.result, dealAnalysis.summary, hasRunAnalysis, analysisChat])
+  
+  // 대화 메시지 전송 핸들러
+  const handleSendChatMessage = useCallback((message: string) => {
+    if (dealAnalysis.result) {
+      analysisChat.sendMessage(message, dealAnalysis.result)
+    }
+  }, [dealAnalysis.result, analysisChat])
+  
+  // 동적 인사이트 데이터 (분석 결과 있으면 사용, 없으면 기본값)
+  const currentInsights = dealAnalysis.result?.insights
 
   // ============================================================
   // EVENT HANDLERS
@@ -328,23 +378,7 @@ export default function AnalysisPage() {
     toast.success('새 분석을 시작합니다.')
   }
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputValue.trim() || isAnalyzing) return
-    
-    setChatMessages(prev => [...prev, { role: 'user', content: inputValue }])
-    setInputValue('')
-    setIsAnalyzing(true)
-    
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: '분석을 완료했습니다. 우측 패널에서 업데이트된 결과를 확인하세요.' 
-      }])
-      setIsAnalyzing(false)
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, 1500)
-  }
+
 
   const handleAddressSelect = (addr: string) => {
     setAddress(addr)
@@ -628,54 +662,19 @@ export default function AnalysisPage() {
         {/* Chat header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
           <h2 className="text-sm font-medium text-foreground">대화</h2>
-          <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+          <span className="text-xs text-muted-foreground">{analysisChat.messages.length}개 메시지</span>
         </div>
 
-        {/* Chat messages */}
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
-            {chatMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted text-foreground'
-                }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                </div>
-              </div>
-            ))}
-            {isAnalyzing && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  분석 중...
-                    </div>
-                    <AnalysisCTA />
-                  </div>
-                )}
-            <div ref={chatEndRef} />
-          </div>
-        </ScrollArea>
-
-        {/* Chat input */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t border-border bg-card">
-          <div className="flex gap-2">
-            <Input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="질문을 입력하세요..."
-              className="flex-1 text-sm"
-              disabled={isAnalyzing}
-            />
-            <Button type="submit" size="icon" disabled={isAnalyzing || !inputValue.trim()}>
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
-          <p className="text-[11px] text-gray-500 whitespace-normal break-keep leading-relaxed">
-            예: 이 물건 DSCR이 낮은데 어떻게 접근하면 좋을까?
-          </p>
-        </form>
+        {/* Chat content */}
+        <div className="flex-1 p-3 overflow-hidden">
+          <AnalysisChat
+            messages={analysisChat.messages}
+            suggestedQuestions={dealAnalysis.suggestedQuestions}
+            isLoading={analysisChat.isLoading}
+            onSendMessage={handleSendChatMessage}
+            hasAnalysis={!!dealAnalysis.result}
+          />
+        </div>
       </div>
 
       {/* ============================================================ */}
@@ -909,6 +908,18 @@ export default function AnalysisPage() {
                   </label>
                 </div>
               </div>
+              
+              {/* Run Analysis Button */}
+              <div className="mt-4">
+                <RunAnalysisButton
+                  onClick={handleRunAnalysis}
+                  isLoading={dealAnalysis.isLoading}
+                  hasRun={hasRunAnalysis}
+                />
+                {dealAnalysis.error && (
+                  <p className="text-xs text-red-500 mt-2">{dealAnalysis.error}</p>
+                )}
+              </div>
             </div>
           </ScrollArea>
 
@@ -1055,27 +1066,27 @@ export default function AnalysisPage() {
               <div className="flex-1 min-h-0 overflow-y-auto bg-white p-5">
                 {/* 매수 판단 */}
                 {activeTab === '매수 판단' && (
-                  <InsightPanel insight={dealInsights.buyDecision} />
+                  <InsightPanel insight={currentInsights?.buyDecision || dealInsights.buyDecision} />
                 )}
 
                 {/* 가격협상 포인트 */}
                 {activeTab === '가격협상 포인트' && (
-                  <InsightPanel insight={dealInsights.negotiation} />
+                  <InsightPanel insight={currentInsights?.negotiation || dealInsights.negotiation} />
                 )}
 
                 {/* 현금흐름 안정성 */}
                 {activeTab === '현금흐름 안정성' && (
-                  <InsightPanel insight={dealInsights.cashflow} />
+                  <InsightPanel insight={currentInsights?.cashflow || dealInsights.cashflow} />
                 )}
 
                 {/* 업사이드 가능성 */}
                 {activeTab === '업사이드 가능성' && (
-                  <InsightPanel insight={dealInsights.upside} />
+                  <InsightPanel insight={currentInsights?.upside || dealInsights.upside} />
                 )}
 
                 {/* 리스크와 다음 액션 */}
                 {activeTab === '리스크와 다음 액션' && (
-                  <InsightPanel insight={dealInsights.riskAction} />
+                  <InsightPanel insight={currentInsights?.riskAction || dealInsights.riskAction} />
                 )}
               </div>
             </div>
