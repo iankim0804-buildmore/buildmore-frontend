@@ -184,75 +184,135 @@ export const useKakaoMap = (options: MapInitOptions): UseKakaoMapReturn => {
 
   // Step 4: 지도 생성
   useEffect(() => {
-    if (!coordinates || !mapRef.current || !window.kakao?.maps) return
+    if (!coordinates) {
+      console.log('[kakao-map] Step 4: Waiting for coordinates...')
+      return
+    }
+    
+    if (!window.kakao?.maps) {
+      console.log('[kakao-map] Step 4: Waiting for window.kakao.maps...')
+      return
+    }
     
     console.log('[kakao-map] Step 4: Creating map with coordinates:', coordinates)
     
-    try {
-      const { zoom = 3 } = options
-      
-      const mapOption = {
-        center: new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng),
-        level: zoom,
+    // DOM이 마운트되고 크기가 결정된 후 실행
+    requestAnimationFrame(() => {
+      if (!mapRef.current) {
+        console.warn('[kakao-map] ⚠️ Map container is not mounted yet - will retry')
+        // 아직 DOM이 준비되지 않으면 작은 지연 후 재시도
+        setTimeout(() => {
+          if (!mapRef.current) {
+            console.error('[kakao-map] ❌ Map container still not mounted - giving up')
+            setError('지도 컨테이너를 찾을 수 없습니다.')
+            setIsLoading(false)
+          }
+        }, 100)
+        return
       }
 
-      mapInstance.current = new window.kakao.maps.Map(mapRef.current, mapOption)
-      console.log('[kakao-map] Map instance created')
+      try {
+        console.log('[kakao-map] Map container verified:', { width: mapRef.current.offsetWidth, height: mapRef.current.offsetHeight })
+        
+        const { zoom = 3 } = options
+        
+        const mapOption = {
+          center: new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng),
+          level: zoom,
+        }
 
-      // 마커 생성
-      const markerPosition = new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng)
-      markerRef.current = new window.kakao.maps.Marker({
-        position: markerPosition,
-      })
-      markerRef.current.setMap(mapInstance.current)
-      console.log('[kakao-map] Marker placed')
+        mapInstance.current = new window.kakao.maps.Map(mapRef.current, mapOption)
+        console.log('[kakao-map] ✅ Map instance created')
 
-      setIsLoading(false)
-      setError(null)
-      console.log('[kakao-map] Map initialization complete!')
-    } catch (err) {
-      console.error('[kakao-map] Map creation error:', err)
-      
-      if (isTestDomain()) {
-        setError(`테스트 도메인(${getCurrentDomain()})에서는 Kakao Map이 차단될 수 있습니다. buildmore.co.kr/analysis에서 확인해주세요.`)
-      } else {
-        setError('지도를 생성할 수 없습니다. Kakao Developers 콘솔에서 도메인 등록 상태를 확인해주세요.')
+        // 마커 생성
+        const markerPosition = new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng)
+        markerRef.current = new window.kakao.maps.Marker({
+          position: markerPosition,
+        })
+        markerRef.current.setMap(mapInstance.current)
+        console.log('[kakao-map] ✅ Marker placed at', coordinates)
+
+        setIsLoading(false)
+        setError(null)
+        console.log('[kakao-map] ✅ Map initialization complete!')
+      } catch (err) {
+        console.error('[kakao-map] ❌ Map creation error:', err)
+        
+        if (isTestDomain()) {
+          setError(`테스트 도메인(${getCurrentDomain()})에서는 Kakao Map이 차단될 수 있습니다. buildmore.co.kr/analysis에서 확인해주세요.`)
+        } else {
+          setError('지도를 생성할 수 없습니다. Kakao Developers 콘솔에서 도메인 등록 상태를 확인해주세요.')
+        }
+        setIsLoading(false)
       }
-      setIsLoading(false)
-    }
+    })
   }, [coordinates, options.zoom])
 
   // 모달 지도 초기화 함수
   const initModalMap = useCallback(() => {
-    if (!coordinates || !modalMapRef.current || !window.kakao?.maps) {
-      console.log('[kakao-map] Cannot init modal map - missing dependencies')
+    console.log('[kakao-map] Modal: Initializing modal map...')
+    
+    if (!coordinates) {
+      console.warn('[kakao-map] Modal: No coordinates available yet')
       return
     }
 
-    console.log('[kakao-map] Initializing modal map...')
+    if (!window.kakao?.maps) {
+      console.warn('[kakao-map] Modal: window.kakao.maps not available')
+      return
+    }
 
-    try {
-      const mapOption = {
-        center: new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng),
-        level: 2, // 모달에서는 더 확대
+    // DOM이 마운트되고 크기가 결정된 후 실행
+    requestAnimationFrame(() => {
+      if (!modalMapRef.current) {
+        console.warn('[kakao-map] Modal: Container not mounted - retrying...')
+        setTimeout(() => {
+          if (!modalMapRef.current) {
+            console.error('[kakao-map] Modal: Container still not mounted')
+            return
+          }
+          initializeModalMapInternal()
+        }, 100)
+        return
       }
+      
+      initializeModalMapInternal()
+    })
 
-      modalMapInstance.current = new window.kakao.maps.Map(modalMapRef.current, mapOption)
+    const initializeModalMapInternal = () => {
+      try {
+        if (!modalMapRef.current) {
+          console.error('[kakao-map] Modal: Container disappeared during init')
+          return
+        }
 
-      // 마커 생성
-      const markerPosition = new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng)
-      modalMarkerRef.current = new window.kakao.maps.Marker({
-        position: markerPosition,
-      })
-      modalMarkerRef.current.setMap(modalMapInstance.current)
+        console.log('[kakao-map] Modal: Container verified:', { width: modalMapRef.current.offsetWidth, height: modalMapRef.current.offsetHeight })
 
-      // 줌 컨트롤 추가
-      const zoomControl = new window.kakao.maps.ZoomControl()
-      modalMapInstance.current.addControl(zoomControl, window.kakao.maps.ControlPosition.RIGHT)
+        const mapOption = {
+          center: new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng),
+          level: 2, // 모달에서는 더 확대
+        }
 
-      console.log('[kakao-map] Modal map initialized')
-    } catch (err) {
-      console.error('[kakao-map] Modal map creation error:', err)
+        modalMapInstance.current = new window.kakao.maps.Map(modalMapRef.current, mapOption)
+        console.log('[kakao-map] Modal: ✅ Map instance created')
+
+        // 마커 생성
+        const markerPosition = new window.kakao.maps.LatLng(coordinates.lat, coordinates.lng)
+        modalMarkerRef.current = new window.kakao.maps.Marker({
+          position: markerPosition,
+        })
+        modalMarkerRef.current.setMap(modalMapInstance.current)
+        console.log('[kakao-map] Modal: ✅ Marker placed')
+
+        // 줌 컨트롤 추가
+        const zoomControl = new window.kakao.maps.ZoomControl()
+        modalMapInstance.current.addControl(zoomControl, window.kakao.maps.ControlPosition.RIGHT)
+        console.log('[kakao-map] Modal: ✅ Zoom control added')
+
+        console.log('[kakao-map] Modal: ✅ Initialization complete')
+      } catch (err) {
+        console.error('[kakao-map] Modal: ❌ Map creation error:', err)
+      }
     }
   }, [coordinates])
 
