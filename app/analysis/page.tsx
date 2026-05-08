@@ -9,6 +9,9 @@ import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { AnalysisCTA } from "./components/AnalysisCTA"
+import { NewsTicker } from "./components/NewsTicker"
+import { TagGroup } from "./components/TagGroup"
+import { KpiGroup } from "./components/KpiGroup"
 import {
   Plus,
   FolderOpen,
@@ -81,6 +84,19 @@ const addressHistory = [
   '서울특별시 강남구 역삼동 123-4',
   '서울특별시 서초구 서초동 456-7',
   '서울특별시 송파구 잠실동 789-0',
+]
+
+const topNews = [
+  { id: 1, title: "서울 상업용 부동산 거래량 전월 대비 증가", url: "#" },
+  { id: 2, title: "기준금리 동결 전망에 수익형 부동산 관망세 지속", url: "#" },
+  { id: 3, title: "마포·성수권 중소형 빌딩 매수 문의 증가", url: "#" },
+  { id: 4, title: "임대료 상승 지역과 공실률 확대 지역 양극화", url: "#" },
+  { id: 5, title: "금융권, 상업용 부동산 담보대출 심사 강화", url: "#" },
+  { id: 6, title: "역세권 리테일 공실률 안정세", url: "#" },
+  { id: 7, title: "서울 주요 상권 유동인구 회복세", url: "#" },
+  { id: 8, title: "소형 업무시설 투자 수익률 지역별 편차 확대", url: "#" },
+  { id: 9, title: "노후 건축물 리모델링 수요 증가", url: "#" },
+  { id: 10, title: "매입가 조정 가능한 급매성 물건 관심 증가", url: "#" },
 ]
 
 // ============================================================
@@ -564,10 +580,10 @@ export default function AnalysisPage() {
       {/* ============================================================ */}
       <div className="flex-1 flex flex-col bg-[#f8f8f9] overflow-hidden">
         {/* KPI STRIP (72px) */}
-        <div className="h-[72px] bg-white border-b border-border px-5 grid grid-cols-[160px_1fr_180px] items-center flex-shrink-0">
+        <div className="h-[72px] bg-white border-b border-border px-5 flex items-center justify-between flex-shrink-0">
           {/* Run button */}
           <Button 
-            className="w-[108px] h-10 bg-foreground text-background hover:bg-foreground/90 text-sm font-medium"
+            className="w-[108px] h-10 bg-foreground text-background hover:bg-foreground/90 text-sm font-medium flex-shrink-0"
             onClick={() => {
               recalc()
               toast.success('분석이 완료되었습니다.')
@@ -576,41 +592,18 @@ export default function AnalysisPage() {
             분석 실행
           </Button>
           
-          {/* Tags + KPIs */}
-          <div className="flex items-center gap-4">
-            {/* Tags */}
-            <div className="flex gap-1.5">
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[11px] rounded">합정 생활상권</span>
-              <span className="px-2 py-0.5 bg-green-50 text-green-600 text-[11px] rounded">역세권</span>
-              <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[11px] rounded">팝업/F&B</span>
-              <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[11px] rounded">주거 유입</span>
-            </div>
-            
-            {/* KPIs */}
-            <div className="grid grid-cols-4 gap-8 flex-1">
-              <div className="text-center">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">NOI</p>
-                <p className="text-[17px] font-semibold tabular-nums">{noi.toLocaleString('ko-KR')}만</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">DSCR</p>
-                <p className={`text-[17px] font-semibold tabular-nums ${dscr < 1 ? 'text-red-600' : ''}`}>{dscr.toFixed(2)}x</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">LTV</p>
-                <p className="text-[17px] font-semibold tabular-nums">{ltv.toFixed(1)}%</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">CAP</p>
-                <p className="text-[17px] font-semibold tabular-nums">{cap.toFixed(1)}%</p>
-              </div>
-            </div>
-          </div>
+          {/* News ticker - flex-1 with min-w-0 to prevent overflow */}
+          <NewsTicker news={topNews} />
           
-          {/* Live indicator */}
-          <div className="flex items-center justify-end gap-2 text-blue-600 text-sm">
-            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-            실시간 데이터 분석중
+          {/* Tags + KPIs - right aligned group */}
+          <div className="ml-auto flex items-center gap-4 flex-shrink-0">
+            <TagGroup tags={[
+              { id: 'tag1', label: '합정 생활상권', color: 'blue' },
+              { id: 'tag2', label: '역세권', color: 'green' },
+              { id: 'tag3', label: '팝업/F&B', color: 'purple' },
+              { id: 'tag4', label: '주거 유입', color: 'amber' },
+            ]} />
+            <KpiGroup noi={noi} dscr={dscr} ltv={ltv} cap={cap} />
           </div>
         </div>
 
