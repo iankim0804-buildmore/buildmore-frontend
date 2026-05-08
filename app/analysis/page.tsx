@@ -921,207 +921,369 @@ export default function AnalysisPage() {
               </div>
               
               {/* Table content */}
-              <div className="h-[260px] overflow-auto">
+              <div className="bg-white">
                 {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/50">
-                      <tr>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">항목</th>
-                        <th className="text-right text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">값</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">설명</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <div className="p-5 space-y-6">
+                    {/* 상단 메트릭 4개 카드 */}
+                    <div className="grid grid-cols-4 gap-3">
                       {[
-                        { label: '매입가', value: `${price.toFixed(1)}억`, desc: '총 취득 비용 기준' },
-                        { label: '대출금액', value: `${loan.toFixed(1)}억`, desc: `LTV ${ltv.toFixed(1)}%` },
-                        { label: '자기자본', value: `${(price - loan).toFixed(1)}억`, desc: `매입가 대비 ${((price - loan) / price * 100).toFixed(1)}%` },
-                        { label: '금리', value: `${rate.toFixed(1)}%`, desc: '연간 고정금리 기준' },
-                        { label: '연간 이자비용', value: `${(loan * rate / 100 * 10000).toLocaleString('ko-KR')}만`, desc: `대출 ${loan.toFixed(1)}억 × ${rate.toFixed(1)}%` },
-                        { label: '월 이자비용', value: `${Math.round(loan * rate / 100 * 10000 / 12).toLocaleString('ko-KR')}만`, desc: '연간 이자 ÷ 12개월' },
-                        { label: 'NOI', value: `${noi.toLocaleString('ko-KR')}만`, desc: `월세 ${rent}만 × 12 × (1 - 공실 ${vacancy}%) - 운영비` },
-                        { label: 'DSCR', value: `${dscr.toFixed(2)}x`, desc: dscr >= 1 ? '금융비용 충분히 커버' : '금융비용 미달 — 개선 필요' },
-                        { label: 'CAP Rate', value: `${cap.toFixed(2)}%`, desc: `NOI ÷ 매입가 ${price.toFixed(1)}억` },
-                      ].map((row, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-3 text-[13px] text-muted-foreground">{row.label}</td>
-                          <td className={`px-4 py-3 text-[13px] font-semibold text-right ${row.label === 'DSCR' && dscr < 1 ? 'text-red-600' : ''}`}>{row.value}</td>
-                          <td className="px-4 py-3 text-[13px]">{row.desc}</td>
-                        </tr>
+                        { label: '매입가', value: `${price.toFixed(1)}억`, sub: '취득비용 포함' },
+                        { label: '자기자본', value: `${(price - loan).toFixed(1)}억`, sub: `LTV ${ltv.toFixed(1)}%` },
+                        { label: '월 상환액', value: `${Math.round(loan * 10000 * (rate / 100) / 12).toLocaleString('ko-KR')}만`, sub: '원리금균등' },
+                        { label: 'CoC 수익률', value: `${(((noi - loan * 10000 * (rate / 100)) / ((price - loan) * 10000)) * 100).toFixed(1)}%`, sub: '세전 현금흐름 기준' },
+                      ].map((card, i) => (
+                        <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#a1a1aa] mb-2">{card.label}</p>
+                          <p className="text-[22px] font-bold whitespace-nowrap">{card.value}</p>
+                          <p className="text-[11.5px] text-[#a1a1aa] mt-1">{card.sub}</p>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+
+                    {/* 2단 레이아웃 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* 좌측 - 현금흐름 */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">현금흐름</h4>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {[
+                              { label: '연간 임대수입 (PGI)', value: rent * 12, isOperating: false },
+                              { label: '공실 손실', value: -(rent * 12 * (vacancy / 100)), isOperating: false },
+                              { label: '유효총수입 (EGI)', value: rent * 12 * (1 - vacancy / 100), isOperating: false },
+                              { label: '운영비용 (OPEX)', value: -82, isOperating: false },
+                              { label: '순영업수익 (NOI)', value: noi, isOperating: true },
+                              { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
+                              { label: '세전 현금흐름', value: noi - loan * 10000 * (rate / 100), isOperating: false },
+                            ].map((row, i) => (
+                              <tr key={i} className={row.isOperating ? 'bg-[#fafafa] font-bold border-t border-b border-[#e7e7ea]' : ''}>
+                                <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
+                                <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.value > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
+                                  {row.value > 0 ? '+' : ''}{Math.round(row.value).toLocaleString('ko-KR')}만
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* 우측 - 가치 분석 */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">가치 분석</h4>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {[
+                              { label: 'Cap Rate', value: `${cap.toFixed(1)}%` },
+                              { label: '기준금리 (ECOS)', value: '3.50%' },
+                              { label: '코픽스', value: '3.82%' },
+                              { label: '금리 스프레드', value: `${(rate - 3.82).toFixed(2)}%p`, color: (rate - 3.82) > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
+                              { label: '매입단가 (㎡당)', value: `${Math.round(price * 10000 / 420).toLocaleString('ko-KR')}만` },
+                              { label: '마포구 평균단가', value: '4,099만' },
+                              { label: '시세 대비', value: Math.round(price * 10000 / 420) <= 4099 ? '적정' : '고평가', color: Math.round(price * 10000 / 420) <= 4099 ? 'text-[#16a34a]' : 'text-[#dc2626]' },
+                            ].map((row, i) => (
+                              <tr key={i}>
+                                <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
+                                <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {/* NOI · DSCR */}
                 {activeTab === 'NOI · DSCR' && (
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/50">
-                      <tr>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">시나리오</th>
-                        <th className="text-right text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">NOI (연간)</th>
-                        <th className="text-right text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">DSCR</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">판정</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {([10, 20, 30] as const).map((v) => {
-                        const noiV = Math.max(0, rent * 12 * (1 - v / 100) - 82)
-                        const annualDebt = loan * 10000 * (rate / 100)
-                        const dscrV = annualDebt ? noiV / annualDebt : 0
-                        const isActive = v === vacancy
-                        return (
-                          <tr key={v} className={`border-b border-border/50 ${isActive ? 'bg-primary/5' : 'hover:bg-muted/30'}`}>
-                            <td className="px-4 py-3 text-[13px]">
-                              {v === 10 ? '낙관 (공실 10%)' : v === 20 ? '기본 (공실 20%)' : '보수 (공실 30%)'}
-                              {isActive && <span className="ml-2 text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded">현재</span>}
-                            </td>
-                            <td className="px-4 py-3 text-[13px] font-semibold text-right">{noiV.toLocaleString('ko-KR')}만</td>
-                            <td className={`px-4 py-3 text-[13px] font-semibold text-right ${dscrV < 1 ? 'text-red-600' : 'text-green-600'}`}>{dscrV.toFixed(2)}x</td>
-                            <td className="px-4 py-3 text-[13px]">{dscrV >= 1 ? '적격' : dscrV >= 0.8 ? '부족' : '부적격'}</td>
-                          </tr>
-                        )
-                      })}
-                      <tr className="border-b border-border/50 hover:bg-muted/30 bg-muted/20">
-                        <td className="px-4 py-3 text-[13px] font-medium">손익분기 월세</td>
-                        <td className="px-4 py-3 text-[13px] text-right" colSpan={2}>
-                          {Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancy / 100))).toLocaleString('ko-KR')}만원
-                        </td>
-                        <td className="px-4 py-3 text-[13px] text-muted-foreground">DSCR = 1.0 기준</td>
-                      </tr>
-                      <tr className="hover:bg-muted/30">
-                        <td className="px-4 py-3 text-[13px] font-medium">현재 월세와의 차이</td>
-                        <td className="px-4 py-3 text-[13px] text-right" colSpan={2}>
-                          {(rent - Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancy / 100)))).toLocaleString('ko-KR')}만원
-                        </td>
-                        <td className={`px-4 py-3 text-[13px] ${rent >= Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancy / 100))) ? 'text-green-600' : 'text-red-600'}`}>
-                          {rent >= Math.ceil((loan * 10000 * (rate / 100) + 82) / (12 * (1 - vacancy / 100))) ? '흑자' : '적자'}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <div className="p-5 space-y-6">
+                    {/* 상단 메트릭 4개 카드 */}
+                    <div className="grid grid-cols-4 gap-3">
+                      {[
+                        { label: 'NOI', value: `${Math.round(noi).toLocaleString('ko-KR')}만`, sub: '연간 순영업수익' },
+                        { label: 'DSCR', value: dscr.toFixed(2), sub: dscr >= 1.25 ? '✓ 안전' : '⚠ 위험', valueColor: dscr >= 1.25 ? 'text-[#16a34a]' : dscr < 1.0 ? 'text-[#dc2626]' : '' },
+                        { label: '잠재 NOI', value: `${Math.round(rent * 12 - 82).toLocaleString('ko-KR')}만`, sub: '공실 0% 기준' },
+                        { label: '공실률', value: `${vacancy}%`, sub: vacancy === 10 ? '긍정' : vacancy === 20 ? '적정' : '보수' },
+                      ].map((card, i) => (
+                        <div key={i} className="bg-white border border-[#e7e7ea] rounded-[16px] p-[14px]">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#a1a1aa] mb-2">{card.label}</p>
+                          <p className={`text-[22px] font-bold whitespace-nowrap ${card.valueColor || ''}`}>{card.value}</p>
+                          <p className="text-[11.5px] text-[#a1a1aa] mt-1">{card.sub}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* NOI 브릿지 테이블 */}
+                    <div>
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {[
+                            { label: 'PGI (잠재 총임대수입)', value: rent * 12, note: `월 ${rent}만 × 12` },
+                            { label: '공실 손실', value: -(rent * 12 * (vacancy / 100)), note: `공실률 ${vacancy}%` },
+                            { label: 'EGI (유효총수입)', value: rent * 12 * (1 - vacancy / 100), note: '' },
+                            { label: 'OPEX (운영비용)', value: -82, note: '고정' },
+                            { label: 'NOI', value: noi, note: '', isHighlight: true },
+                            { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), note: '연간 금융비용' },
+                            { label: 'DSCR', value: dscr, note: 'NOI / DS', isHighlight: true, customValue: dscr.toFixed(2) },
+                          ].map((row, i) => (
+                            <tr key={i} className={row.isHighlight ? 'bg-[#fafafa] font-bold border-t border-b border-[#e7e7ea]' : ''}>
+                              <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
+                              <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.value > 0 && !row.customValue ? 'text-[#16a34a]' : row.value < 0 ? 'text-[#dc2626]' : ''}`}>
+                                {row.customValue ?? (row.value > 0 ? '+' : '') + Math.round(row.value).toLocaleString('ko-KR') + (row.customValue ? '' : '만')}
+                              </td>
+                              <td className="py-2.5 px-3 text-xs text-[#a1a1aa] text-right">{row.note}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 스트레스 테스트 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* 금리 +1%p */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">금리 +1%p 시나리오</h4>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {(() => {
+                              const stressRate = rate + 1
+                              const stressDS = loan * 10000 * (stressRate / 100)
+                              const stressDscr = noi / stressDS
+                              const stressCF = noi - stressDS
+                              const baseCF = noi - loan * 10000 * (rate / 100)
+                              return [
+                                { label: '조정 DS', value: Math.round(stressDS).toLocaleString('ko-KR') + '만' },
+                                { label: '조정 DSCR', value: stressDscr.toFixed(2) },
+                                { label: '현금흐름 변화', value: Math.round(stressCF - baseCF).toLocaleString('ko-KR') + '만', color: 'text-[#dc2626]' },
+                              ].map((row, i) => (
+                                <tr key={i}>
+                                  <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
+                                  <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                                </tr>
+                              ))
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* 공실 +10%p */}
+                      <div>
+                        <h4 className="text-sm font-semibold mb-3">공실 +10%p 시나리오</h4>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {(() => {
+                              const stressVacancy = Math.min(100, vacancy + 10)
+                              const stressNoi = Math.max(0, rent * 12 * (1 - stressVacancy / 100) - 82)
+                              const stressDscr = stressNoi / (loan * 10000 * (rate / 100))
+                              const stressCF = stressNoi - loan * 10000 * (rate / 100)
+                              const baseCF = noi - loan * 10000 * (rate / 100)
+                              return [
+                                { label: '조정 NOI', value: Math.round(stressNoi).toLocaleString('ko-KR') + '만' },
+                                { label: '조정 DSCR', value: stressDscr.toFixed(2) },
+                                { label: '현금흐름 변화', value: Math.round(stressCF - baseCF).toLocaleString('ko-KR') + '만', color: 'text-[#dc2626]' },
+                              ].map((row, i) => (
+                                <tr key={i}>
+                                  <td className="py-2.5 px-3 text-xs text-[#666]">{row.label}</td>
+                                  <td className={`py-2.5 px-3 text-right font-semibold whitespace-nowrap ${row.color || ''}`}>{row.value}</td>
+                                </tr>
+                              ))
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {/* 건축조건 */}
                 {activeTab === '건축조건' && (
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/50">
-                      <tr>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">항목</th>
-                        <th className="text-right text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">값</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">비고</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <div className="p-5">
+                    <div className="grid grid-cols-3 gap-4">
                       {[
-                        { label: '시나리오', value: scenario, desc: '현재 선택된 건축 시나리오' },
-                        { label: '대장상 연면적', value: `${buildingData.registerArea}㎡`, desc: '건축물대장 등록 기준' },
-                        { label: '신축 최대 연면적', value: `${buildingData.maxGfa}㎡`, desc: '법정 용적률 적용' },
-                        { label: '분석 연면적', value: `${gfa}㎡`, desc: scenario === '현황' ? '현황 유지' : gfa > buildingData.maxGfa ? '법정 용적률 초과' : '가능 범위 내' },
-                        { label: '시공비 단가', value: `${constructionCost.toLocaleString()}만원/㎡`, desc: '공사비 산정 기준' },
-                        { label: '총 시공비', value: `${(gfa * constructionCost).toLocaleString()}만원`, desc: scenario === '현황' ? '해당 없음' : `${gfa}㎡ × ${constructionCost}만원` },
-                        { label: '엘리베이터', value: elevator, desc: elevator === '설치예정' ? '설치 예정 (Bankability -3점)' : elevator === '있음' ? '기설치 완료' : '없음 — 임차인 유치 불리' },
-                        { label: '허가연도', value: String(buildingData.permitYear), desc: '건축 허가 기준년도' },
-                        { label: '사용승인연도', value: String(buildingData.approvalYear), desc: `준공 후 ${new Date().getFullYear() - buildingData.approvalYear}년 경과` },
-                      ].map((row, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-3 text-[13px] text-muted-foreground">{row.label}</td>
-                          <td className={`px-4 py-3 text-[13px] font-semibold text-right ${row.label === '분석 연면적' && gfa > buildingData.maxGfa && scenario !== '현황' ? 'text-red-600' : ''}`}>{row.value}</td>
-                          <td className="px-4 py-3 text-[13px]">{row.desc}</td>
-                        </tr>
+                        {
+                          title: '증축',
+                          rows: [
+                            ['법정 최대 연면적', '420㎡'],
+                            ['현재 연면적', `${gfa}㎡`],
+                            ['추가 가능 면적', `${(420 - gfa)}㎡`, 'text-[#16a34a]'],
+                            ['시공비', `${constructionCost}만원/㎡`],
+                            ['총 공사비', `${Math.round((420 - gfa) * constructionCost).toLocaleString('ko-KR')}만`, 'text-[#dc2626]'],
+                            ['추가 월임대 추정', `${Math.round((420 - gfa) / gfa * rent).toLocaleString('ko-KR')}만/월`, 'text-[#16a34a]'],
+                            ['손익분기', `${((420 - gfa) * constructionCost / ((420 - gfa) / gfa * rent * 12)).toFixed(1)}년`],
+                          ],
+                        },
+                        {
+                          title: '신축',
+                          rows: [
+                            ['최대 연면적', '420㎡ (용적률 200%)'],
+                            ['지하층 선택', basement || '없음'],
+                            ['시공비', `${constructionCost}만원/㎡`],
+                            ['해체비 포함 총비용', `${Math.round(420 * constructionCost + 500).toLocaleString('ko-KR')}만`, 'text-[#dc2626]'],
+                            ['신축 후 최대 NOI 추정', `${Math.round(noi * (420 / gfa)).toLocaleString('ko-KR')}만`, 'text-[#16a34a]'],
+                            ['현재 대비', `+${((420 / gfa - 1) * 100).toFixed(0)}%`],
+                            ['손익분기', `${((420 * constructionCost + 500) / (noi * (420 / gfa))).toFixed(1)}년`],
+                          ],
+                        },
+                        {
+                          title: '리모델링',
+                          rows: [
+                            ['공사 범위', remodelingRange || 'none'],
+                            ['시공비', `${constructionCost}만원/㎡`],
+                            ['총 공사비', `${Math.round(gfa * constructionCost * 0.3).toLocaleString('ko-KR')}만`, 'text-[#dc2626]'],
+                            ['임대료 상승 기대', '+10~15% 추정'],
+                            ['개선 후 NOI 추정', `${Math.round(noi * 1.12).toLocaleString('ko-KR')}만`, 'text-[#16a34a]'],
+                            ['현재 대비', '+12% 추정'],
+                            ['손익분기', `${(gfa * constructionCost * 0.3 / (noi * 0.12)).toFixed(1)}년`],
+                          ],
+                        },
+                      ].map((card, cardIdx) => (
+                        <div key={cardIdx} className="border border-[#e7e7ea] rounded-[12px] p-4">
+                          <h4 className="font-semibold mb-3">{card.title}</h4>
+                          <table className="w-full text-xs">
+                            <tbody>
+                              {card.rows.map((row, i) => (
+                                <tr key={i} className="border-b border-[#f1f1f3] last:border-b-0">
+                                  <td className="py-2 px-2 text-[#666]">{row[0]}</td>
+                                  <td className={`py-2 px-2 text-right font-semibold whitespace-nowrap ${row[2] || ''}`}>{row[1]}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="mt-3 pt-3 border-t border-[#f1f1f3] flex items-center gap-1.5">
+                            <span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${elevator === '있음' ? 'bg-[#16a34a]' : elevator === '설치예정' ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'}`} />
+                            <span className="text-[11px] text-[#666]">
+                              {elevator === '있음' ? '엘리베이터 있음' : elevator === '설치예정' ? '엘리베이터 설치예정 (+4,500만 반영)' : '엘리베이터 없음'}
+                            </span>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
                 )}
 
                 {/* 리스크 */}
                 {activeTab === '리스크' && (
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/50">
-                      <tr>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">리스크 항목</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">수준</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">영향</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">대응</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        {
-                          label: 'DSCR 미달',
-                          level: dscr >= 1 ? '낮음' : dscr >= 0.8 ? '중간' : '높음',
-                          color: dscr >= 1 ? 'text-green-600' : dscr >= 0.8 ? 'text-amber-600' : 'text-red-600',
-                          impact: `현재 ${dscr.toFixed(2)}x — ${dscr >= 1 ? '금융비용 충분 커버' : '금융비용 미달'}`,
-                          action: dscr >= 1 ? '현 구조 유지 가능' : '매입가 협상 또는 월세 인상 검토',
-                        },
-                        {
-                          label: '공실 리스크',
-                          level: vacancy <= 10 ? '낮음' : vacancy <= 20 ? '중간' : '높음',
-                          color: vacancy <= 10 ? 'text-green-600' : vacancy <= 20 ? 'text-amber-600' : 'text-red-600',
-                          impact: `공실률 ${vacancy}% 가정`,
-                          action: '임차인 업종 다양화, 장기 임대 계약 유도',
-                        },
-                        {
-                          label: 'LTV 리스크',
-                          level: ltv <= 60 ? '낮음' : ltv <= 75 ? '중간' : '높음',
-                          color: ltv <= 60 ? 'text-green-600' : ltv <= 75 ? 'text-amber-600' : 'text-red-600',
-                          impact: `LTV ${ltv.toFixed(1)}% — ${ltv > 70 ? '고레버리지 구조' : '안정적 레버리지'}`,
-                          action: ltv > 70 ? '자기자본 비중 확대 권장' : '현 구조 유지 가능',
-                        },
-                        {
-                          label: '도로확폭',
-                          level: roadRisk ? '중간' : '낮음',
-                          color: roadRisk ? 'text-amber-600' : 'text-green-600',
-                          impact: roadRisk ? '인접도로 4m 미만 — 확폭 대상 가능성' : '도로확폭 리스크 미반영',
-                          action: '도시계획도로 저촉 여부 확인 필요',
-                        },
-                        {
-                          label: '엘리베이터',
-                          level: elevator === '있음' ? '낮음' : elevator === '설치예정' ? '중간' : '중간',
-                          color: elevator === '있음' ? 'text-green-600' : 'text-amber-600',
-                          impact: elevator === '있음' ? '기설치 — 임차인 유치 유리' : elevator === '설치예정' ? 'Bankability -3점 반영' : '미설치 — 임차인 선호도 저하',
-                          action: elevator !== '있음' ? '엘리베이터 설치 검토 (비용 대비 임대수익 증가 확인)' : '현 상태 유지',
-                        },
-                        {
-                          label: 'CAP Rate',
-                          level: cap >= 5 ? '낮음' : cap >= 3.5 ? '중간' : '높음',
-                          color: cap >= 5 ? 'text-green-600' : cap >= 3.5 ? 'text-amber-600' : 'text-red-600',
-                          impact: `CAP ${cap.toFixed(2)}% — ${cap >= 5 ? '수익성 양호' : cap >= 3.5 ? '수익성 보통' : '수익성 낮음'}`,
-                          action: cap < 3.5 ? '매입가 인하 또는 임대수익 개선 필요' : '현 구조 유지 가능',
-                        },
-                      ].map((row, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-4 py-3 text-[13px] font-medium">{row.label}</td>
-                          <td className={`px-4 py-3 text-[13px] font-semibold ${row.color}`}>{row.level}</td>
-                          <td className="px-4 py-3 text-[13px]">{row.impact}</td>
-                          <td className="px-4 py-3 text-[13px] text-muted-foreground">{row.action}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="p-5 space-y-6">
+                    {/* 리스크 등급 배지 */}
+                    <div className="flex items-center gap-2">
+                      <span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${bankabilityScore >= 70 ? 'bg-[#16a34a]' : bankabilityScore >= 50 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'}`} />
+                      <span className="text-sm font-semibold">
+                        종합 리스크 {bankabilityScore >= 70 ? '낮음' : bankabilityScore >= 50 ? '보통' : '높음'}
+                      </span>
+                    </div>
+
+                    {/* 금융 리스크 */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">금융 리스크</h4>
+                      <table className="w-full text-sm">
+                        <thead className="text-xs text-[#777] uppercase">
+                          <tr className="border-b border-[#f1f1f3]">
+                            <th className="text-left py-2 px-3 font-medium">항목</th>
+                            <th className="text-left py-2 px-3 font-medium">현재값</th>
+                            <th className="text-left py-2 px-3 font-medium">상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ['LTV', `${ltv.toFixed(1)}%`, ltv <= 60 ? '양호' : ltv <= 70 ? '주의' : '위험', ltv <= 60 ? 'bg-[#16a34a]' : ltv <= 70 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                            ['DSCR 안전마진', dscr.toFixed(2), dscr >= 1.25 ? '양호' : dscr >= 1.0 ? '주의' : '위험', dscr >= 1.25 ? 'bg-[#16a34a]' : dscr >= 1.0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                            ['금리 민감도', `+1%p 시 DSCR ${((noi / (loan * 10000 * ((rate + 1) / 100)))).toFixed(2)}`, ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? '양호' : '위험', ((noi / (loan * 10000 * ((rate + 1) / 100)))) >= 1.25 ? 'bg-[#16a34a]' : 'bg-[#fbbf24]'],
+                            ['공실 민감도', `+10%p 시 NOI ${Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)).toLocaleString('ko-KR')}만`, Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)) > 0 ? '주의' : '위험', Math.round(Math.max(0, rent * 12 * (1 - Math.min(100, vacancy + 10) / 100) - 82)) > 0 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[#f1f1f3]">
+                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 건축 리스크 */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">건축 리스크</h4>
+                      <table className="w-full text-sm">
+                        <thead className="text-xs text-[#777] uppercase">
+                          <tr className="border-b border-[#f1f1f3]">
+                            <th className="text-left py-2 px-3 font-medium">항목</th>
+                            <th className="text-left py-2 px-3 font-medium">현재값</th>
+                            <th className="text-left py-2 px-3 font-medium">상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ['도로확폭', '인접도로 4m', '위험', 'bg-[#ef4444]'],
+                            ['용도지역', '제2종일반주거', '양호', 'bg-[#16a34a]'],
+                            ['건폐율 여유', '60% (법정 한도)', '주의', 'bg-[#fbbf24]'],
+                            ['용적률 여유', `200% → 현재 ${Math.round(gfa / 210 * 100)}% 사용`, gfa < 350 ? '양호' : gfa < 400 ? '주의' : '위험', gfa < 350 ? 'bg-[#16a34a]' : gfa < 400 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[#f1f1f3]">
+                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 시장 리스크 */}
+                    <div>
+                      <h4 className="text-sm font-semibold mb-3">시장 리스크</h4>
+                      <table className="w-full text-sm">
+                        <thead className="text-xs text-[#777] uppercase">
+                          <tr className="border-b border-[#f1f1f3]">
+                            <th className="text-left py-2 px-3 font-medium">항목</th>
+                            <th className="text-left py-2 px-3 font-medium">현재값</th>
+                            <th className="text-left py-2 px-3 font-medium">상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ['상권 유형', '합정 생활상권', '양호', 'bg-[#16a34a]'],
+                            ['공실 트렌드', `${vacancy}%`, vacancy <= 10 ? '양호' : vacancy <= 20 ? '주의' : '위험', vacancy <= 10 ? 'bg-[#16a34a]' : vacancy <= 20 ? 'bg-[#fbbf24]' : 'bg-[#ef4444]'],
+                            ['역세권 여부', '역세권 (합정역)', '양호', 'bg-[#16a34a]'],
+                          ].map((row, i) => (
+                            <tr key={i} className="border-b border-[#f1f1f3]">
+                              <td className="py-2.5 px-3 text-xs text-[#666]">{row[0]}</td>
+                              <td className="py-2.5 px-3 text-xs text-[#333]">{row[1]}</td>
+                              <td className="py-2.5 px-3"><span className="inline-flex items-center gap-1.5"><span className={`w-[6px] h-[6px] rounded-full flex-shrink-0 ${row[3]}`} /><span className="text-[12px] font-medium text-[#3f3f46]">{row[2]}</span></span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 경고 박스 */}
+                    <div className="bg-[#fffbeb] border border-[#fef08a] rounded-[8px] p-3">
+                      <p className="text-xs text-[#666] leading-relaxed">
+                        도로확폭 리스크: 인접도로가 4m 미만이면 도로확폭 대상이 될 수 있어 신축 시 유효 대지면적이 줄고 건폐율·용적률 산정에 불리해질 수 있습니다.
+                      </p>
+                    </div>
+                  </div>
                 )}
 
                 {/* 실거래 비교 */}
                 {activeTab === '실거래 비교' && (
                   <table className="w-full">
-                    <thead className="sticky top-0 bg-muted/50">
+                    <thead className="sticky top-0 bg-[#fafafb]">
                       <tr>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">거래일</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">위치</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">면적</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">거래가</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">㎡당</th>
-                        <th className="text-left text-[11px] uppercase text-muted-foreground font-medium px-4 py-3">유형</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
+                        <th className="text-left text-[11px] uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
                       </tr>
                     </thead>
                     <tbody>
                       {transactions.map((tx, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/30">
+                        <tr key={i} className="border-b border-[#f1f1f3]">
                           <td className="px-4 py-3 text-[13px]">{tx.date}</td>
                           <td className="px-4 py-3 text-[13px]">{tx.location}</td>
                           <td className="px-4 py-3 text-[13px]">{tx.area}</td>
-                          <td className="px-4 py-3 text-[13px] font-medium">{tx.price}</td>
+                          <td className="px-4 py-3 text-[13px] font-semibold">{tx.price}</td>
                           <td className="px-4 py-3 text-[13px]">{tx.pricePerM2}</td>
                           <td className="px-4 py-3 text-[13px]">{tx.type}</td>
                         </tr>
