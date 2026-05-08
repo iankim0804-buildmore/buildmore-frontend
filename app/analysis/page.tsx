@@ -595,7 +595,7 @@ export default function AnalysisPage() {
           </Button>
           
           {/* News ticker with gap and background */}
-          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-2 py-1 shadow-sm">
+          <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
             <NewsTicker news={topNews} />
           </div>
           
