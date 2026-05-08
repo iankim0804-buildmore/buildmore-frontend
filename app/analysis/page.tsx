@@ -1283,8 +1283,8 @@ export default function AnalysisPage() {
                         </div>
                       ))}
                     </div>
+                    <CTASection />
                   </div>
-                  <CTASection />
                 )}
 
                 {/* 리스크 */}
