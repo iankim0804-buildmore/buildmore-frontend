@@ -1226,7 +1226,7 @@ BuildMore 판단:
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <h3 className="text-[15px] font-bold text-gray-950 mb-2">DEAL SCORE</h3>
-                    <p className="text-xs leading-relaxed text-gray-600 break-keep">이 매물의 종합 딜 매력도를 평가한 점���입니다.</p>
+                    <p className="text-xs leading-relaxed text-gray-600 break-keep">이 매물의 종합 딜 매력도를 평가한 점수입니다.</p>
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="inline-flex items-baseline">
