@@ -598,10 +598,9 @@ export default function AnalysisPage() {
                 <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   분석 중...
-                    </div>
-                    <CTASection />
-                  </div>
-                )}
+                </div>
+              </div>
+            )}
             <div ref={chatEndRef} />
           </div>
         </ScrollArea>
