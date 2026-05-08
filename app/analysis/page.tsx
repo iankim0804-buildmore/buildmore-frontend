@@ -117,7 +117,7 @@ export default function AnalysisPage() {
   // Panel B: 임대조건
   const [rent, setRent] = useState(320)
   const [deposit, setDeposit] = useState(5000)
-  const [vacancy, setVacancy] = useState<10 | 20 | 30>(20)
+  const [vacancy, setVacancy] = useState(20)
   
   // Panel C: 건축물대장 (read-only from API, using defaults)
   const buildingData = { permitYear: 2000, approvalYear: 2001, registerArea: 420, maxGfa: 420 }
@@ -601,14 +601,22 @@ export default function AnalysisPage() {
                     <NumField value={rate} onChange={setRate} step={0.1} />
                   </div>
                   <div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-foreground transition-all" style={{ width: `${ltv}%` }} />
+                    <div className="flex items-center justify-center gap-2">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={ltv}
+                        onChange={(e) => setLoan((price * parseFloat(e.target.value)) / 100)}
+                        className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, #1a1a1a 0%, #1a1a1a ${ltv}%, #f5f5f5 ${ltv}%, #f5f5f5 100%)`,
+                          outline: 'none'
+                        }}
+                      />
                     </div>
-                    <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
-                      <span>급매</span>
-                      <span>LTV {ltv.toFixed(1)}%</span>
-                      <span>AI 할인 5~10% ��용</span>
-                    </div>
+                    <p className="text-center text-[12px] font-semibold text-foreground mt-2">LTV {ltv.toFixed(1)}%</p>
                   </div>
                 </div>
               </div>
@@ -646,10 +654,22 @@ export default function AnalysisPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500" style={{ width: '42%' }} />
+                    <div className="flex items-center justify-center gap-2">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={vacancy}
+                        onChange={(e) => setVacancy(parseInt(e.target.value))}
+                        className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+                        style={{
+                          background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${vacancy}%, #f5f5f5 ${vacancy}%, #f5f5f5 100%)`,
+                          outline: 'none'
+                        }}
+                      />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">공실민감도</p>
+                    <p className="text-center text-[12px] font-semibold text-foreground mt-2">공실민감도 {vacancy}%</p>
                   </div>
                 </div>
               </div>
