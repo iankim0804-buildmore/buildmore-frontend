@@ -375,7 +375,7 @@ export default function AnalysisPage() {
                   </button>
                 ))}
                 <button
-                  onClick={() => handleComingSoon('검색 기록 ��리')}
+                  onClick={() => handleComingSoon('검색 기록 ���리')}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -525,7 +525,8 @@ export default function AnalysisPage() {
                 </div>
               </div>
             ))}
-            {isAnalyzing && (
+          </div>
+          {isAnalyzing && (
               <div className="flex justify-start">
                 <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
