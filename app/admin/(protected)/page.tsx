@@ -40,13 +40,45 @@ export default function AdminDashboardPage() {
   }, [])
 
   useEffect(() => {
-    // Initial fetch
+    // 1. Initial immediate fetch
     fetchData()
 
-    // Set up 30-second polling
-    const interval = setInterval(fetchData, 30000)
+    // 2. Fetch on window focus
+    const onFocus = () => {
+      fetchData()
+    }
+    window.addEventListener('focus', onFocus)
 
-    return () => clearInterval(interval)
+    // 3. Calculate milliseconds until next KST 09:10
+    function msUntilNext0910KST() {
+      const now = new Date()
+      // Create KST time (UTC+9)
+      const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+      const target = new Date(kstNow)
+      target.setHours(9, 10, 0, 0)
+      // If already past 09:10 today, schedule for next day
+      if (kstNow >= target) {
+        target.setDate(target.getDate() + 1)
+      }
+      return target.getTime() - kstNow.getTime()
+    }
+
+    // 4. Schedule daily fetch at 09:10 KST
+    let dailyInterval: ReturnType<typeof setInterval>
+    const initialTimeout = setTimeout(() => {
+      // Fetch immediately at 09:10
+      fetchData()
+      // Then set up 24-hour interval
+      dailyInterval = setInterval(() => {
+        fetchData()
+      }, 24 * 60 * 60 * 1000)
+    }, msUntilNext0910KST())
+
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      clearTimeout(initialTimeout)
+      if (dailyInterval) clearInterval(dailyInterval)
+    }
   }, [fetchData])
 
   if (isLoading && !data) {
