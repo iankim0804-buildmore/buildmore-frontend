@@ -823,7 +823,8 @@ export default function AnalysisPage() {
           {/* ============================================================ */}
           {/* RIGHT CONTENT AREA */}
           {/* ============================================================ */}
-          <ScrollArea className="p-3.5 h-full">
+          <div className="relative flex flex-col h-full overflow-hidden">
+          <ScrollArea className="flex-1 p-3.5 pb-[280px]">
             <h1 className="text-[26px] font-extrabold text-foreground mb-4">분석 결과</h1>
 
             {/* Top 3 cards */}
@@ -940,7 +941,7 @@ export default function AnalysisPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col h-full min-h-0">
+            <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 relative">
               {/* Tabs */}
               <div className="h-[46px] flex border-b border-border flex-shrink-0">
                 {tabs.map(tab => (
@@ -958,8 +959,8 @@ export default function AnalysisPage() {
                 ))}
               </div>
               
-              {/* Tab content - scrollable with padding for fixed CTA */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-white pb-[240px]">
+              {/* Tab content */}
+              <div className="flex-1 min-h-0 overflow-y-auto bg-white">
                 {/* 금융 분석 */}
                 {activeTab === '금융 분석' && (
                   <div className="p-5 space-y-6 whitespace-normal break-keep leading-relaxed">
@@ -988,7 +989,7 @@ export default function AnalysisPage() {
                               { label: '유효총수입 (EGI)', value: rent * 12 * (1 - vacancyRate / 100), isOperating: false },
                               { label: '운영비용 (OPEX)', value: -82, isOperating: false },
                               { label: '순영업수익 (NOI)', value: noi, isOperating: true },
-                              { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
+                              { label: '부���상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
                               { label: '세전 현금흐름', value: noi - loan * 10000 * (rate / 100), isOperating: false },
                             ].map((row, i) => (
                               <tr key={i} className={row.isOperating ? 'bg-[#fafafa] font-bold border-t border-b border-[#e7e7ea]' : ''}>
@@ -1324,13 +1325,17 @@ export default function AnalysisPage() {
                   </div>
                 )}
               </div>
-              
-              {/* Fixed CTA at bottom */}
-              <div className="sticky bottom-3 z-30 px-5">
-                <AnalysisCTA />
-              </div>
             </div>
+            
           </ScrollArea>
+          
+          {/* Fixed CTA at bottom */}
+          <div className="absolute bottom-0 left-0 right-0 z-30 mx-3.5 mb-3.5">
+            <div className="bg-white rounded-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border border-border overflow-hidden">
+              <AnalysisCTA />
+            </div>
+          </div>
+          </div>
         </div>
       </div>
       </div>
