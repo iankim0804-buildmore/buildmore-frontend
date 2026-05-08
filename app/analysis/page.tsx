@@ -766,9 +766,9 @@ export default function AnalysisPage() {
       </button>
 
       {/* ============================================================ */}
-      {/* B. CHAT AREA (flex-1) */}
+      {/* B. CHAT AREA (축소된 폭) */}
       {/* ============================================================ */}
-      <div className="flex-1 flex flex-col bg-background border-r border-border">
+      <div className="w-[280px] flex-shrink-0 flex flex-col bg-background border-r border-border">
         {/* Chat header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
           <h2 className="text-sm font-medium text-foreground">대화</h2>
@@ -776,7 +776,7 @@ export default function AnalysisPage() {
         </div>
 
         {/* Chat content */}
-        <div className="flex-1 p-3 overflow-hidden flex flex-col">
+        <div className="flex-1 p-3 overflow-hidden flex flex-col min-w-0">
           {/* Messages */}
           <ScrollArea className="flex-1">
             <div className="space-y-3 pr-4">
@@ -895,7 +895,7 @@ export default function AnalysisPage() {
                         step="0.1"
                         value={ltv}
                         onChange={(e) => setLoan((price * parseFloat(e.target.value)) / 100)}
-                        className="flex-1 h-2 bg-muted rounded-full appearance-none cursor-pointer"
+                        className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #1a1a1a 0%, #1a1a1a ${ltv}%, #f5f5f5 ${ltv}%, #f5f5f5 100%)`,
                           outline: 'none'
@@ -949,7 +949,7 @@ export default function AnalysisPage() {
                         step="1"
                         value={vacancySensitivity}
                         onChange={(e) => setVacancySensitivity(parseInt(e.target.value))}
-                        className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
+                        className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${vacancySensitivity}%, #f5f5f5 ${vacancySensitivity}%, #f5f5f5 100%)`,
                           outline: 'none'
