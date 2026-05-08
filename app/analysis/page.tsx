@@ -1393,31 +1393,33 @@ export default function AnalysisPage() {
 
                 {/* 실거래 비교 */}
                 {activeTab === '실거래 비교' && (
-                  <table className="w-full whitespace-normal break-keep leading-relaxed">
-                    <thead className="sticky top-0 bg-[#fafafb]">
-                      <tr>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
-                        <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((tx, i) => (
-                        <tr key={i} className="border-b border-[#f1f1f3]">
-                          <td className="px-4 py-3 text-sm break-keep">{tx.date}</td>
-                          <td className="px-4 py-3 text-sm break-keep">{tx.location}</td>
-                          <td className="px-4 py-3 text-sm break-keep">{tx.area}</td>
-                          <td className="px-4 py-3 text-sm font-semibold tabular-nums">{tx.price}</td>
-                          <td className="px-4 py-3 text-sm tabular-nums">{tx.pricePerM2}</td>
-                          <td className="px-4 py-3 text-sm break-keep">{tx.type}</td>
+                  <div className="space-y-0">
+                    <table className="w-full whitespace-normal break-keep leading-relaxed">
+                      <thead className="sticky top-0 bg-[#fafafb]">
+                        <tr>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래일</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">위치</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">면적</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">거래가</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">㎡당</th>
+                          <th className="text-left text-xs uppercase text-[#777] font-medium px-4 py-3 tracking-wide">유형</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <CTASection />
+                      </thead>
+                      <tbody>
+                        {transactions.map((tx, i) => (
+                          <tr key={i} className="border-b border-[#f1f1f3]">
+                            <td className="px-4 py-3 text-sm break-keep">{tx.date}</td>
+                            <td className="px-4 py-3 text-sm break-keep">{tx.location}</td>
+                            <td className="px-4 py-3 text-sm break-keep">{tx.area}</td>
+                            <td className="px-4 py-3 text-sm font-semibold tabular-nums">{tx.price}</td>
+                            <td className="px-4 py-3 text-sm tabular-nums">{tx.pricePerM2}</td>
+                            <td className="px-4 py-3 text-sm break-keep">{tx.type}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <CTASection />
+                  </div>
                 )}
               </div>
             </div>
