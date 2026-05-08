@@ -768,7 +768,7 @@ export default function AnalysisPage() {
       {/* ============================================================ */}
       {/* B. CHAT AREA (축소된 폭) */}
       {/* ============================================================ */}
-      <div className="w-[280px] flex-shrink-0 flex flex-col bg-background border-r border-border">
+      <div className="w-[420px] flex-shrink-0 flex flex-col bg-background border-r border-border">
         {/* Chat header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
           <h2 className="text-sm font-medium text-foreground">대화</h2>
@@ -1089,7 +1089,7 @@ export default function AnalysisPage() {
                   <span className="text-muted-foreground font-bold">상권</span>
                   <span>합정 생활상권 · 역세권 · 팝업/F&B</span>
                   <span className="text-muted-foreground font-bold">입력값</span>
-                  <span>매입 {price.toFixed(1)}억 / 대출 {loan.toFixed(1)}억 / 금리 {rate.toFixed(1)}%</span>
+                  <span>매입 {price.toFixed(1)}�� / 대출 {loan.toFixed(1)}억 / 금리 {rate.toFixed(1)}%</span>
                   <span className="text-muted-foreground font-bold">분석엔진</span>
                   <span>BuildMore v2.1</span>
                   <span className="text-muted-foreground font-bold">설명</span>
