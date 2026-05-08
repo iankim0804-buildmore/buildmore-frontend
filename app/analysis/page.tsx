@@ -1303,7 +1303,6 @@ BuildMore 판단:
                         type="button"
                         onClick={() => {
                           setShowMapModal(true)
-                          // 모달이 열린 후 지도 초기화
                           setTimeout(() => initModalMap(), 100)
                         }}
                         className="p-1 hover:bg-muted rounded transition-colors"
@@ -1314,6 +1313,7 @@ BuildMore 판단:
                     )}
                   </div>
                 </div>
+
                 {mapError ? (
                   <div className="flex-1 bg-gray-50 border border-dashed border-gray-200 rounded-lg flex items-center justify-center px-3 py-4">
                     <div className="text-center">
@@ -1322,18 +1322,24 @@ BuildMore 판단:
                       <p className="text-[10px] text-gray-400">브라우저 콘솔(F12)에서 [kakao-map] 로그를 확인해주세요.</p>
                     </div>
                   </div>
-                ) : mapLoading ? (
-                  <div className="flex-1 bg-gray-100 rounded-lg flex items-center justify-center min-h-[140px]">
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">지도 로딩 중...</p>
-                    </div>
-                  </div>
                 ) : (
-                  <div 
-                    ref={mapRef}
-                    className="flex-1 bg-gray-100 rounded-lg overflow-hidden min-h-[140px]"
-                  />
+                  <div className="relative flex-1 min-h-[140px] overflow-hidden rounded-lg bg-gray-100">
+                    {/* Map container - always rendered */}
+                    <div 
+                      ref={mapRef}
+                      className="absolute inset-0 h-full w-full"
+                    />
+
+                    {/* Loading overlay */}
+                    {mapLoading && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100/80">
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">지도 로딩 중...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
