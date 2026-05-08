@@ -170,9 +170,9 @@ export default function AnalysisPage() {
     setBankabilityScore(scoreVal)
     
     if (scoreVal >= 68 && dscrVal >= 0.9) {
-      setDealSignal('매수')
-    } else if (scoreVal <= 35 || vacancy >= 30) {
       setDealSignal('매수보류')
+    } else if (scoreVal <= 35 || vacancy >= 30) {
+      setDealSignal('매수')
     } else {
       setDealSignal('가격협상')
     }
@@ -511,11 +511,11 @@ export default function AnalysisPage() {
           </div>
           
           {/* Pills */}
-          <div className="flex justify-end gap-2">
-            <span className="px-2.5 py-1 bg-muted text-[11px] rounded-full">제2종일반주거</span>
-            <span className="px-2.5 py-1 bg-muted text-[11px] rounded-full">법정 건폐율 60%</span>
-            <span className="px-2.5 py-1 bg-muted text-[11px] rounded-full">법정 용적률 200%</span>
-            <span className="px-2.5 py-1 bg-muted text-[11px] rounded-full">대지 210㎡</span>
+          <div className="flex justify-end gap-1.5 flex-nowrap">
+            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">제2종일반주거</span>
+            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">법정 건폐율 60%</span>
+            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">법정 용적률 200%</span>
+            <span className="px-2 py-1 bg-muted text-[10.5px] rounded-full whitespace-nowrap">대지 210㎡</span>
           </div>
         </header>
 
@@ -545,24 +545,24 @@ export default function AnalysisPage() {
             <div className="w-px h-8 bg-border" />
             
             {/* KPIs */}
-            <div className="flex items-center gap-4">
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase">NOI</p>
+            <div className="grid grid-cols-[1fr_1px_1fr_1px_1fr_1px_1fr] items-center gap-x-5">
+              <div className="text-center">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">NOI</p>
                 <p className="text-[17px] font-semibold">{noi.toLocaleString('ko-KR')}만</p>
               </div>
-              <div className="w-px h-8 bg-border" />
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase">DSCR</p>
+              <div className="w-px h-8 bg-border justify-self-center" />
+              <div className="text-center">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">DSCR</p>
                 <p className={`text-[17px] font-semibold ${dscr < 1 ? 'text-red-600' : ''}`}>{dscr.toFixed(2)}x</p>
               </div>
-              <div className="w-px h-8 bg-border" />
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase">LTV</p>
+              <div className="w-px h-8 bg-border justify-self-center" />
+              <div className="text-center">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">LTV</p>
                 <p className="text-[17px] font-semibold">{ltv.toFixed(1)}%</p>
               </div>
-              <div className="w-px h-8 bg-border" />
-              <div>
-                <p className="text-[11px] text-muted-foreground uppercase">CAP</p>
+              <div className="w-px h-8 bg-border justify-self-center" />
+              <div className="text-center">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">CAP</p>
                 <p className="text-[17px] font-semibold">{cap.toFixed(1)}%</p>
               </div>
             </div>
@@ -819,26 +819,26 @@ export default function AnalysisPage() {
               {/* DEAL SIGNAL */}
               <div className="bg-white border border-border rounded-[14px] p-4">
                 <p className="text-[15px] font-bold mb-3">DEAL SIGNAL</p>
-                <p className={`text-[28px] font-bold mb-2 ${dealSignal !== '매수' ? 'text-red-600' : ''}`}>
+                <p className={`text-[28px] font-bold mb-2 ${dealSignal === '매수보류' ? 'text-red-600' : dealSignal === '가격협상' ? 'text-amber-600' : ''}`}>
                   {dealSignal}
                 </p>
                 <p className="text-[13px] text-muted-foreground mb-4">
-                  {dealSignal === '매수' 
-                    ? 'DSCR 및 수익률 양호' 
+                  {dealSignal === '매수보류'
+                    ? 'DSCR 및 수익률 양호'
                     : dealSignal === '가격협상'
                       ? 'DSCR 기준 미달, 매입가 협상 권장'
                       : '공실률 과다, 재검토 필요'}
                 </p>
                 <div className="relative h-1 bg-muted rounded-full">
-                  <div 
+                  <div
                     className="absolute w-3.5 h-3.5 bg-foreground rounded-full -top-1.5"
-                    style={{ left: `${dealSignal === '매수' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
+                    style={{ left: `${dealSignal === '매수보류' ? 10 : dealSignal === '가격협상' ? 50 : 90}%` }}
                   />
                 </div>
                 <div className="flex justify-between mt-2 text-[11px] text-muted-foreground">
-                  <span>매수</span>
-                  <span className="text-red-600">가격협상</span>
                   <span>매수보류</span>
+                  <span className="text-amber-600">가격협상</span>
+                  <span className="text-red-600">매수</span>
                 </div>
               </div>
 
@@ -971,7 +971,7 @@ export default function AnalysisPage() {
                             {[
                               { label: '연간 임대수입 (PGI)', value: rent * 12, isOperating: false },
                               { label: '공실 손실', value: -(rent * 12 * (vacancy / 100)), isOperating: false },
-                              { label: '유효총수입 (EGI)', value: rent * 12 * (1 - vacancy / 100), isOperating: false },
+                              { label: '유효총수��� (EGI)', value: rent * 12 * (1 - vacancy / 100), isOperating: false },
                               { label: '운영비용 (OPEX)', value: -82, isOperating: false },
                               { label: '순영업수익 (NOI)', value: noi, isOperating: true },
                               { label: '부채상환 (DS)', value: -(loan * 10000 * (rate / 100)), isOperating: false },
