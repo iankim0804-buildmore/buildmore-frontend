@@ -85,7 +85,7 @@ function highlightHeadline(headline: string): React.ReactNode {
   // 인라인으로 이어붙여 span 사이 공백 방지
   return <>{parts.map((part) =>
     keywords.includes(part)
-      ? <span key={part} className="font-bold">{part}</span>
+      ? <span key={part}>{part}</span>
       : <span key={part}>{part}</span>
   )}</>
 
