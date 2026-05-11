@@ -99,19 +99,6 @@ const addressHistory = [
   '서울특별시 송파구 잠실동 789-0',
 ]
 
-const topNews = [
-  { id: 1, title: "서울 상업용 부동산 거래량 전월 대비 증가", url: "#" },
-  { id: 2, title: "기준금리 동결 전망에 수익형 부동산 관망세 지속", url: "#" },
-  { id: 3, title: "마포·성수권 중소형 빌딩 매수 문의 증가", url: "#" },
-  { id: 4, title: "임대료 상승 지역과 공실률 확대 지역 양극화", url: "#" },
-  { id: 5, title: "금융권, 상업용 부동산 담보대출 심사 강화", url: "#" },
-  { id: 6, title: "역세권 리테일 공실률 안정세", url: "#" },
-  { id: 7, title: "서울 주요 상권 유동인구 회복세", url: "#" },
-  { id: 8, title: "소형 업무시설 투자 수익률 지역별 편차 확대", url: "#" },
-  { id: 9, title: "노후 건축물 리모델링 수요 증가", url: "#" },
-  { id: 10, title: "매입가 조정 가능한 급매성 물건 관심 증가", url: "#" },
-]
-
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
@@ -997,7 +984,7 @@ BuildMore 판단:
           
           {/* News ticker with gap and background */}
           <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
-            <NewsTicker news={topNews} />
+            <NewsTicker onAddressSelect={handleAddressSelect} />
           </div>
           
           {/* KPIs - right aligned */}
