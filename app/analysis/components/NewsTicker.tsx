@@ -52,44 +52,6 @@ function signalColor(signal: string) {
   return signal === 'favorable' ? 'text-blue-600' : 'text-orange-500'
 }
 
-function highlightHeadline(headline: string): React.ReactNode {
-  // 핵심 키워드들 - 상업용 부동산, 상권, 거래 관련
-  const keywords = [
-    '상업용',
-    '부동산',
-    '거래량',
-    '상권',
-    '임대료',
-    '공실률',
-    '매수',
-    '매입',
-    '리모델링',
-    '대출',
-    '금리',
-    '수익률',
-    '역세권',
-    '매물',
-    '투자',
-    '강화',
-    '증가',
-    '상승',
-    '감소',
-    '회복',
-    '안정',
-  ]
-
-  // 키워드를 기준으로 텍스트 분할
-  const regex = new RegExp(`(${keywords.join('|')})`, 'g')
-  const parts = headline.split(regex).filter(part => part.length > 0) // 빈 부분 제거
-
-  // 인라인으로 이어붙여 span 사이 공백 방지
-  return <>{parts.map((part) =>
-    keywords.includes(part)
-      ? <span key={part}>{part}</span>
-      : <span key={part}>{part}</span>
-  )}</>
-
-}
 
 function translateTransactionType(type: string): string {
   const map: Record<string, string> = {
@@ -143,7 +105,7 @@ function TickerPopup({
         <div className="p-5 border-b border-border flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-2">
             <h2 className="text-[17px] font-bold leading-snug text-gray-950 break-keep flex-1">
-              {highlightHeadline(detail.headline)}
+              {detail.headline}
             </h2>
             <button
               type="button"
@@ -319,7 +281,7 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
               className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-70 transition-opacity flex items-center gap-2 cursor-pointer hover:underline underline-offset-2"
             >
               <span className="shrink-0">•</span>
-              {highlightHeadline(item.headline)}
+              {item.headline}
             </button>
           ))}
         </div>
