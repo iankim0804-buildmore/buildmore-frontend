@@ -80,18 +80,18 @@ function highlightHeadline(headline: string): React.ReactNode {
 
   // 키워드를 기준으로 텍스트 분할
   const regex = new RegExp(`(${keywords.join('|')})`, 'g')
-  const parts = headline.split(regex)
+  const parts = headline.split(regex).filter(part => part.length > 0) // 빈 부분 제거
 
   return (
     <>
-      {parts.map((part, idx) => {
+      {parts.map((part) => {
         const isKeyword = keywords.includes(part)
         return isKeyword ? (
-          <span key={idx} className="font-bold">
+          <span key={part} className="font-bold">
             {part}
           </span>
         ) : (
-          <span key={idx}>{part}</span>
+          <span key={part}>{part}</span>
         )
       })}
     </>
