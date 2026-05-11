@@ -309,21 +309,43 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
     await fetchDetail(item.id, item)
   }, [fetchDetail])
 
+  // ── rAF 기반 seamless 스크롤 ────────────────────────────────────
+  const trackRef = useRef<HTMLDivElement>(null)
+  const offsetRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+  const SPEED = 0.6 // px/frame
+
+  useEffect(() => {
+    if (items.length === 0) return
+
+    const step = () => {
+      const el = trackRef.current
+      if (!el) { rafRef.current = requestAnimationFrame(step); return }
+
+      // 트랙 전체 너비의 절반 = 한 세트 너비 (아이템을 2벌 복사했으므로)
+      const half = el.scrollWidth / 2
+      offsetRef.current += SPEED
+      if (offsetRef.current >= half) offsetRef.current -= half
+
+      el.style.transform = `translateX(${-offsetRef.current}px)`
+      rafRef.current = requestAnimationFrame(step)
+    }
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [items])
+
   if (items.length === 0) return null
 
-  // ── marquee 렌더 ────────────────────────────────────────────────
-  // 아이템을 2번 반복해서 끊김 없는 루프 구현
-  const repeated = [...items, ...items]
-  const animDuration = `${items.length * 6}s`
+  // 아이템을 3벌 복사 → 짧은 화면에서도 항상 넘치도록
+  const repeated = [...items, ...items, ...items]
 
   return (
     <>
       <div className="flex-1 min-w-0 overflow-hidden">
         <div
-          className="flex gap-16 whitespace-nowrap"
-          style={{
-            animation: `ticker-scroll ${animDuration} linear infinite`,
-          }}
+          ref={trackRef}
+          className="flex gap-16 whitespace-nowrap will-change-transform"
         >
           {repeated.map((item, idx) => (
             <button
@@ -347,13 +369,6 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
           onNewsSelect={(id) => fetchDetail(id)}
         />
       )}
-
-      <style jsx global>{`
-        @keyframes ticker-scroll {
-          0%   { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </>
   )
 }
