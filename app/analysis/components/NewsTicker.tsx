@@ -52,10 +52,6 @@ function signalColor(signal: string) {
   return signal === 'favorable' ? 'text-blue-600' : 'text-orange-500'
 }
 
-function signalIcon(signal: string) {
-  return signal === 'favorable' ? '📈' : '📊'
-}
-
 function highlightHeadline(headline: string): React.ReactNode {
   // 핵심 키워드들 - 상업용 부동산, 상권, 거래 관련
   const keywords = [
@@ -91,7 +87,7 @@ function highlightHeadline(headline: string): React.ReactNode {
       {parts.map((part, idx) => {
         const isKeyword = keywords.includes(part)
         return isKeyword ? (
-          <span key={idx} className="font-bold underline decoration-wavy">
+          <span key={idx} className="font-bold">
             {part}
           </span>
         ) : (
@@ -317,7 +313,7 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
     <>
       <div className="flex-1 min-w-0 overflow-hidden">
         <div
-          className="flex gap-10 whitespace-nowrap"
+          className="flex gap-16 whitespace-nowrap"
           style={{
             animation: `ticker-scroll ${animDuration} linear infinite`,
           }}
@@ -327,9 +323,9 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
               key={`${item.id}-${idx}`}
               type="button"
               onClick={() => handleItemClick(item)}
-              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-80 transition-opacity"
+              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-80 transition-opacity flex items-center gap-2"
             >
-              <span className="mr-1.5 text-[12px]">{signalIcon(item.signal)}</span>
+              <span className="shrink-0">•</span>
               {highlightHeadline(item.headline)}
             </button>
           ))}
