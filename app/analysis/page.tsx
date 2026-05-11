@@ -314,7 +314,7 @@ export default function AnalysisPage() {
     // DEAL SIGNAL 점수 계산
     // 기본 점수: 63점
     // DSCR 패널티: (0.95 - DSCR) * 24 (DSCR 낮을수록 점수 감소)
-    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 높을수록 점수 감���)
+    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 ��을수록 점수 감���)
     // 엘리베이터 미설치: -3점
     const vacancyPenalty = (vacancyRate - 10) * (vacancySensitivity / 100) * 1.2 // 공실률 10% 기준, 민감도 반영
     const scoreVal = Math.max(18, Math.min(88,
@@ -737,9 +737,11 @@ BuildMore 판단:
       {/* ============================================================ */}
       {/* TOPBAR (66px) - FULL WIDTH */}
       {/* ============================================================ */}
-      <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_400px] items-center flex-shrink-0">
+      <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_auto] items-center flex-shrink-0">
         {/* Logo */}
-        <div className="text-[22px] font-extrabold text-foreground tracking-tight">BUILDMORE</div>
+        <Link href="/" className="text-[22px] font-extrabold text-foreground tracking-tight hover:opacity-80 transition-opacity">
+          BUILDMORE
+        </Link>
         
         {/* Address search */}
         <div className="flex justify-center">
@@ -791,13 +793,15 @@ BuildMore 판단:
           </div>
         </div>
         
-        {/* Pills */}
-        <div className="flex justify-end gap-1 flex-nowrap">
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">제2종일반주거</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 건폐율 60%</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 용적률 200%</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">대지 210㎡</span>
-        </div>
+        {/* Navigation Links */}
+        <nav className="flex items-center gap-6">
+          <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            About
+          </Link>
+          <Link href="/login" className="text-sm font-medium text-foreground bg-foreground/5 hover:bg-foreground/10 px-4 py-2 rounded-lg transition-colors">
+            로그인
+          </Link>
+        </nav>
       </header>
 
       {/* MAIN LAYOUT - Sidebar + Content */}
@@ -930,9 +934,18 @@ BuildMore 판단:
       {/* ============================================================ */}
       <div className="w-[420px] flex-shrink-0 flex flex-col bg-background border-r border-border">
         {/* Chat header */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
-          <h2 className="text-sm font-medium text-foreground">대화</h2>
-          <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+        <div className="flex-shrink-0 border-b border-border bg-card">
+          <div className="h-12 flex items-center justify-between px-4">
+            <h2 className="text-sm font-medium text-foreground">대화</h2>
+            <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+          </div>
+          {/* Address property pills (sticky) */}
+          <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">제2종일반주거</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 60%</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 200%</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 210㎡</span>
+          </div>
         </div>
 
         {/* Chat content */}
