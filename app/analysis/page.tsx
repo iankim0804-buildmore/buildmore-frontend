@@ -314,7 +314,7 @@ export default function AnalysisPage() {
     // DEAL SIGNAL 점수 계산
     // 기본 점수: 63점
     // DSCR 패널티: (0.95 - DSCR) * 24 (DSCR 낮을수록 점수 감소)
-    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 ��을수록 점수 감���)
+    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 ���을수록 점수 감���)
     // 엘리베이터 미설치: -3점
     const vacancyPenalty = (vacancyRate - 10) * (vacancySensitivity / 100) * 1.2 // 공실률 10% 기준, 민감도 반영
     const scoreVal = Math.max(18, Math.min(88,
@@ -938,6 +938,11 @@ BuildMore 판단:
           <div className="h-12 flex items-center justify-between px-4">
             <h2 className="text-sm font-medium text-foreground">대화</h2>
             <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+          </div>
+          {/* Current address */}
+          <div className="px-4 pt-2.5 pb-1">
+            <p className="text-xs text-muted-foreground">분석 대상</p>
+            <p className="text-sm font-medium text-foreground mt-0.5 truncate">{address || '주소를 입력하세요'}</p>
           </div>
           {/* Address property pills (sticky) */}
           <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
