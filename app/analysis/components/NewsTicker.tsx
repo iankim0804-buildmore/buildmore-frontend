@@ -56,6 +56,52 @@ function signalIcon(signal: string) {
   return signal === 'favorable' ? '📈' : '📊'
 }
 
+function highlightHeadline(headline: string): React.ReactNode {
+  // 핵심 키워드들 - 상업용 부동산, 상권, 거래 관련
+  const keywords = [
+    '상업용',
+    '부동산',
+    '거래량',
+    '상권',
+    '임대료',
+    '공실률',
+    '매수',
+    '매입',
+    '리모델링',
+    '대출',
+    '금리',
+    '수익률',
+    '역세권',
+    '매물',
+    '투자',
+    '강화',
+    '증가',
+    '상승',
+    '감소',
+    '회복',
+    '안정',
+  ]
+
+  // 키워드를 기준으로 텍스트 분할
+  const regex = new RegExp(`(${keywords.join('|')})`, 'g')
+  const parts = headline.split(regex)
+
+  return (
+    <>
+      {parts.map((part, idx) => {
+        const isKeyword = keywords.includes(part)
+        return isKeyword ? (
+          <span key={idx} className="font-bold underline decoration-wavy">
+            {part}
+          </span>
+        ) : (
+          <span key={idx}>{part}</span>
+        )
+      })}
+    </>
+  )
+}
+
 function translateTransactionType(type: string): string {
   const map: Record<string, string> = {
     commercial_sale: '상업용매매',
@@ -108,7 +154,7 @@ function TickerPopup({
         <div className="p-5 border-b border-border flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-2">
             <h2 className="text-[17px] font-bold leading-snug text-gray-950 break-keep flex-1">
-              {detail.headline}
+              {highlightHeadline(detail.headline)}
             </h2>
             <button
               type="button"
@@ -206,7 +252,7 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
   const [openDetail, setOpenDetail] = useState<TickerDetail | null>(null)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── 뉴스 목록 조회 ──────────────────────────────────────────────
+  // ── 뉴스 목록 조회 ────────────────────────────────────────���─────
   const fetchTicker = useCallback(async () => {
     try {
       const res = await fetch('/api/news/ticker')
@@ -281,10 +327,10 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
               key={`${item.id}-${idx}`}
               type="button"
               onClick={() => handleItemClick(item)}
-              className={`shrink-0 text-[13px] font-medium hover:underline underline-offset-2 transition-colors ${signalColor(item.signal)}`}
+              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-80 transition-opacity"
             >
               <span className="mr-1.5 text-[12px]">{signalIcon(item.signal)}</span>
-              {item.headline}
+              {highlightHeadline(item.headline)}
             </button>
           ))}
         </div>
