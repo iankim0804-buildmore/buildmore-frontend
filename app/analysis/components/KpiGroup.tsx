@@ -15,7 +15,7 @@ export const KpiGroup = ({ noi, dscr, ltv, cap }: KpiGroupProps) => {
         <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{noi.toLocaleString('ko-KR')}만</p>
       </div>
       <div className="text-center">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">DSCR</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">은행식 DSCR</p>
         <p className={`mt-0.5 text-sm font-semibold tabular-nums ${dscr < 1 ? 'text-red-600' : 'text-foreground'}`}>
           {dscr.toFixed(2)}x
         </p>
