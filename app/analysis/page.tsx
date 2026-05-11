@@ -607,16 +607,16 @@ BuildMore 판단:
   }
 
   // Number input increment/decrement
-  const NumField = ({ 
-    value, 
-    onChange, 
-    step, 
+  const NumField = ({
+    value,
+    onChange,
+    step,
     min = 0,
     disabled = false,
     isLoan = false,
     decimals = 0,
     displayDecimals,
-  }: { 
+  }: {
     value: number
     onChange: (v: number) => void
     step: number
@@ -627,38 +627,87 @@ BuildMore 판단:
     displayDecimals?: number
   }) => {
     const displayDecimal = displayDecimals !== undefined ? displayDecimals : decimals
-    const formatValue = (v: number) => {
-      if (displayDecimal > 0) return v.toFixed(displayDecimal)
-      return Math.round(v).toString()
+    const formatValue = (v: number) =>
+      displayDecimal > 0 ? v.toFixed(displayDecimal) : Math.round(v).toString()
+
+    // 편집 중 로컬 문자열 상태
+    const [localValue, setLocalValue] = useState<string | null>(null)
+    const isEditing = localValue !== null
+
+    // long-press refs
+    const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+    // 최신 value를 interval 클로저에서 읽을 수 있도록 ref 유지
+    const valueRef = useRef(value)
+    useEffect(() => { valueRef.current = value }, [value])
+
+    const stopRepeat = () => {
+      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
+      if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null }
     }
-    
+
+    const startRepeat = (delta: number) => {
+      // 즉시 1회 적용
+      const next = parseFloat(Math.max(min, value + delta).toFixed(decimals || 0))
+      onChange(next)
+      valueRef.current = next
+      // 500ms 대기 후 80ms 간격으로 반복
+      pressTimer.current = setTimeout(() => {
+        repeatInterval.current = setInterval(() => {
+          const stepped = parseFloat(Math.max(min, valueRef.current + delta).toFixed(decimals || 0))
+          valueRef.current = stepped
+          onChange(stepped)
+        }, 80)
+      }, 500)
+    }
+
+    // 입력 커밋 (blur / Enter)
+    const commitEdit = () => {
+      if (localValue === null) return
+      const parsed = parseFloat(localValue.replace(/,/g, ''))
+      onChange(Math.max(min, isNaN(parsed) ? value : parseFloat(parsed.toFixed(decimals || 0))))
+      setLocalValue(null)
+    }
+
     return (
-    <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
-      <input
-        type="number"
-        value={formatValue(value)}
-        onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
-        disabled={disabled}
-        className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
-        step={decimals > 0 ? `0.${'0'.repeat(decimals - 1)}1` : "any"}
-      />
-      <button
-        onClick={() => onChange(Math.max(min, value - step))}
-        disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
-      >
-        −
-      </button>
-      <button
-        onClick={() => onChange(value + step)}
-        disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
-      >
-        +
-      </button>
-    </div>
-  )
-}
+      <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={isEditing ? localValue! : formatValue(value)}
+          disabled={disabled}
+          onFocus={() => setLocalValue(formatValue(value))}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { commitEdit(); (e.target as HTMLInputElement).blur() }
+            if (e.key === 'Escape') { setLocalValue(null); (e.target as HTMLInputElement).blur() }
+          }}
+          className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0 cursor-text select-all"
+        />
+        <button
+          onPointerDown={(e) => { e.preventDefault(); startRepeat(-step) }}
+          onPointerUp={stopRepeat}
+          onPointerLeave={stopRepeat}
+          onPointerCancel={stopRepeat}
+          disabled={disabled}
+          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        >
+          −
+        </button>
+        <button
+          onPointerDown={(e) => { e.preventDefault(); startRepeat(+step) }}
+          onPointerUp={stopRepeat}
+          onPointerLeave={stopRepeat}
+          onPointerCancel={stopRepeat}
+          disabled={disabled}
+          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        >
+          +
+        </button>
+      </div>
+    )
+  }
 
   // Metric Card Component for consistent styling
   const MetricCard = ({ 
