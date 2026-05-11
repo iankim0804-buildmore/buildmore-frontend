@@ -82,20 +82,13 @@ function highlightHeadline(headline: string): React.ReactNode {
   const regex = new RegExp(`(${keywords.join('|')})`, 'g')
   const parts = headline.split(regex).filter(part => part.length > 0) // 빈 부분 제거
 
-  return (
-    <>
-      {parts.map((part) => {
-        const isKeyword = keywords.includes(part)
-        return isKeyword ? (
-          <span key={part} className="font-bold">
-            {part}
-          </span>
-        ) : (
-          <span key={part}>{part}</span>
-        )
-      })}
-    </>
-  )
+  // 인라인으로 이어붙여 span 사이 공백 방지
+  return <>{parts.map((part) =>
+    keywords.includes(part)
+      ? <span key={part} className="font-bold">{part}</span>
+      : <span key={part}>{part}</span>
+  )}</>
+
 }
 
 function translateTransactionType(type: string): string {
@@ -145,7 +138,7 @@ function TickerPopup({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-[480px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+      <div className="relative z-10 w-[600px] max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-border flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-2">
@@ -323,7 +316,7 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
               key={`${item.id}-${idx}`}
               type="button"
               onClick={() => handleItemClick(item)}
-              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-80 transition-opacity flex items-center gap-2"
+              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-70 transition-opacity flex items-center gap-2 cursor-pointer hover:underline underline-offset-2"
             >
               <span className="shrink-0">•</span>
               {highlightHeadline(item.headline)}
