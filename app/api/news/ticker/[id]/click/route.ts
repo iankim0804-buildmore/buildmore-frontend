@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const BACKEND = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_ADMIN_API_URL ||
+  'https://ai-mvp.replit.app'
+).replace(/\/$/, '')
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = params.id
+  const { id } = await params
   const body = await request.json().catch(() => ({}))
-
-  if (!BACKEND) {
-    return NextResponse.json({ status: 'ok' })
-  }
   try {
     const res = await fetch(`${BACKEND}/api/news/ticker/${id}/click`, {
       method: 'POST',
