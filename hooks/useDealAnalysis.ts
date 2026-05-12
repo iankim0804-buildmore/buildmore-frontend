@@ -41,11 +41,26 @@ export function useDealAnalysis(): UseDealAnalysisReturn {
         throw new Error(data.error || '분석 중 오류가 발생했습니다.')
       }
       
+      // API 응답 형태: { input, summary, bankabilityScore, dealSignal, kpis, insights }
+      // AnalysisResult 형태:  { input, kpi, bankability, dealSignal, summary, insights }
+      // 두 형태 모두 호환되도록 매핑
+      const result = (data.result ?? (data.input ? {
+        input: data.input,
+        kpi: data.kpis ?? data.kpi ?? {},
+        bankability: { score: data.bankabilityScore ?? 0, description: '' },
+        dealSignal: data.dealSignal ?? '',
+        summary: data.summary ?? '',
+        insights: data.insights ?? {},
+        // raw fields (chat context 빌드용)
+        bankabilityScore: data.bankabilityScore,
+        kpis: data.kpis,
+      } : null)) as AnalysisResult | null
+      
       setState({
         isLoading: false,
-        result: data.result,
-        summary: data.summary,
-        suggestedQuestions: data.suggestedQuestions,
+        result,
+        summary: data.summary ?? null,
+        suggestedQuestions: data.suggestedQuestions ?? [],
         error: null
       })
     } catch (error) {
