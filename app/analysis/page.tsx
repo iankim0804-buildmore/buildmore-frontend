@@ -509,7 +509,31 @@ BuildMore 판단:
         body: JSON.stringify({
           message,
           analysisResult: dealAnalysis.result,
-          history: [userMsg]
+          analysisContext: {
+            address,
+            deal_amount: Math.round(price * 100_000_000),
+            loan_amount: Math.round(loan * 100_000_000),
+            equity: Math.round((price - loan) * 100_000_000),
+            monthly_rent: Math.round(rent * 10_000),
+            deposit: deposit > 0 ? Math.round(deposit * 10_000) : 0,
+            interest_rate: rate / 100,
+            vacancy_rate: vacancyRate / 100,
+            score_cards: (dealAnalysis.result as any)?.bankabilityScore
+              ? { bankability_score: (dealAnalysis.result as any).bankabilityScore }
+              : undefined,
+            feasibility_card: (dealAnalysis.result as any)?.kpis
+              ? {
+                  annual_noi: ((dealAnalysis.result as any).kpis.noi || 0) * 10_000,
+                  dscr: (dealAnalysis.result as any).kpis.dscr,
+                  ltv: (dealAnalysis.result as any).kpis.ltv,
+                  cap_rate: (dealAnalysis.result as any).kpis.capRate,
+                }
+              : undefined,
+            conclusion_card: (dealAnalysis.result as any)?.dealSignal
+              ? { verdict: (dealAnalysis.result as any).dealSignal }
+              : undefined,
+          },
+          history: chatMessages.map((m: any) => ({ role: m.role, content: m.content })),
         })
       })
       
