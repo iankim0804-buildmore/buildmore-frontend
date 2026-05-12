@@ -17,10 +17,10 @@ interface TickerItem {
 interface RelatedProperty {
   id: string | number
   address: string
-  transaction_type: string
-  transaction_date: string
-  area_sqm: number
-  amount: number
+  deal_type: string
+  deal_date: string
+  area_m2: number
+  deal_amount: number
 }
 
 interface RelatedNews {
@@ -74,9 +74,10 @@ function translateTransactionType(type: string): string {
   return map[type] ?? type
 }
 
-function formatAmount(amount: number): string {
-  const eok = amount / 100000000
-  return eok >= 1 ? `${eok.toFixed(1)}억` : `${(amount / 10000).toFixed(0)}만`
+function formatAmount(manwon: number): string {
+  if (!manwon) return '-'
+  if (manwon >= 10000) return `${(manwon / 10000).toFixed(1)}억`
+  return `${manwon.toLocaleString()}만`
 }
 
 // ─── Popup ────────────────────────────────────────────────────────────────────
@@ -168,20 +169,20 @@ function TickerPopup({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[13px] font-medium text-gray-950 truncate">{prop.address}</span>
-                      <span className="text-[13px] font-semibold text-gray-950 shrink-0">{formatAmount(prop.amount)}</span>
+                      <span className="text-[13px] font-semibold text-gray-950 shrink-0">{formatAmount(prop.deal_amount)}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                      <span>{translateTransactionType(prop.transaction_type)}</span>
-                      {prop.transaction_date && (
+                      <span>{translateTransactionType(prop.deal_type)}</span>
+                      {prop.deal_date && (
                         <>
                           <span>·</span>
-                          <span>{prop.transaction_date}</span>
+                          <span>{prop.deal_date}</span>
                         </>
                       )}
-                      {prop.area_sqm > 0 && (
+                      {prop.area_m2 > 0 && (
                         <>
                           <span>·</span>
-                          <span>{prop.area_sqm}㎡</span>
+                          <span>{prop.area_m2}㎡</span>
                         </>
                       )}
                     </div>
