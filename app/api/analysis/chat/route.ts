@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       response: data.response || '',
       sources_used: data.sources_used || [],
       model: data.model || '',
+      apply_to_analyzer: data.apply_to_analyzer || null,
       timestamp: new Date().toISOString(),
       source: 'backend',
     })
