@@ -133,6 +133,7 @@ export default function AnalysisPage() {
   // B-3. SIDEBAR STATE (New)
   // ============================================================
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [applyTrigger, setApplyTrigger] = useState(0)
   
   // ============================================================
   // B-4. KAKAO MAP HOOK
@@ -552,7 +553,41 @@ BuildMore 판단:
       }
       
       setChatMessages(prev => [...prev, assistantMsg])
-      
+
+      // apply_to_analyzer: LLM이 제안한 값을 패널에 반영하고 분석 재실행
+      if (data.apply_to_analyzer) {
+        const apply = data.apply_to_analyzer
+        if (apply.price != null) setPrice(apply.price)
+        if (apply.loan != null) setLoan(apply.loan)
+        if (apply.rate != null) setRate(apply.rate)
+        if (apply.rent != null) setRent(apply.rent)
+        if (apply.deposit != null) setDeposit(apply.deposit)
+        if (apply.vacancyRate != null) setVacancyRate(apply.vacancyRate)
+
+        const applyFields = Object.entries(apply)
+          .filter(([k]) => ['price','loan','rate','rent','deposit','vacancyRate'].includes(k))
+          .map(([k, v]) => {
+            const labels: Record<string, string> = {
+              price: '매입가', loan: '대출', rate: '금리',
+              rent: '월세', deposit: '보증금', vacancyRate: '공실률'
+            }
+            const units: Record<string, string> = {
+              price: '억', loan: '억', rate: '%',
+              rent: '만원', deposit: '만원', vacancyRate: '%'
+            }
+            return `${labels[k]} ${v}${units[k]}`
+          }).join(' · ')
+
+        const confirmMsg: ChatMessage = {
+          id: `msg-${Date.now() + 2}`,
+          role: 'assistant',
+          content: `분석기에 값을 적용했습니다 (${applyFields}). 분석을 실행합니다...`,
+          createdAt: new Date(),
+        }
+        setChatMessages(prev => [...prev, confirmMsg])
+        setApplyTrigger(n => n + 1)
+      }
+
       if (process.env.NODE_ENV === 'development') {
         console.log('[chat] LLM response appended:', data.response)
       }
@@ -576,7 +611,15 @@ BuildMore 판단:
     } finally {
       setIsChatLoading(false)
     }
-  }, [dealAnalysis.result])
+  }, [dealAnalysis.result, setPrice, setLoan, setRate, setRent, setDeposit, setVacancyRate])
+
+  // apply_to_analyzer — 상태 업데이트 후 handleRunAnalysis 안전하게 호출
+  useEffect(() => {
+    if (applyTrigger > 0) {
+      handleRunAnalysis()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyTrigger])
 
   // 추천 질문 클릭 핸들러
   const handleSuggestedQuestionClick = async (question: {
