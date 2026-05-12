@@ -754,11 +754,7 @@ BuildMore 판단:
       const bootstrapMsg: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: `**${confirmedAddress}** 주소가 확정되었습니다.
-
-${parts.length > 0 ? '> ' + parts.join(' · ') + '
-
-' : ''}${compMsg}우측 패널 조건을 확인하고 **분석 실행**을 눌러주세요.`,
+        content: `**${confirmedAddress}** 주소가 확정되었습니다.\n\n${parts.length > 0 ? '> ' + parts.join(' · ') + '\n\n' : ''}${compMsg}우측 패널 조건을 확인하고 **분석 실행**을 눌러주세요.`,
         createdAt: new Date(),
       }
       setChatMessages(prev => [...prev, bootstrapMsg])
