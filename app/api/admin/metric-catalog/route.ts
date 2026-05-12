@@ -5,7 +5,10 @@ export async function GET() {
   const cookieStore = await cookies()
   const token = cookieStore.get('buildmore_admin_token')?.value
   
-  const adminApiUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'https://ai-mvp.replit.app'
+  const _rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
+  const adminApiUrl = (_rawAdminUrl && !_rawAdminUrl.includes('ssmrdesign'))
+    ? _rawAdminUrl
+    : 'https://ai-mvp.replit.app'
   const internalKey = process.env.ADMIN_INTERNAL_KEY
   const adminToken = process.env.ADMIN_TOKEN
   
