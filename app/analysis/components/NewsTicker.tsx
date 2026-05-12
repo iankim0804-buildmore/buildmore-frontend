@@ -1,342 +1,374 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-// ── 백엔드 타입 ──────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface TickerItem {
   id: number
-  headline: string | null
+  headline: string
+  signal: 'favorable' | 'unfavorable' | string
   district_name: string
-  bjd_code: string
-  signal: string | null
-  signal_strength: string | null
-  frame: string
   report_date: string
-  summary: string | null
-  wiki_note_id: number | null
 }
 
 interface RelatedProperty {
-  address: string | null
-  deal_type: string
-  deal_date: string | null
-  area_m2: number | null
-  deal_amount: number | null
+  id: string | number
+  address: string
+  transaction_type: string
+  transaction_date: string
+  area_sqm: number
+  amount: number
 }
 
-interface DetailData extends TickerItem {
-  click_count: number
-  exposed_count: number
-  related_properties: RelatedProperty[]
-}
-
-interface LegacyItem {
+interface RelatedNews {
   id: number
-  title: string
-  url: string
+  headline: string
+  signal: string
+  district_name: string
+  report_date: string
 }
 
-type NewsItem = TickerItem | LegacyItem
-
-// ── 헬퍼 ─────────────────────────────────────────────
-function isTickerItem(item: NewsItem): item is TickerItem {
-  return 'headline' in item
+interface TickerDetail {
+  id: number
+  headline: string
+  district_name: string
+  report_date: string
+  signal: string
+  summary: string
+  related_properties: RelatedProperty[]
+  related_news?: RelatedNews[]
 }
 
-function getTitle(item: NewsItem): string {
-  if (isTickerItem(item)) return item.headline ?? item.district_name + ' 상권 동향'
-  return item.title
+interface NewsTickerProps {
+  onAddressSelect: (address: string) => void
 }
 
-const FRAME_DOT: Record<string, string> = {
-  opportunity: 'bg-emerald-500',
-  contrarian: 'bg-amber-500',
-  neutral: 'bg-gray-400',
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getOrCreateSessionId(): string {
+  const key = 'buildmore_session_id'
+  const existing = sessionStorage.getItem(key)
+  if (existing) return existing
+  const id = crypto.randomUUID()
+  sessionStorage.setItem(key, id)
+  return id
 }
 
-const SIGNAL_BADGE: Record<string, string> = {
-  favorable: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-  unfavorable: 'bg-red-100 text-red-700 border-red-200',
-  neutral: 'bg-gray-100 text-gray-600 border-gray-200',
+function signalColor(signal: string) {
+  return signal === 'favorable' ? 'text-blue-600' : 'text-orange-500'
 }
 
-const SIGNAL_LABEL: Record<string, string> = {
-  favorable: '매수 신호',
-  unfavorable: '주의 신호',
-  neutral: '관망',
+
+function translateTransactionType(type: string): string {
+  const map: Record<string, string> = {
+    commercial_sale: '상업용매매',
+    commercial_lease: '상업용임대',
+    office_sale: '업무용매매',
+    office_lease: '업무용임대',
+    retail_sale: '리테일매매',
+    retail_lease: '리테일임대',
+  }
+  return map[type] ?? type
 }
 
-const DEAL_TYPE_LABEL: Record<string, string> = {
-  commercial_sale: '상업용 매매',
-  commercial_rent: '상업용 임대',
-  row_house_sale: '다세대 매매',
-  row_house_rent: '다세대 임대',
-  apartment_sale: '아파트 매매',
-  apartment_rent: '아파트 임대',
-  land_sale: '토지 매매',
+function formatAmount(amount: number): string {
+  const eok = amount / 100000000
+  return eok >= 1 ? `${eok.toFixed(1)}억` : `${(amount / 10000).toFixed(0)}만`
 }
 
-function formatAmount(amount: number | null): string {
-  if (amount == null) return '-'
-  if (amount >= 10000) return `${(amount / 10000).toFixed(1)}억`
-  return `${amount.toLocaleString()}만`
-}
+// ─── Popup ────────────────────────────────────────────────────────────────────
 
-// ── 상세 팝업 ─────────────────────────────────────────
-function DistrictDetailDialog({
+function TickerPopup({
   detail,
-  open,
   onClose,
+  onAddressSelect,
+  onNewsSelect,
 }: {
-  detail: DetailData | null
-  open: boolean
+  detail: TickerDetail
   onClose: () => void
+  onAddressSelect: (address: string) => void
+  onNewsSelect: (id: number) => void
 }) {
-  if (!detail) return null
+  const handlePropertyClick = (prop: RelatedProperty) => {
+    onClose()
+    onAddressSelect(prop.address)
+  }
 
-  const signal = detail.signal ?? 'neutral'
-  const badgeClass = SIGNAL_BADGE[signal] ?? SIGNAL_BADGE.neutral
-  const signalLabel = SIGNAL_LABEL[signal] ?? '관망'
-
-  // summary 파싱: [동향] [의미] [신호] 섹션 분리
-  const summaryLines = (detail.summary ?? '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
+  const handleDistrictClick = () => {
+    onClose()
+    onAddressSelect(detail.district_name)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[480px] p-0 gap-0 overflow-hidden">
-        {/* 헤더 */}
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] font-medium text-muted-foreground">
-              {detail.region_2depth ?? ''} {detail.region_3depth ?? ''}
-            </span>
-            <span className="text-[11px] text-muted-foreground">·</span>
-            <span className="text-[11px] text-muted-foreground">{detail.report_date}</span>
-          </div>
-          <DialogTitle className="text-[17px] font-bold leading-snug text-left break-keep">
-            {detail.headline ?? detail.district_name + ' 상권 동향'}
-          </DialogTitle>
-          <div className="flex items-center gap-2 mt-2.5">
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}`}
-            >
-              {signalLabel}
-            </span>
-            {detail.signal_strength === 'high' && (
-              <span className="text-[11px] text-muted-foreground">강도 높음</span>
-            )}
-          </div>
-        </DialogHeader>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-        <ScrollArea className="max-h-[70vh]">
-          <div className="px-5 py-4 space-y-4">
-            {/* 요약 */}
-            {summaryLines.length > 0 && (
+      {/* Panel */}
+      <div className="relative z-10 w-[640px] max-h-[88vh] bg-white rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-5 border-b border-border flex-shrink-0">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <h2 className="text-[17px] font-bold leading-snug text-gray-950 break-keep flex-1">
+              {detail.headline}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded hover:bg-muted text-muted-foreground shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">{detail.district_name}</span>
+            {detail.report_date && (
+              <>
+                <span className="text-muted-foreground text-xs">·</span>
+                <span className="text-xs text-muted-foreground">{detail.report_date}</span>
+              </>
+            )}
+            <span
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                detail.signal === 'favorable'
+                  ? 'text-blue-600 border-blue-200 bg-blue-50'
+                  : 'text-orange-500 border-orange-200 bg-orange-50'
+              }`}
+            >
+              {detail.signal === 'favorable' ? '매수 우호' : '역발상 주목'}
+            </span>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Summary */}
+          <div className="px-5 py-4 border-b border-border">
+            <p className="text-[13px] leading-relaxed text-gray-700 break-keep whitespace-pre-line">
+              {detail.summary || '본문을 불러오는 중입니다...'}
+            </p>
+          </div>
+
+          {/* Related Properties */}
+          <div className="px-5 pt-4 pb-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              이 상권 매물
+            </p>
+            {detail.related_properties && detail.related_properties.length > 0 ? (
               <div className="space-y-2">
-                {summaryLines.map((line, i) => (
-                  <p
-                    key={i}
-                    className={`text-[13px] leading-relaxed break-keep ${
-                      line.startsWith('[') ? 'font-medium text-foreground' : 'text-muted-foreground'
-                    }`}
+                {detail.related_properties.slice(0, 5).map((prop) => (
+                  <button
+                    key={prop.id}
+                    type="button"
+                    onClick={() => handlePropertyClick(prop)}
+                    className="w-full text-left px-3 py-2.5 rounded-lg border border-border hover:bg-muted transition-colors"
                   >
-                    {line}
-                  </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] font-medium text-gray-950 truncate">{prop.address}</span>
+                      <span className="text-[13px] font-semibold text-gray-950 shrink-0">{formatAmount(prop.amount)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                      <span>{translateTransactionType(prop.transaction_type)}</span>
+                      {prop.transaction_date && (
+                        <>
+                          <span>·</span>
+                          <span>{prop.transaction_date}</span>
+                        </>
+                      )}
+                      {prop.area_sqm > 0 && (
+                        <>
+                          <span>·</span>
+                          <span>{prop.area_sqm}㎡</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
                 ))}
               </div>
-            )}
-
-            {/* 관련 매물 */}
-            {detail.related_properties.length > 0 && (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
-                    인근 최근 거래
-                  </p>
-                  <div className="space-y-2">
-                    {detail.related_properties.map((p, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
-                      >
-                        <div className="min-w-0 flex-1 pr-3">
-                          <p className="text-[12px] font-medium truncate text-foreground">
-                            {p.address ?? '-'}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {DEAL_TYPE_LABEL[p.deal_type] ?? p.deal_type}
-                            {p.area_m2 != null && ` · ${p.area_m2.toFixed(0)}㎡`}
-                          </p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[13px] font-semibold tabular-nums">
-                            {formatAmount(p.deal_amount)}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {p.deal_date ?? '-'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* 관련 매물 없을 때 */}
-            {detail.related_properties.length === 0 && (
-              <>
-                <Separator />
-                <p className="text-[12px] text-muted-foreground text-center py-2">
-                  인근 거래 데이터가 없습니다.
-                </p>
-              </>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={handleDistrictClick}>
+                이 상권 직접 분석하기
+              </Button>
             )}
           </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+
+          {/* Related News */}
+          {detail.related_news && detail.related_news.length > 0 && (
+            <div className="px-5 pt-3 pb-5 border-t border-border mt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                관련 뉴스
+              </p>
+              <div className="space-y-1">
+                {detail.related_news.slice(0, 3).map((news) => (
+                  <button
+                    key={news.id}
+                    type="button"
+                    onClick={() => onNewsSelect(news.id)}
+                    className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-muted transition-colors group"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="shrink-0 text-muted-foreground mt-0.5">•</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-gray-800 leading-snug break-keep group-hover:text-gray-950 transition-colors">
+                          {news.headline}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground">{news.district_name}</span>
+                          {news.report_date && (
+                            <>
+                              <span className="text-muted-foreground text-[11px]">·</span>
+                              <span className="text-[11px] text-muted-foreground">{news.report_date}</span>
+                            </>
+                          )}
+                          <span
+                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ml-1 ${
+                              news.signal === 'favorable'
+                                ? 'text-blue-600 border-blue-200 bg-blue-50'
+                                : 'text-orange-500 border-orange-200 bg-orange-50'
+                            }`}
+                          >
+                            {news.signal === 'favorable' ? '매수 우호' : '역발상'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
-// ── 메인 컴포넌트 ─────────────────────────────────────
-interface NewsTickerProps {
-  news?: LegacyItem[]
-}
+// ─── Main Component ───────────────────────────────────────────────────────────
 
-export const NewsTicker = ({ news = [] }: NewsTickerProps) => {
-  const [items, setItems] = useState<NewsItem[]>(news)
-  const [index, setIndex] = useState(0)
-  const [loaded, setLoaded] = useState(false)
-  const [detail, setDetail] = useState<DetailData | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000 // 30분
 
-  // 목록 fetch
-  useEffect(() => {
-    let cancelled = false
-    async function fetchTicker() {
-      try {
-        const res = await fetch('/api/news/ticker', { cache: 'no-store' })
-        if (!res.ok) throw new Error('fetch failed')
-        const data = await res.json()
-        const liveItems: TickerItem[] = data.items ?? []
-        if (!cancelled && liveItems.length > 0) {
-          setItems(liveItems)
-          setLoaded(true)
-        }
-      } catch {
-        // fall back to legacy news prop
+export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
+  const [items, setItems] = useState<TickerItem[]>([])
+  const [openDetail, setOpenDetail] = useState<TickerDetail | null>(null)
+  const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // ── 뉴스 목록 조회 ────────────────────────────────────────���─────
+  const fetchTicker = useCallback(async () => {
+    try {
+      const res = await fetch('/api/news/ticker')
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      const data = await res.json()
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        setItems(data.items)
       }
-    }
-    fetchTicker()
-    return () => {
-      cancelled = true
+    } catch (err) {
+      console.warn('[NewsTicker] fetch failed:', err)
     }
   }, [])
 
-  // 폴백
   useEffect(() => {
-    if (!loaded && news.length > 0) setItems(news)
-  }, [news, loaded])
+    fetchTicker()
+    refreshTimer.current = setInterval(fetchTicker, REFRESH_INTERVAL_MS)
+    return () => {
+      if (refreshTimer.current) clearInterval(refreshTimer.current)
+    }
+  }, [fetchTicker])
 
-  // 자동 순환
-  useEffect(() => {
-    if (items.length === 0) return
-    const timer = setInterval(() => {
-      setIndex((prev) => (prev + 1) % items.length)
-    }, 4000)
-    return () => clearInterval(timer)
-  }, [items.length])
+  // ── detail 조회 공통 함수 ────────────────────────────────────────
+  const fetchDetail = useCallback(async (id: number, fallback?: Partial<TickerDetail>) => {
+    try {
+      const res = await fetch(`/api/news/ticker/${id}/detail`)
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      const detail: TickerDetail = await res.json()
+      setOpenDetail(detail)
+    } catch (err) {
+      console.warn('[NewsTicker] detail fetch failed:', err)
+      setOpenDetail({
+        id,
+        headline: fallback?.headline ?? '',
+        district_name: fallback?.district_name ?? '',
+        report_date: fallback?.report_date ?? '',
+        signal: fallback?.signal ?? '',
+        summary: '',
+        related_properties: [],
+      })
+    }
+  }, [])
 
-  // 클릭 핸들러: click 추적 + detail 팝업
-  const handleClick = useCallback(async (e: React.MouseEvent, item: NewsItem) => {
-    if (!isTickerItem(item)) return
-    e.preventDefault()
-
-    // 클릭 추적 (fire-and-forget)
+  // ── 마퀴 클릭 → click 이벤트 + detail 조회 ──────────────────────
+  const handleItemClick = useCallback(async (item: TickerItem) => {
+    const sessionId = getOrCreateSessionId()
     fetch(`/api/news/ticker/${item.id}/click`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: null }),
+      body: JSON.stringify({ session_id: sessionId }),
     }).catch(() => {})
+    await fetchDetail(item.id, item)
+  }, [fetchDetail])
 
-    // 상세 팝업 열기
-    setDetailLoading(true)
-    setDetailOpen(true)
-    try {
-      const res = await fetch(`/api/news/ticker/${item.id}/detail`, { cache: 'no-store' })
-      if (!res.ok) throw new Error('detail fetch failed')
-      const data: DetailData = await res.json()
-      setDetail(data)
-    } catch {
-      // 팝업은 열렸지만 데이터 로드 실패 — 기존 item으로 임시 표시
-      setDetail({
-        ...item,
-        click_count: 0,
-        exposed_count: 0,
-        related_properties: [],
-        region_2depth: null,
-        region_3depth: null,
-        signal_strength: null,
-      })
-    } finally {
-      setDetailLoading(false)
+  // ── rAF 기반 seamless 스크롤 ────────────────────────────────────
+  const trackRef = useRef<HTMLDivElement>(null)
+  const offsetRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+  const SPEED = 0.6 // px/frame
+
+  useEffect(() => {
+    if (items.length === 0) return
+
+    const step = () => {
+      const el = trackRef.current
+      if (!el) { rafRef.current = requestAnimationFrame(step); return }
+
+      // 트랙 전체 너비의 절반 = 한 세트 너비 (아이템을 2벌 복사했으므로)
+      const half = el.scrollWidth / 2
+      offsetRef.current += SPEED
+      if (offsetRef.current >= half) offsetRef.current -= half
+
+      el.style.transform = `translateX(${-offsetRef.current}px)`
+      rafRef.current = requestAnimationFrame(step)
     }
-  }, [])
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [items])
 
   if (items.length === 0) return null
 
-  const current = items[index]
-  const frame = isTickerItem(current) ? current.frame : 'neutral'
-  const dotClass = FRAME_DOT[frame] ?? FRAME_DOT.neutral
-  const title = getTitle(current)
+  // 아이템을 3벌 복사 → 짧은 화면에서도 항상 넘치도록
+  const repeated = [...items, ...items, ...items]
 
   return (
     <>
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        {/* Frame 색상 dot */}
-        <span
-          className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${dotClass}`}
-          title={frame}
-        />
-        {/* 헤드라인 — 클릭 시 detail 팝업 */}
-        <button
-          type="button"
-          onClick={(e) => handleClick(e, current)}
-          className="block text-[13px] text-foreground hover:text-foreground/70 truncate whitespace-nowrap text-left transition-colors"
-          disabled={detailLoading}
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <div
+          ref={trackRef}
+          className="flex gap-16 whitespace-nowrap will-change-transform"
         >
-          {detailLoading ? (
-            <span className="opacity-60">{title}</span>
-          ) : (
-            title
-          )}
-        </button>
+          {repeated.map((item, idx) => (
+            <button
+              key={`${item.id}-${idx}`}
+              type="button"
+              onClick={() => handleItemClick(item)}
+              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-70 transition-opacity flex items-center gap-2 cursor-pointer hover:underline underline-offset-2"
+            >
+              <span className="shrink-0">•</span>
+              {item.headline}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* 상세 팝업 */}
-      <DistrictDetailDialog
-        detail={detail}
-        open={detailOpen}
-        onClose={() => {
-          setDetailOpen(false)
-          setDetail(null)
-        }}
-      />
+      {openDetail && (
+        <TickerPopup
+          detail={openDetail}
+          onClose={() => setOpenDetail(null)}
+          onAddressSelect={onAddressSelect}
+          onNewsSelect={(id) => fetchDetail(id)}
+        />
+      )}
     </>
   )
 }

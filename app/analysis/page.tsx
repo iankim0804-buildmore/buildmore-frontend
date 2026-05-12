@@ -99,19 +99,6 @@ const addressHistory = [
   '서울특별시 송파구 잠실동 789-0',
 ]
 
-const topNews = [
-  { id: 1, title: "서울 상업용 부동산 거래량 전월 대비 증가", url: "#" },
-  { id: 2, title: "기준금리 동결 전망에 수익형 부동산 관망세 지속", url: "#" },
-  { id: 3, title: "마포·성수권 중소형 빌딩 매수 문의 증가", url: "#" },
-  { id: 4, title: "임대료 상승 지역과 공실률 확대 지역 양극화", url: "#" },
-  { id: 5, title: "금융권, 상업용 부동산 담보대출 심사 강화", url: "#" },
-  { id: 6, title: "역세권 리테일 공실률 안정세", url: "#" },
-  { id: 7, title: "서울 주요 상권 유동인구 회복세", url: "#" },
-  { id: 8, title: "소형 업무시설 투자 수익률 지역별 편차 확대", url: "#" },
-  { id: 9, title: "노후 건축물 리모델링 수요 증가", url: "#" },
-  { id: 10, title: "매입가 조정 가능한 급매성 물건 관심 증가", url: "#" },
-]
-
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
@@ -327,7 +314,7 @@ export default function AnalysisPage() {
     // DEAL SIGNAL 점수 계산
     // 기본 점수: 63점
     // DSCR 패널티: (0.95 - DSCR) * 24 (DSCR 낮을수록 점수 감소)
-    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 높을수록 점수 감���)
+    // 공실률 패널티: 공실률 * 공실민감도 * 가중치 (공실률 높을수록, 민감도 ���을수록 점수 감���)
     // 엘리베이터 미설치: -3점
     const vacancyPenalty = (vacancyRate - 10) * (vacancySensitivity / 100) * 1.2 // 공실률 10% 기준, 민감도 반영
     const scoreVal = Math.max(18, Math.min(88,
@@ -620,16 +607,16 @@ BuildMore 판단:
   }
 
   // Number input increment/decrement
-  const NumField = ({ 
-    value, 
-    onChange, 
-    step, 
+  const NumField = ({
+    value,
+    onChange,
+    step,
     min = 0,
     disabled = false,
     isLoan = false,
     decimals = 0,
     displayDecimals,
-  }: { 
+  }: {
     value: number
     onChange: (v: number) => void
     step: number
@@ -640,38 +627,87 @@ BuildMore 판단:
     displayDecimals?: number
   }) => {
     const displayDecimal = displayDecimals !== undefined ? displayDecimals : decimals
-    const formatValue = (v: number) => {
-      if (displayDecimal > 0) return v.toFixed(displayDecimal)
-      return Math.round(v).toString()
+    const formatValue = (v: number) =>
+      displayDecimal > 0 ? v.toFixed(displayDecimal) : Math.round(v).toString()
+
+    // 편집 중 로컬 문자열 상태
+    const [localValue, setLocalValue] = useState<string | null>(null)
+    const isEditing = localValue !== null
+
+    // long-press refs
+    const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+    // 최신 value를 interval 클로저에서 읽을 수 있도록 ref 유지
+    const valueRef = useRef(value)
+    useEffect(() => { valueRef.current = value }, [value])
+
+    const stopRepeat = () => {
+      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
+      if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null }
     }
-    
+
+    const startRepeat = (delta: number) => {
+      // 즉시 1회 적용
+      const next = parseFloat(Math.max(min, value + delta).toFixed(decimals || 0))
+      onChange(next)
+      valueRef.current = next
+      // 500ms 대기 후 80ms 간격으로 반복
+      pressTimer.current = setTimeout(() => {
+        repeatInterval.current = setInterval(() => {
+          const stepped = parseFloat(Math.max(min, valueRef.current + delta).toFixed(decimals || 0))
+          valueRef.current = stepped
+          onChange(stepped)
+        }, 80)
+      }, 500)
+    }
+
+    // 입력 커밋 (blur / Enter)
+    const commitEdit = () => {
+      if (localValue === null) return
+      const parsed = parseFloat(localValue.replace(/,/g, ''))
+      onChange(Math.max(min, isNaN(parsed) ? value : parseFloat(parsed.toFixed(decimals || 0))))
+      setLocalValue(null)
+    }
+
     return (
-    <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
-      <input
-        type="number"
-        value={formatValue(value)}
-        onChange={(e) => onChange(Math.max(min, parseFloat(e.target.value) || 0))}
-        disabled={disabled}
-        className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0"
-        step={decimals > 0 ? `0.${'0'.repeat(decimals - 1)}1` : "any"}
-      />
-      <button
-        onClick={() => onChange(Math.max(min, value - step))}
-        disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
-      >
-        −
-      </button>
-      <button
-        onClick={() => onChange(value + step)}
-        disabled={disabled}
-        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base"
-      >
-        +
-      </button>
-    </div>
-  )
-}
+      <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={isEditing ? localValue! : formatValue(value)}
+          disabled={disabled}
+          onFocus={() => setLocalValue(formatValue(value))}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { commitEdit(); (e.target as HTMLInputElement).blur() }
+            if (e.key === 'Escape') { setLocalValue(null); (e.target as HTMLInputElement).blur() }
+          }}
+          className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0 cursor-text select-all"
+        />
+        <button
+          onPointerDown={(e) => { e.preventDefault(); startRepeat(-step) }}
+          onPointerUp={stopRepeat}
+          onPointerLeave={stopRepeat}
+          onPointerCancel={stopRepeat}
+          disabled={disabled}
+          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        >
+          −
+        </button>
+        <button
+          onPointerDown={(e) => { e.preventDefault(); startRepeat(+step) }}
+          onPointerUp={stopRepeat}
+          onPointerLeave={stopRepeat}
+          onPointerCancel={stopRepeat}
+          disabled={disabled}
+          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        >
+          +
+        </button>
+      </div>
+    )
+  }
 
   // Metric Card Component for consistent styling
   const MetricCard = ({ 
@@ -701,9 +737,11 @@ BuildMore 판단:
       {/* ============================================================ */}
       {/* TOPBAR (66px) - FULL WIDTH */}
       {/* ============================================================ */}
-      <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_400px] items-center flex-shrink-0">
+      <header className="h-[66px] bg-white border-b border-border px-5 grid grid-cols-[170px_1fr_auto] items-center flex-shrink-0">
         {/* Logo */}
-        <div className="text-[22px] font-extrabold text-foreground tracking-tight">BUILDMORE</div>
+        <Link href="/" className="text-[22px] font-extrabold text-foreground tracking-tight hover:opacity-80 transition-opacity">
+          BUILDMORE
+        </Link>
         
         {/* Address search */}
         <div className="flex justify-center">
@@ -755,13 +793,15 @@ BuildMore 판단:
           </div>
         </div>
         
-        {/* Pills */}
-        <div className="flex justify-end gap-1 flex-nowrap">
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">제2종일반주거</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 건폐율 60%</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">법정 용적률 200%</span>
-          <span className="px-2.5 py-1 bg-muted text-[12px] rounded-full whitespace-nowrap">대지 210㎡</span>
-        </div>
+        {/* Navigation Links */}
+        <nav className="flex items-center gap-6">
+          <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            About
+          </Link>
+          <Link href="/login" className="text-sm font-medium text-foreground bg-foreground/5 hover:bg-foreground/10 px-4 py-2 rounded-lg transition-colors">
+            로그인
+          </Link>
+        </nav>
       </header>
 
       {/* MAIN LAYOUT - Sidebar + Content */}
@@ -894,9 +934,23 @@ BuildMore 판단:
       {/* ============================================================ */}
       <div className="w-[420px] flex-shrink-0 flex flex-col bg-background border-r border-border">
         {/* Chat header */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-card">
-          <h2 className="text-sm font-medium text-foreground">대화</h2>
-          <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+        <div className="flex-shrink-0 border-b border-border bg-card">
+          <div className="h-12 flex items-center justify-between px-4">
+            <h2 className="text-sm font-medium text-foreground">대화</h2>
+            <span className="text-xs text-muted-foreground">{chatMessages.length}개 메시지</span>
+          </div>
+          {/* Current address */}
+          <div className="px-4 pt-2.5 pb-1">
+            <p className="text-xs text-muted-foreground">분석 대상</p>
+            <p className="text-sm font-medium text-foreground mt-0.5 truncate">{address || '주소를 입력하세요'}</p>
+          </div>
+          {/* Address property pills (sticky) */}
+          <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">제2종일반주거</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 60%</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 200%</span>
+            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 210㎡</span>
+          </div>
         </div>
 
         {/* Chat content */}
@@ -997,7 +1051,7 @@ BuildMore 판단:
           
           {/* News ticker with gap and background */}
           <div className="ml-4 flex-1 min-w-0 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
-            <NewsTicker news={topNews} />
+            <NewsTicker onAddressSelect={handleAddressSelect} />
           </div>
           
           {/* KPIs - right aligned */}

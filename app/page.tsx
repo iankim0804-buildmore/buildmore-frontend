@@ -82,7 +82,7 @@ export default function LandingPage() {
               <a href="#pricing" className="block text-sm text-muted-foreground">가격</a>
               <div className="pt-3 border-t border-border space-y-2">
                 <Button variant="outline" size="sm" className="w-full">로그인</Button>
-                <Link href="/demo" className="block">
+                <Link href="/analysis" className="block">
                   <Button size="sm" className="w-full bg-primary text-primary-foreground">무료 분석 시작</Button>
                 </Link>
               </div>
@@ -107,7 +107,7 @@ export default function LandingPage() {
                 LTV, NOI, DSCR, 자기자본 비율, 월 이자 부담을 분석해 부동산 딜의 금융 실행 가능성을 사전에 판단합니다. 은행 제출 전 투자위원회 메모를 준비하세요.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 mb-8">
-                <Link href="/demo">
+              <Link href="/analysis">
                   <Button size="lg" className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
                     딜 분석 시작하기
                     <ArrowRight className="w-4 h-4" />
@@ -323,7 +323,7 @@ export default function LandingPage() {
                 <div className="p-6 space-y-4">
                   <div className="flex items-start gap-3">
                     <X className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                    <span className="text-sm text-foreground">1m 차이로 임대료 30% 격차</span>
+                    <span className="text-sm text-foreground">1m 차이로 임���료 30% 격차</span>
                   </div>
                   <div className="flex items-start gap-3">
                     <X className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
@@ -822,7 +822,7 @@ export default function LandingPage() {
                     <span>주요 리스크 요약</span>
                   </li>
                 </ul>
-                <Link href="/demo" className="block">
+                <Link href="/analysis" className="block">
                   <Button variant="outline" className="w-full">
                     무료 분석
                   </Button>
@@ -912,7 +912,7 @@ export default function LandingPage() {
           <p className="text-primary-foreground/80 mb-8 max-w-lg mx-auto">
             LTV, NOI, DSCR, 법규 리스크를 사전에 분석하고 은행 제출용 리포트를 준비하세요.
           </p>
-          <Link href="/demo">
+          <Link href="/analysis">
             <Button size="lg" variant="secondary" className="gap-2">
               무료로 딜 분석 시작하기
               <ArrowRight className="w-4 h-4" />

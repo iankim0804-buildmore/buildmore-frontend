@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
+import { EnvDebugBadge } from '@/components/EnvDebugBadge'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -51,6 +52,8 @@ export default function RootLayout({
         {children}
         <Toaster position="top-center" richColors />
         {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* TODO: 개발 완료 후 제거 */}
+        <EnvDebugBadge />
       </body>
     </html>
   )
