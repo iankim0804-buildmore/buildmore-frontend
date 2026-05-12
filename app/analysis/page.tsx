@@ -63,18 +63,76 @@ interface ChatMessage {
   }>
 }
 
+interface AddressProps {
+  zoning: string | null
+  bcrat: number | null
+  vlrat: number | null
+  land_area_m2: number | null
+  land_price_per_m2: number | null
+  built_year: number | null
+  floors_above: number | null
+}
+
+interface SearchHistoryItem {
+  address: string
+  timestamp: number
+}
+
+interface AnalysisHistoryItem {
+  address: string
+  score: number
+  dealSignal: string
+  timestamp: number
+}
+
+
+interface AddressProps {
+  zoning: string | null
+  bcrat: number | null
+  vlrat: number | null
+  land_area_m2: number | null
+  land_price_per_m2: number | null
+  built_year: number | null
+  floors_above: number | null
+}
+
+interface SearchHistoryItem {
+  address: string
+  timestamp: number
+}
+
+interface AnalysisHistoryItem {
+  address: string
+  score: number
+  dealSignal: string
+  timestamp: number
+}
+
+interface AddressProps {
+  zoning: string | null
+  bcrat: number | null
+  vlrat: number | null
+  land_area_m2: number | null
+  land_price_per_m2: number | null
+  built_year: number | null
+  floors_above: number | null
+}
+
+interface SearchHistoryItem {
+  address: string
+  timestamp: number
+}
+
+interface AnalysisHistoryItem {
+  address: string
+  score: number
+  dealSignal: string
+  timestamp: number
+}
+
 // ============================================================
 // DATA
 // ============================================================
-const mapProperties: MapProperty[] = [
-  { id: 'mp1', shortAddress: '합정동 410-12', address: '서울특별시 마포구 합정동 410-12', price: 42.0, rent: 290, area: '300㎡', position: { left: '17%', top: '18%' } },
-  { id: 'mp2', shortAddress: '서교동 395-10', address: '서울특별시 마포구 서교동 395-10', price: 33.0, rent: 260, area: '220㎡', position: { left: '53%', top: '14%' } },
-  { id: 'mp3', shortAddress: '상수동 72-1', address: '서울특별시 마포구 상수동 72-1', price: 28.5, rent: 210, area: '180㎡', position: { left: '73%', top: '24%' } },
-  { id: 'mp4', shortAddress: '합정동 428-5', address: '서울특별시 마포구 합정동 428-5', price: 38.0, rent: 320, area: '210㎡', position: { left: '23%', top: '46%' } },
-  { id: 'mp5', shortAddress: '망원동 379-7', address: '서울특별시 마포구 망원동 379-7', price: 26.8, rent: 190, area: '160㎡', position: { left: '67%', top: '48%' } },
-  { id: 'mp6', shortAddress: '합정동 601-3', address: '서울특별시 마포구 합정동 601-3', price: 47.0, rent: 360, area: '350㎡', position: { left: '80%', top: '72%' } },
-  { id: 'mp7', shortAddress: '서교동 510-2', address: '서울특별시 마포구 서교동 510-2', price: 36.5, rent: 280, area: '250㎡', position: { left: '28%', top: '79%' } },
-]
 
 const transactions = [
   { date: '2025.05.23', location: '합정동', area: '142㎡', price: '58.2억', pricePerM2: '4,099만', type: '상업' },
@@ -86,19 +144,7 @@ const transactions = [
   { date: '2024.11.22', location: '상수동', area: '171㎡', price: '64.5억', pricePerM2: '3,772만', type: '상업' },
 ]
 
-const recentAnalyses = [
-  { address: '합정동 428-5', score: 43, date: '방금 전' },
-  { address: '서교동 395-10', score: 67, date: '어제' },
-  { address: '상수동 72-1', score: 55, date: '3일 전' },
-]
 
-const addressHistory = [
-  '서울특별시 마포구 합정동 428-5',
-  '서울특별시 마포구 서교동 395-10',
-  '서울특별시 강남구 역삼동 123-4',
-  '서울특별시 서초구 서초동 456-7',
-  '서울특별시 송파구 잠실동 789-0',
-]
 
 // ============================================================
 // MAIN COMPONENT
@@ -139,8 +185,7 @@ export default function AnalysisPage() {
   // ============================================================
   // B-4. KAKAO MAP HOOK
   // ============================================================
-  // address state는 아래에서 정의되므로 기본값 사용
-  const defaultAddress = '서울특별시 마포구 합정동 428-5'
+  const [addressConfirmed, setAddressConfirmed] = useState(false)
   const { 
     mapRef, 
     modalMapRef,
@@ -148,7 +193,7 @@ export default function AnalysisPage() {
     error: mapError,
     initModalMap 
   } = useKakaoMap({
-    address: defaultAddress,
+    address: addressConfirmed ? address : '',
     zoom: 3,
   })
 
@@ -156,8 +201,18 @@ export default function AnalysisPage() {
   // C. ANALYSIS PANEL STATE
   // ============================================================
   // Address & history
-  const [address, setAddress] = useState('서울특별시 마포구 합정동 428-5')
+  const [address, setAddress] = useState('')
   const [showHistory, setShowHistory] = useState(false)
+  const [addressProps, setAddressProps] = useState<AddressProps | null>(null)
+  const [isBootstrapping, setIsBootstrapping] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('bm_search_history') || '[]') } catch { return [] }
+  })
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('bm_analysis_history') || '[]') } catch { return [] }
+  })
   
   // Panel A: 매입조건
   const [price, setPrice] = useState(38.00)
@@ -189,7 +244,6 @@ export default function AnalysisPage() {
   
   // Map modal
   const [showMapModal, setShowMapModal] = useState(false)
-  const [selectedProperty, setSelectedProperty] = useState<MapProperty>(mapProperties[3])
   
   // Table tabs - 인사이트 중심 탭
   const [activeTab, setActiveTab] = useState('매수 판단')
@@ -427,6 +481,21 @@ export default function AnalysisPage() {
         }
         return updated
       })
+
+      // Save to analysis history (max 20)
+      setAnalysisHistory(prev => {
+        const newItem: AnalysisHistoryItem = {
+          address,
+          score: bankabilityScore,
+          dealSignal,
+          timestamp: Date.now(),
+        }
+        const updated = [newItem, ...prev.filter(h => h.address !== address)].slice(0, 20)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bm_analysis_history', JSON.stringify(updated))
+        }
+        return updated
+      })
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.log('[analysis] error:', error)
@@ -650,25 +719,87 @@ BuildMore 판단:
 
 
 
+  const handleAddressConfirm = useCallback(async (confirmedAddress: string) => {
+    if (!confirmedAddress.trim()) return
+    setIsBootstrapping(true)
+    setShowHistory(false)
+    setAddressConfirmed(false)
+
+    try {
+      const resp = await fetch('/api/analysis/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_address: confirmedAddress }),
+      })
+
+      if (!resp.ok) throw new Error('bootstrap 실패')
+      const data = await resp.json()
+
+      setAddressProps(data.address_props ?? null)
+      setAddressConfirmed(true)
+
+      const si = data.sample_inputs
+      if (si) {
+        if (si.price) setPrice(si.price)
+        if (si.loan) setLoan(si.loan)
+        if (si.rate) setRate(si.rate)
+        if (si.rent) setRent(si.rent)
+        if (si.deposit) setDeposit(si.deposit)
+        if (si.vacancy_rate) setVacancyRate(si.vacancy_rate)
+      }
+
+      // Save to search history (max 5)
+      const newSearchHistory: SearchHistoryItem[] = [
+        { address: confirmedAddress, timestamp: Date.now() },
+        ...searchHistory.filter(h => h.address !== confirmedAddress),
+      ].slice(0, 5)
+      setSearchHistory(newSearchHistory)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bm_search_history', JSON.stringify(newSearchHistory))
+      }
+
+      // Add bootstrap assistant message
+      const props = data.address_props ?? {}
+      const parts: string[] = []
+      if (props.zoning) parts.push(props.zoning)
+      if (props.bcrat != null) parts.push(`건폐율 ${props.bcrat}%`)
+      if (props.vlrat != null) parts.push(`용적률 ${props.vlrat}%`)
+      if (props.land_area_m2 != null) parts.push(`대지 ${Math.round(props.land_area_m2)}㎡`)
+
+      const compMsg = data.comparable_count > 0
+        ? `인근 유사 거래 **${data.comparable_count}건**을 참고해 초기 조건을 설정했습니다. `
+        : ''
+
+      const bootstrapMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `**${confirmedAddress}** 주소가 확정되었습니다.
+
+${parts.length > 0 ? '> ' + parts.join(' · ') + '
+
+' : ''}${compMsg}우측 패널 조건을 확인하고 **분석 실행**을 눌러주세요.`,
+        createdAt: new Date(),
+      }
+      setChatMessages(prev => [...prev, bootstrapMsg])
+
+      // Auto-run analysis
+      setApplyTrigger(n => n + 1)
+
+    } catch {
+      toast.error('주소 정보를 불러오지 못했습니다. 조건을 직접 입력해 분석을 실행해주세요.')
+    } finally {
+      setIsBootstrapping(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchHistory])
+
   const handleAddressSelect = (addr: string) => {
     setAddress(addr)
     setShowHistory(false)
-    // Find matching property if exists
-    const prop = mapProperties.find(p => p.address === addr)
-    if (prop) {
-      setPrice(prop.price)
-      setRent(prop.rent)
-    }
+    handleAddressConfirm(addr)
   }
 
-  const handleAnalyzeSelected = () => {
-    setAddress(selectedProperty.address)
-    setPrice(selectedProperty.price)
-    setRent(selectedProperty.rent)
-    setShowMapModal(false)
-    recalc()
-    toast.success(`${selectedProperty.shortAddress} 분석을 시작합니다.`)
-  }
+
 
   const handleComingSoon = (feature: string) => {
     toast.info(`${feature} 기능은 준비 중입니다.`)
@@ -816,18 +947,28 @@ BuildMore 판단:
           <div className="relative w-[420px]">
             <Input
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              onChange={(e) => { setAddress(e.target.value); setAddressConfirmed(false) }}
               onFocus={() => setShowHistory(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && address.trim()) {
+                  e.preventDefault()
+                  handleAddressSelect(address.trim())
+                }
+              }}
               className="h-[42px] pr-20 text-sm"
-              placeholder="주소를 입력하세요"
+              placeholder="주소 입력 후 Enter로 확정"
             />
-            <button
-              type="button"
-              onClick={() => setShowHistory(!showHistory)}
-              className="absolute right-12 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
+            {isBootstrapping ? (
+              <Loader2 className="absolute right-[52px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+                className="absolute right-[52px] top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowMapModal(true)}
@@ -839,23 +980,45 @@ BuildMore 판단:
             {/* History dropdown */}
             {showHistory && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
-                {addressHistory.map((addr, i) => (
+                {searchHistory.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">검색 기록이 없습니다.</p>
+                ) : searchHistory.map((item, i) => (
                   <button
                     key={i}
-                    onClick={() => handleAddressSelect(addr)}
+                    onClick={() => handleAddressSelect(item.address)}
                     className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-muted text-left"
                   >
-                    <span className="truncate">{addr}</span>
-                    <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground flex-shrink-0" />
+                    <span className="truncate">{item.address}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const updated = searchHistory.filter((_, idx) => idx !== i)
+                        setSearchHistory(updated)
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('bm_search_history', JSON.stringify(updated))
+                        }
+                      }}
+                      className="ml-2 flex-shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                    </button>
                   </button>
                 ))}
-                <button
-                  onClick={() => handleComingSoon('검색 기록 관리')}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  검색 기록 관리
-                </button>
+                {searchHistory.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setSearchHistory([])
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem('bm_search_history')
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:bg-muted border-t border-border"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    검색 기록 전체 삭제
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -937,18 +1100,20 @@ BuildMore 판단:
 
             {/* Recent Analyses */}
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider px-2 mb-1">최근 분석</p>
-            {recentAnalyses.map((item, i) => (
-              <Button 
+            {analysisHistory.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground px-2 py-1">분석 기록이 없습니다.</p>
+            ) : analysisHistory.slice(0, 5).map((item, i) => (
+              <Button
                 key={i}
-                variant="ghost" 
+                variant="ghost"
                 size="sm"
-                className={`w-full justify-start gap-2 text-xs h-auto py-1.5 ${i === 0 ? 'bg-accent' : ''}`}
-                onClick={() => handleComingSoon(item.address)}
+                className={`w-full justify-start gap-2 text-xs h-auto py-1.5 ${i === 0 && item.address === address ? 'bg-accent' : ''}`}
+                onClick={() => handleAddressSelect(item.address)}
               >
                 <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <div className="flex-1 text-left truncate">
-                  <p className="text-[11px] truncate">{item.address}</p>
-                  <p className="text-[10px] text-muted-foreground">{item.date}</p>
+                  <p className="text-[11px] truncate">{item.address.split(' ').slice(-2).join(' ')}</p>
+                  <p className="text-[10px] text-muted-foreground">점수 {item.score} · {item.dealSignal}</p>
                 </div>
               </Button>
             ))}
@@ -1010,14 +1175,35 @@ BuildMore 판단:
           {/* Current address */}
           <div className="px-4 pt-2.5 pb-1">
             <p className="text-xs text-muted-foreground">분석 대상</p>
-            <p className="text-sm font-medium text-foreground mt-0.5 truncate">{address || '주소를 입력하세요'}</p>
+            <p className="text-sm font-medium text-foreground mt-0.5 truncate">
+              {address || '주소를 입력하고 Enter로 확정하세요'}
+              {address && !addressConfirmed && !isBootstrapping && (
+                <span className="ml-1.5 text-[11px] text-amber-600 font-normal">미확정</span>
+              )}
+            </p>
           </div>
-          {/* Address property pills (sticky) */}
+          {/* Address property pills (dynamic from bootstrap) */}
           <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
-            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">제2종일반주거</span>
-            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 60%</span>
-            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 200%</span>
-            <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 210㎡</span>
+            {isBootstrapping ? (
+              <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full text-muted-foreground animate-pulse">토지 정보 조회 중...</span>
+            ) : addressProps ? (
+              <>
+                {addressProps.zoning && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">{addressProps.zoning}</span>
+                )}
+                {addressProps.bcrat != null && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 {addressProps.bcrat}%</span>
+                )}
+                {addressProps.vlrat != null && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 {addressProps.vlrat}%</span>
+                )}
+                {addressProps.land_area_m2 != null && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 {Math.round(addressProps.land_area_m2)}㎡</span>
+                )}
+              </>
+            ) : (
+              <span className="px-2 py-0.5 bg-muted/50 text-[11px] rounded-full text-muted-foreground italic">주소 확정 시 토지 정보 표시</span>
+            )}
           </div>
         </div>
 
