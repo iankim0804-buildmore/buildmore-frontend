@@ -16,6 +16,7 @@ import { InsightPanel, type DealInsight } from "./components/InsightPanel"
 import { useDealAnalysis } from "@/hooks/useDealAnalysis"
 import { useKakaoMap } from "@/hooks/useKakaoMap"
 import type { DealInput } from "@/lib/analysis/dealAnalysisEngine"
+import ReactMarkdown from "react-markdown"
 import {
   Plus,
   FolderOpen,
@@ -1033,7 +1034,11 @@ BuildMore 판단:
                         ? 'bg-foreground text-background'
                         : 'bg-white border border-border text-foreground'
                     }`}>
-                      {msg.content}
+                      {msg.role === 'assistant' ? (
+                        <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-strong:font-semibold prose-headings:font-semibold [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      ) : msg.content}
                     </div>
                   </div>
                   
@@ -1598,3 +1603,4 @@ BuildMore 판단:
     </div>
   )
 }
+
