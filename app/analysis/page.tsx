@@ -67,7 +67,7 @@ interface AddressProps {
   zoning: string | null
   bcrat: number | null
   vlrat: number | null
-  land_area_m2: number | null
+  area_m2: number | null
   land_price_per_m2: number | null
   built_year: number | null
   floors_above: number | null
@@ -86,16 +86,6 @@ interface AnalysisHistoryItem {
 }
 
 
-interface AddressProps {
-  zoning: string | null
-  bcrat: number | null
-  vlrat: number | null
-  land_area_m2: number | null
-  land_price_per_m2: number | null
-  built_year: number | null
-  floors_above: number | null
-}
-
 interface SearchHistoryItem {
   address: string
   timestamp: number
@@ -106,16 +96,6 @@ interface AnalysisHistoryItem {
   score: number
   dealSignal: string
   timestamp: number
-}
-
-interface AddressProps {
-  zoning: string | null
-  bcrat: number | null
-  vlrat: number | null
-  land_area_m2: number | null
-  land_price_per_m2: number | null
-  built_year: number | null
-  floors_above: number | null
 }
 
 interface SearchHistoryItem {
@@ -740,12 +720,13 @@ BuildMore 판단:
 
       const si = data.sample_inputs
       if (si) {
-        if (si.price) setPrice(si.price)
-        if (si.loan) setLoan(si.loan)
-        if (si.rate) setRate(si.rate)
-        if (si.rent) setRent(si.rent)
-        if (si.deposit) setDeposit(si.deposit)
-        if (si.vacancy_rate) setVacancyRate(si.vacancy_rate)
+        // Backend sends AnalysisRunRequest-compatible units: won / decimal ratio
+        if (si.deal_amount) setPrice(Math.round(si.deal_amount / 1e7) / 10) // eok
+        if (si.deal_amount) setLoan(Math.round(si.deal_amount * 0.6 / 1e7) / 10)
+        if (si.interest_rate) setRate(Math.round(si.interest_rate * 1000) / 10) // %
+        if (si.monthly_rent) setRent(Math.round(si.monthly_rent / 10000)) // 만원
+        if (si.deposit) setDeposit(Math.round(si.deposit / 10000)) // 만원
+        if (si.vacancy_rate) setVacancyRate(Math.round(si.vacancy_rate * 1000) / 10) // %
       }
 
       // Save to search history (max 5)
@@ -764,7 +745,7 @@ BuildMore 판단:
       if (props.zoning) parts.push(props.zoning)
       if (props.bcrat != null) parts.push(`건폐율 ${props.bcrat}%`)
       if (props.vlrat != null) parts.push(`용적률 ${props.vlrat}%`)
-      if (props.land_area_m2 != null) parts.push(`대지 ${Math.round(props.land_area_m2)}㎡`)
+      if (props.area_m2 != null) parts.push(`대지 ${Math.round(props.area_m2)}㎡`)
 
       const compMsg = data.comparable_count > 0
         ? `인근 유사 거래 **${data.comparable_count}건**을 참고해 초기 조건을 설정했습니다. `
@@ -1197,8 +1178,8 @@ ${parts.length > 0 ? '> ' + parts.join(' · ') + '
                 {addressProps.vlrat != null && (
                   <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 {addressProps.vlrat}%</span>
                 )}
-                {addressProps.land_area_m2 != null && (
-                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 {Math.round(addressProps.land_area_m2)}㎡</span>
+                {addressProps.area_m2 != null && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 {Math.round(addressProps.area_m2 ?? 0)}㎡</span>
                 )}
               </>
             ) : (
