@@ -1035,9 +1035,21 @@ BuildMore 판단:
                         : 'bg-white border border-border text-foreground'
                     }`}>
                       {msg.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-strong:font-semibold prose-headings:font-semibold [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                          <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        </div>
+                        <ReactMarkdown
+                          components={{
+                            h3: ({children}) => <p className="font-semibold text-[13px] text-foreground mt-2.5 mb-1 first:mt-0">{children}</p>,
+                            h4: ({children}) => <p className="font-semibold text-[12px] text-foreground mt-2 mb-0.5">{children}</p>,
+                            p:  ({children}) => <p className="text-[13px] leading-relaxed mb-1.5 last:mb-0">{children}</p>,
+                            ul: ({children}) => <ul className="text-[13px] space-y-0.5 my-1 pl-4 list-disc">{children}</ul>,
+                            ol: ({children}) => <ol className="text-[13px] space-y-0.5 my-1 pl-4 list-decimal">{children}</ol>,
+                            li: ({children}) => <li className="leading-relaxed">{children}</li>,
+                            strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                            table: ({children}) => <table className="text-[12px] w-full my-2 border-collapse">{children}</table>,
+                            th: ({children}) => <th className="border border-border px-2 py-1 text-left font-semibold bg-muted">{children}</th>,
+                            td: ({children}) => <td className="border border-border px-2 py-1">{children}</td>,
+                            hr: () => <hr className="my-2 border-border" />,
+                          }}
+                        >{msg.content}</ReactMarkdown>
                       ) : msg.content}
                     </div>
                   </div>
