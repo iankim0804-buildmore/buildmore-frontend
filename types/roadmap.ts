@@ -17,6 +17,13 @@ export interface RoadmapNode {
   y: number
   user_impact_score: number
   updated_at: string | null
+  // 지능형 감사 컬럼
+  issues: string | null
+  opportunities: string | null
+  audit_score: number | null
+  gap_severity: string | null
+  audited_at: string | null
+  audit_type: string | null
 }
 
 export interface RoadmapEdge {
@@ -40,10 +47,20 @@ export interface InsightPanel {
   recommendations: string[]
 }
 
+export interface SystemDiagnosis {
+  system_verdict: string
+  critical_bottlenecks: Array<{ rank: number; node_id: string; impact: string }>
+  pipeline_risk: string
+  immediate_actions: string[]
+}
+
 export interface RoadmapGraph {
   nodes: RoadmapNode[]
   edges: RoadmapEdge[]
   layer_labels: Record<string, string>
   health: HealthSummary
-  insights: InsightPanel
+  insights?: InsightPanel
+  system_diagnosis: SystemDiagnosis
+  last_audited_at: string | null
+  audit_run_id: string | null
 }
