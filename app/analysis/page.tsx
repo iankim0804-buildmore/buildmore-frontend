@@ -751,16 +751,34 @@ BuildMore 판단:
         ? `인근 유사 거래 **${data.comparable_count}건**을 참고해 초기 조건을 설정했습니다. `
         : ''
 
+      // If bootstrap returned analysis, inject it directly (skip second /api/analysis/run call)
+      if (data.analysis) {
+        dealAnalysis.injectResult(data.analysis)
+        setHasRunAnalysis(true)
+
+        // Save to analysis history
+        const score = data.analysis?.score_cards?.bankability_score ?? 0
+        const dealSignal = data.analysis?.conclusion_card?.overall_grade ?? ''
+        const newAnalysisHistory: AnalysisHistoryItem[] = [
+          { address: confirmedAddress, score, dealSignal, timestamp: Date.now() },
+          ...analysisHistory.filter((h: AnalysisHistoryItem) => h.address !== confirmedAddress),
+        ].slice(0, 5)
+        setAnalysisHistory(newAnalysisHistory)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bm_analysis_history', JSON.stringify(newAnalysisHistory))
+        }
+      } else {
+        // Fallback: trigger analysis run via existing flow
+        setApplyTrigger(n => n + 1)
+      }
+
       const bootstrapMsg: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: `**${confirmedAddress}** 주소가 확정되었습니다.\n\n${parts.length > 0 ? '> ' + parts.join(' · ') + '\n\n' : ''}${compMsg}우측 패널 조건을 확인하고 **분석 실행**을 눌러주세요.`,
+        content: `**${confirmedAddress}** 주소가 확정되었습니다.\n\n${parts.length > 0 ? '> ' + parts.join(' · ') + '\n\n' : ''}${compMsg}${data.analysis ? `Bankability Score **${data.analysis?.score_cards?.bankability_score ?? '-'}점** (${data.analysis?.conclusion_card?.overall_grade ?? ''})` : '우측 패널 조건을 확인하고 **분석 실행**을 눌러주세요.'}`,
         createdAt: new Date(),
       }
       setChatMessages(prev => [...prev, bootstrapMsg])
-
-      // Auto-run analysis
-      setApplyTrigger(n => n + 1)
 
     } catch {
       toast.error('주소 정보를 불러오지 못했습니다. 조건을 직접 입력해 분석을 실행해주세요.')
