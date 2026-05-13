@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const BACKEND_URL  = process.env.BACKEND_URL         || 'https://ai-mvp.replit.app'
+const BACKEND_URL  = process.env.BACKEND_URL         || 'https://ai-mvp-ssmrdesign0804.replit.app'
 const INTERNAL_KEY = process.env.ADMIN_INTERNAL_KEY  || ''
 
 export async function POST() {
