@@ -32,12 +32,14 @@ interface Props {
   filterStatus: string | null
   selectedId: string | null
   onSelect: (node: RoadmapNode) => void
+  onDeselect: () => void
 }
 
-export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, selectedId, onSelect }: Props) {
-  const rawUid  = useId()
-  const uid     = rawUid.replace(/:/g, "")
-  const arrowId = `arw-${uid}`
+export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, selectedId, onSelect, onDeselect }: Props) {
+  const rawUid    = useId()
+  const uid       = rawUid.replace(/:/g, "")
+  const arrowId   = `arw-${uid}`
+  const arrowOrgId = `arworg-${uid}`
   const arrowHlId = `arwhl-${uid}`
 
   const [zoom, setZoom]   = useState(0.6)
@@ -55,42 +57,50 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
 
   const nodeMap = useMemo(() => new Map(nodes.map(n => [n.node_id, n])), [nodes])
 
-  /* ─── Auto-fit when data loads ─── */
+  // Connected edge IDs for selected node
+  const connectedEdgeIds = useMemo(() => {
+    if (!selectedId) return null
+    const ids = new Set<string>()
+    for (const e of edges) {
+      if (e.source === selectedId || e.target === selectedId) ids.add(e.edge_id)
+    }
+    return ids
+  }, [selectedId, edges])
+
+  /* ── Auto-fit ── */
   useEffect(() => {
     if (nodes.length === 0 || !containerRef.current) return
     const { clientWidth, clientHeight } = containerRef.current
     const maxX = Math.max(...nodes.map(n => n.x + NODE_W)) + 60
     const maxY = Math.max(...nodes.map(n => n.y + NODE_H)) + 60
     const fit  = Math.min(clientWidth / maxX, clientHeight / maxY) * 0.92
-    zoomRef.current = fit
-    panRef.current  = { x: 10, y: 32 }
+    zoomRef.current = fit; panRef.current = { x: 10, y: 32 }
     setZoom(fit); setPanX(10); setPanY(32)
   }, [nodes.length])
 
-  /* ─── Wheel zoom (passive:false required) ─── */
+  /* ── Wheel zoom ── */
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const rect   = el.getBoundingClientRect()
-      const mx     = e.clientX - rect.left
-      const my     = e.clientY - rect.top
-      const factor = e.deltaY < 0 ? 1.09 : 0.91
-      const oldZ   = zoomRef.current
-      const newZ   = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZ * factor))
-      const ratio  = newZ / oldZ
-      const newPx  = mx + (panRef.current.x - mx) * ratio
-      const newPy  = my + (panRef.current.y - my) * ratio
-      zoomRef.current = newZ
-      panRef.current  = { x: newPx, y: newPy }
-      setZoom(newZ); setPanX(newPx); setPanY(newPy)
+      const rect  = el.getBoundingClientRect()
+      const mx    = e.clientX - rect.left
+      const my    = e.clientY - rect.top
+      const f     = e.deltaY < 0 ? 1.09 : 0.91
+      const oldZ  = zoomRef.current
+      const newZ  = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZ * f))
+      const ratio = newZ / oldZ
+      const nx    = mx + (panRef.current.x - mx) * ratio
+      const ny    = my + (panRef.current.y - my) * ratio
+      zoomRef.current = newZ; panRef.current = { x: nx, y: ny }
+      setZoom(newZ); setPanX(nx); setPanY(ny)
     }
     el.addEventListener("wheel", onWheel, { passive: false })
     return () => el.removeEventListener("wheel", onWheel)
   }, [])
 
-  /* ─── Global mouse for pan ─── */
+  /* ── Global pan (middle mouse) ── */
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!isPanRef.current) return
@@ -112,9 +122,13 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 1) return
     e.preventDefault()
-    isPanRef.current = true
-    setPanning(true)
+    isPanRef.current = true; setPanning(true)
     dragRef.current = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y }
+  }
+
+  const handleCanvasClick = () => {
+    if (edgePopup) { setHlEdgeId(null); setEdgePopup(null) }
+    onDeselect()
   }
 
   const handleEdgeClick = (edge: RoadmapEdge, e: React.MouseEvent) => {
@@ -132,7 +146,7 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
 
   const closePopup = () => { setHlEdgeId(null); setEdgePopup(null) }
 
-  /* ─── Layer x-positions ─── */
+  /* ── Layer x-positions ── */
   const layerXMap = useMemo(() => {
     const m: Record<string, number> = {}
     for (const n of nodes) {
@@ -165,9 +179,9 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
       className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#e2e8f0_1px,transparent_0)] [background-size:20px_20px] bg-zinc-50"
       style={{ cursor: panning ? "grabbing" : "default", userSelect: "none" }}
       onMouseDown={handleMouseDown}
-      onClick={() => edgePopup && closePopup()}
+      onClick={handleCanvasClick}
     >
-      {/* ── Transformable canvas ── */}
+      {/* ── Transform canvas ── */}
       <div
         style={{
           position: "absolute", top: 0, left: 0,
@@ -176,58 +190,69 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
         }}
       >
-        {/* Layer column headers */}
+        {/* Column headers */}
         {Object.entries(layerXMap).map(([layer, x]) => (
-          <div
-            key={layer}
-            style={{
-              position: "absolute", top: 8, left: x, width: NODE_W,
-              textAlign: "center", fontSize: 14, fontWeight: 800,
-              color: "#000000", letterSpacing: "0.14em",
-              textTransform: "uppercase", pointerEvents: "none",
-            }}
-          >
+          <div key={layer} style={{
+            position: "absolute", top: 8, left: x, width: NODE_W,
+            textAlign: "center", fontSize: 14, fontWeight: 800,
+            color: "#000000", letterSpacing: "0.14em",
+            textTransform: "uppercase", pointerEvents: "none",
+          }}>
             {layerLabels[layer] ?? layer}
           </div>
         ))}
 
-        {/* ── Edges SVG (z-index 1, behind nodes) ── */}
-        <svg
-          style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}
-          width={canvasW} height={canvasH}
-        >
+        {/* ── Edges SVG (z-index 1) ── */}
+        <svg style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }} width={canvasW} height={canvasH}>
           <defs>
             <marker id={arrowId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L7,3 z" fill="#f59e0b" />
+            </marker>
+            <marker id={arrowOrgId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L7,3 z" fill="#cbd5e1" />
             </marker>
           </defs>
           {edges.map(edge => {
             const p = edgePath(edge)
             if (!p) return null
-            const isHL = hlEdgeId === edge.edge_id
-            const isFiltered = filterStatus !== null &&
-              nodeMap.get(edge.source)?.status !== filterStatus &&
-              nodeMap.get(edge.target)?.status !== filterStatus
+            const isEdgeClicked = hlEdgeId === edge.edge_id
+            const isNodeConnected = connectedEdgeIds !== null && connectedEdgeIds.has(edge.edge_id)
+
+            // Opacity
+            let opacity = 1
+            if (isEdgeClicked) {
+              opacity = 0  // overlay SVG handles it
+            } else if (connectedEdgeIds !== null) {
+              opacity = isNodeConnected ? 1.0 : 0.15
+            } else if (filterStatus !== null) {
+              const srcStatus = nodeMap.get(edge.source)?.status
+              const tgtStatus = nodeMap.get(edge.target)?.status
+              if (srcStatus !== filterStatus && tgtStatus !== filterStatus) opacity = 0.06
+            }
+
+            const stroke = isNodeConnected && connectedEdgeIds !== null
+              ? "#f59e0b"
+              : (edge.dashed ? "#94a3b8" : "#cbd5e1")
+            const sw = isNodeConnected && connectedEdgeIds !== null ? 3 : 1.5
+            const markerId = isNodeConnected && connectedEdgeIds !== null ? arrowId : arrowOrgId
+
             return (
-              <g key={edge.edge_id} style={{ opacity: isFiltered ? 0.06 : 1 }}>
-                {/* Wide invisible path for click detection */}
+              <g key={edge.edge_id} style={{ opacity }}>
                 <path d={p.d} fill="none" stroke="transparent" strokeWidth={14}
                   style={{ pointerEvents: "all", cursor: "pointer" }}
                   onClick={(e) => handleEdgeClick(edge, e as unknown as React.MouseEvent)}
                 />
-                {/* Visible path (hidden when highlighted — overlay SVG draws it above nodes) */}
-                {!isHL && (
-                  <path d={p.d} fill="none"
-                    stroke={edge.dashed ? "#94a3b8" : "#cbd5e1"}
-                    strokeWidth={1.5}
+                {!isEdgeClicked && (
+                  <path d={p.d} fill="none" stroke={stroke} strokeWidth={sw}
                     strokeDasharray={edge.dashed ? "5 3" : undefined}
-                    markerEnd={`url(#${arrowId})`}
+                    markerEnd={`url(#${markerId})`}
                     style={{ pointerEvents: "none" }}
                   />
                 )}
-                {!isHL && edge.label && (
+                {!isEdgeClicked && edge.label && (
                   <text x={p.mx} y={(p.y1 + p.y2) / 2 - 5}
-                    fill="#94a3b8" fontSize={9} textAnchor="middle"
+                    fill={isNodeConnected && connectedEdgeIds !== null ? "#f59e0b" : "#94a3b8"}
+                    fontSize={9} textAnchor="middle"
                     fontFamily="ui-sans-serif,system-ui,sans-serif"
                     style={{ pointerEvents: "none" }}>
                     {edge.label}
@@ -238,11 +263,11 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
           })}
         </svg>
 
-        {/* ── Node cards (z-index 2) ── */}
+        {/* ── Nodes (z-index 2) ── */}
         <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
           {nodes.map(node => {
             const s = STATUS_STYLE[node.status] ?? STATUS_STYLE.unknown
-            const isFiltered = filterStatus !== null && node.status !== filterStatus
+            const isFiltered = connectedEdgeIds === null && filterStatus !== null && node.status !== filterStatus
             const isSelected = node.node_id === selectedId
             return (
               <button
@@ -279,12 +304,9 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
           })}
         </div>
 
-        {/* ── Highlighted edge overlay (z-index 10, above nodes) ── */}
+        {/* ── Edge-click highlight overlay (z-index 10) ── */}
         {hlEdge && hlPath && (
-          <svg
-            style={{ position: "absolute", top: 0, left: 0, zIndex: 10, pointerEvents: "none" }}
-            width={canvasW} height={canvasH}
-          >
+          <svg style={{ position: "absolute", top: 0, left: 0, zIndex: 10, pointerEvents: "none" }} width={canvasW} height={canvasH}>
             <defs>
               <marker id={arrowHlId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
                 <path d="M0,0 L0,6 L7,3 z" fill="#3b82f6" />
@@ -305,7 +327,7 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
         )}
       </div>
 
-      {/* ── Edge popup (screen-space, outside transform) ── */}
+      {/* ── Edge-click popup (screen space) ── */}
       {edgePopup && (
         <div
           className="absolute z-50 bg-white border border-zinc-200 rounded-xl shadow-xl p-4 w-72"
@@ -316,11 +338,11 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">엣지 연결 정보</p>
-            <button
-              onClick={closePopup}
-              className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 text-sm transition"
-            >✕</button>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">엣지 연결 정보</p>
+            <button onClick={closePopup}
+              className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 text-sm transition">
+              ✕
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <span className="bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-medium px-2.5 py-1.5 rounded-lg flex-1 truncate">
@@ -341,12 +363,10 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
         </div>
       )}
 
-      {/* ── Zoom % badge ── */}
+      {/* ── Zoom badge ── */}
       <div className="absolute bottom-3 right-3 bg-white border border-zinc-200 rounded-lg px-2 py-1 text-[10px] font-medium text-zinc-500 shadow-sm pointer-events-none">
         {Math.round(zoom * 100)}%
       </div>
-
-      {/* ── Nav hint ── */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/80 border border-zinc-200 rounded-lg px-3 py-1 text-[10px] text-zinc-400 shadow-sm pointer-events-none whitespace-nowrap">
         휠: 줌 &nbsp;·&nbsp; 휠클릭 + 드래그: 이동
       </div>
