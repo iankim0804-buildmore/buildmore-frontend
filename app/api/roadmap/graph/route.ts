@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://ai-mvp-ssmrdesign0804.replit.app'
+// NEXT_PUBLIC_ADMIN_API_URL 이 ssmrdesign(개발용) URL 이면 무시하고 프로덕션 URL 사용
+const _rawUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
+const BACKEND_URL = (_rawUrl && !_rawUrl.includes('ssmrdesign'))
+  ? _rawUrl
+  : 'https://ai-mvp.replit.app'
 
 export async function GET() {
   try {
