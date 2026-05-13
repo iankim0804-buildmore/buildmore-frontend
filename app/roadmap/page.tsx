@@ -2,12 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import RoadmapMap from "@/components/RoadmapMap"
-import type { RoadmapGraph, RoadmapNode, NodeStatus } from "@/types/roadmap"
+import type { RoadmapGraph, RoadmapNode, NodeStatus, SystemDiagnosis } from "@/types/roadmap"
+
+const EMPTY_DIAGNOSIS: SystemDiagnosis = {
+  system_verdict: "아직 감사가 실행되지 않았습니다. 🔍 시스템 감사 버튼을 눌러 분석을 시작하세요.",
+  critical_bottlenecks: [],
+  pipeline_risk: "",
+  immediate_actions: ["시스템 감사 버튼 클릭"],
+}
 
 const FALLBACK: RoadmapGraph = {
   nodes: [], edges: [], layer_labels: {},
   health: { health_score: 0, total: 0, by_status: {}, last_updated: "-" },
-  insights: { gaps: [], recommendations: [] },
+  system_diagnosis: EMPTY_DIAGNOSIS,
+  last_audited_at: null,
+  audit_run_id: null,
 }
 
 const STATUS_FILTERS: Array<{ value: NodeStatus | null; label: string; color: string }> = [
@@ -33,45 +42,11 @@ const STATUS_DOT: Record<string, string> = {
   dormant: "#a1a1aa", broken: "#ef4444", unknown: "#d4d4d8",
 }
 
-const TYPE_ROLE: Record<string, string> = {
-  SOURCE:     "공공 또는 민간 원천 데이터를 수집하는 진입점입니다.",
-  COLLECTION: "원천 데이터를 정제·분류하여 처리 큐로 전달합니다.",
-  PROCESSING: "데이터를 변환·가공하여 DB 및 Wiki에 적재합니다.",
-  DATABASE:   "분석과 Wiki 생성에 필요한 정형 데이터를 저장합니다.",
-  WIKI:       "LLM이 생성한 지식과 판단 규칙을 누적·관리합니다.",
-  DELTA:      "변화량 계산과 시그널 생성을 담당합니다.",
-  API:        "분석 결과를 모바일 카드 및 리포트로 서빙합니다.",
-  FRONTEND:   "사용자에게 분석 결과와 리포트를 시각화합니다.",
-}
-
-const TYPE_EXPANSION: Record<string, string[]> = {
-  SOURCE:     ["추가 데이터소스 연동 확대", "실시간 수집 주기 단축", "오류 감지 자동 알림 구축"],
-  COLLECTION: ["수집 정확도 향상 및 중복 제거 자동화", "수집 범위 확대 및 분류 체계 고도화"],
-  PROCESSING: ["LLM 프롬프트 정교화로 품질 향상", "처리 속도 개선 및 실패 재시도 강화"],
-  DATABASE:   ["인덱스 최적화 및 pgvector 유사 검색 활용", "데이터 TTL 정책 수립 및 아카이빙"],
-  WIKI:       ["Wiki 품질 lint 자동화", "사용자 피드백 반영 학습 루프", "다국어 지원 확대"],
-  DELTA:      ["이상값 탐지 고도화", "예측 모델 연동 및 알림 트리거 정교화"],
-  API:        ["응답 캐싱으로 속도 개선", "PDF 리포트 자동생성", "은행 제출용 포맷 연동"],
-  FRONTEND:   ["UX 개선 및 반응형 최적화", "실시간 데이터 연동 강화"],
-}
-
-const TYPE_ISSUE: Record<string, string> = {
-  SOURCE:
-    "수집 실패 시 재시도 로직 미흡 가능. 공공API 응답 지연·스펙 변경에 취약할 수 있으며, 수집 이상 발생 시 알림 체계 부재 여부를 점검할 것.",
-  COLLECTION:
-    "중복 데이터 필터링 정확도 검증 필요. 수집 범위 변경 시 하위 처리 큐에 미치는 영향도 사전 분석이 필요함.",
-  PROCESSING:
-    "LLM 프롬프트 출력 품질의 일관성 보장 어려움. 처리 실패 건에 대한 dead-letter 처리 및 모니터링 체계 점검 필요.",
-  DATABASE:
-    "테이블 증가에 따른 인덱스 최적화 지속 필요. 대용량 조회 시 쿼리 성능 저하 리스크 존재. TTL 및 아카이빙 정책 수립 권장.",
-  WIKI:
-    "LLM 생성 지식의 사실 오류 및 hallucination 리스크 존재. 정기 lint 자동화 미흡 시 지식 품질 저하 누적 가능.",
-  DELTA:
-    "이상값 탐지 기준선(baseline) 설정의 정확도 의존성 높음. peer_group 샘플 수 부족 시 z-score 신뢰도 저하 리스크.",
-  API:
-    "응답 캐싱 전략 부재 시 LLM 호출 비용 급증 가능. 동시 요청 증가 시 Replit Reserved VM 자원 한계 도달 리스크 점검 필요.",
-  FRONTEND:
-    "정적 빌드 시 최신 데이터 반영 지연 가능. 실시간 연동 미흡 시 사용자에게 stale 데이터 노출 위험.",
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#f59e0b",
+  low:      "#10b981",
 }
 
 function HealthBar({ score }: { score: number }) {
@@ -79,6 +54,15 @@ function HealthBar({ score }: { score: number }) {
   return (
     <div className="mt-2 h-2 rounded-full bg-zinc-100 overflow-hidden">
       <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
+    </div>
+  )
+}
+
+function AuditScoreBar({ score, severity }: { score: number; severity: string }) {
+  const color = SEVERITY_COLOR[severity] ?? "#a1a1aa"
+  return (
+    <div className="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+      <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
     </div>
   )
 }
@@ -94,6 +78,17 @@ function DiagSection({ icon, title, children }: { icon: string; title: string; c
   )
 }
 
+interface NodeAuditData {
+  node_id: string
+  label: string
+  issues: string | null
+  opportunities: string | null
+  audit_score: number | null
+  gap_severity: string | null
+  audited_at: string | null
+  audit_type: string | null
+}
+
 export default function RoadmapPage() {
   const [graph, setGraph]               = useState<RoadmapGraph>(FALLBACK)
   const [loading, setLoading]           = useState(true)
@@ -101,27 +96,28 @@ export default function RoadmapPage() {
   const [selected, setSelected]         = useState<RoadmapNode | null>(null)
   const [error, setError]               = useState<string | null>(null)
 
+  // 감사 관련 상태
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditRunId,   setAuditRunId]   = useState<string | null>(null)
+  const [nodeAudit,    setNodeAudit]    = useState<NodeAuditData | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const [sidebarW, setSidebarW] = useState(268)
-  const [rightW,   setRightW]   = useState(320)
+  const [rightW,   setRightW]   = useState(340)
   const dragging    = useRef<null | "left" | "right">(null)
   const [dragCursor, setDragCursor] = useState(false)
 
-  // Sidebar scroll: native wheel handler activated only while mouse is inside sidebar
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const sidebarHovered   = useRef(false)
 
   useEffect(() => {
     const el = sidebarScrollRef.current
     if (!el) return
-
     const onWheel = (e: WheelEvent) => {
       if (!sidebarHovered.current) return
-      e.preventDefault()
-      e.stopPropagation()
+      e.preventDefault(); e.stopPropagation()
       el.scrollTop += e.deltaY
     }
-
-    // Attach once with passive:false so preventDefault() is allowed
     el.addEventListener("wheel", onWheel, { passive: false })
     return () => el.removeEventListener("wheel", onWheel)
   }, [])
@@ -136,7 +132,56 @@ export default function RoadmapPage() {
 
   useEffect(() => { loadGraph() }, [])
 
-  // Panel resize — global mouse handlers
+  // 노드 선택 시 감사 데이터 조회
+  useEffect(() => {
+    if (!selected) { setNodeAudit(null); return }
+    fetch(`/api/roadmap/audit/node/${selected.node_id}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setNodeAudit(d))
+      .catch(() => setNodeAudit(null))
+  }, [selected?.node_id])
+
+  // 감사 트리거
+  async function triggerAudit() {
+    if (auditLoading) return
+    setAuditLoading(true)
+    try {
+      const res = await fetch("/api/roadmap/audit/run", { method: "POST", cache: "no-store" })
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      const { audit_run_id } = await res.json()
+      setAuditRunId(audit_run_id)
+
+      // 5초 간격 폴링 (최대 3분)
+      let elapsed = 0
+      pollRef.current = setInterval(async () => {
+        elapsed += 5
+        if (elapsed > 180) {
+          clearInterval(pollRef.current!); setAuditLoading(false); return
+        }
+        try {
+          const pr = await fetch(`/api/roadmap/audit/run/${audit_run_id}`, { cache: "no-store" })
+          if (!pr.ok) return
+          const status = await pr.json()
+          if (status.status === "success" || status.status === "failed") {
+            clearInterval(pollRef.current!); setAuditLoading(false); setAuditRunId(null)
+            // 그래프 + 노드 감사 갱신
+            await loadGraph()
+            if (selected) {
+              const nr = await fetch(`/api/roadmap/audit/node/${selected.node_id}`, { cache: "no-store" })
+              if (nr.ok) setNodeAudit(await nr.json())
+            }
+          }
+        } catch { /* ignore */ }
+      }, 5000)
+    } catch {
+      setAuditLoading(false)
+    }
+  }
+
+  // cleanup on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+
+  // Panel resize
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (dragging.current === "left")
@@ -155,8 +200,8 @@ export default function RoadmapPage() {
   const toggleFilter = (s: NodeStatus | null) => setFilterStatus(p => p === s ? null : s)
 
   const { health } = graph
+  const diagnosis  = graph.system_diagnosis ?? EMPTY_DIAGNOSIS
 
-  // Diagnostic data
   const activeCount  = health.by_status["active"]  ?? 0
   const warningCount = health.by_status["warning"] ?? 0
   const todoCount    = health.by_status["todo"]    ?? 0
@@ -178,19 +223,23 @@ export default function RoadmapPage() {
     .sort((a, b) => (edgeCnt[b.node_id] || 0) - (edgeCnt[a.node_id] || 0))
     .slice(0, 3)
 
-  const nextActions: string[] = []
-  if (brokenList[0])  nextActions.push(`${brokenList[0].label} 즉시 복구`)
-  if (warnList[0])    nextActions.push(`${warnList[0].label} 경고 원인 분석`)
-  if (topImpact[0] && topImpact[0].status !== "active")
-    nextActions.push(`${topImpact[0].label} 활성화로 임팩트 극대화`)
-  if (nextActions.length === 0 && topImpact[0])
-    nextActions.push(`${topImpact[0].label} 확장 개선 집중`)
+  // legacy fallback actions
+  const nextActions: string[] = diagnosis.immediate_actions.length > 0
+    ? diagnosis.immediate_actions.slice(0, 3)
+    : (() => {
+        const a: string[] = []
+        if (brokenList[0])  a.push(`${brokenList[0].label} 즉시 복구`)
+        if (warnList[0])    a.push(`${warnList[0].label} 경고 원인 분석`)
+        if (topImpact[0] && topImpact[0].status !== "active")
+          a.push(`${topImpact[0].label} 활성화로 임팩트 극대화`)
+        if (a.length === 0 && topImpact[0])
+          a.push(`${topImpact[0].label} 확장 개선 집중`)
+        return a
+      })()
 
-  // Node detail helpers
-  const nodeTypeKey = selected?.type?.toUpperCase() ?? ""
-  const roleText    = TYPE_ROLE[nodeTypeKey]     ?? `${selected?.type ?? ""} 타입 노드입니다.`
-  const expansions  = TYPE_EXPANSION[nodeTypeKey] ?? []
-  const issueText   = TYPE_ISSUE[nodeTypeKey]    ?? "해당 노드 타입에 대한 알려진 리스크 또는 개선점을 별도로 점검하세요."
+  const fmtDate = (iso: string | null) => iso
+    ? new Date(iso).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : null
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans" style={{ cursor: dragCursor ? "col-resize" : undefined }}>
@@ -204,12 +253,34 @@ export default function RoadmapPage() {
               노드 {graph.nodes.length}개 · 엣지 {graph.edges.length}개 · 레이어 {Object.keys(graph.layer_labels).length}개
             </p>
           </div>
-          {error && (
-            <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">{error}</span>
-          )}
+          <div className="flex items-center gap-3">
+            {error && (
+              <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">{error}</span>
+            )}
+            {/* 🔍 시스템 감사 버튼 */}
+            <button
+              onClick={triggerAudit}
+              disabled={auditLoading}
+              className={[
+                "inline-flex items-center gap-2 px-4 py-2 rounded-lg border font-medium text-sm transition",
+                auditLoading
+                  ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed"
+                  : "bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-700",
+              ].join(" ")}
+            >
+              {auditLoading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-zinc-200 rounded-full animate-spin" />
+                  감사 중...
+                </>
+              ) : (
+                <>🔍 시스템 감사</>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Filter pills — dot 7px */}
+        {/* Filter pills */}
         <div className="flex gap-2 mt-4 flex-wrap">
           {STATUS_FILTERS.map(f => (
             <button key={String(f.value)} onClick={() => toggleFilter(f.value)}
@@ -220,7 +291,6 @@ export default function RoadmapPage() {
                   : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300",
               ].join(" ")}
               style={{ fontSize: 13 }}>
-              {/* dot — 7px */}
               <span className="rounded-full flex-shrink-0"
                 style={{ width: 7, height: 7, background: filterStatus === f.value ? "#ffffff" : f.color }} />
               {f.label}
@@ -240,7 +310,6 @@ export default function RoadmapPage() {
           className="flex-shrink-0 border-r border-zinc-200 bg-white relative flex flex-col"
           style={{ width: sidebarW }}
         >
-          {/* Scrollable content — native wheel handled above */}
           <div
             ref={sidebarScrollRef}
             className="flex-1 p-4"
@@ -248,10 +317,6 @@ export default function RoadmapPage() {
             onMouseEnter={() => { sidebarHovered.current = true }}
             onMouseLeave={() => { sidebarHovered.current = false }}
           >
-            <style>{`
-              [data-sidebar-scroll]::-webkit-scrollbar { display: none }
-            `}</style>
-
             {/* Health Score */}
             <section className="mb-4">
               <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-2" style={{ fontSize: 13 }}>Health Score</p>
@@ -265,7 +330,6 @@ export default function RoadmapPage() {
                 {Object.entries(health.by_status).map(([s, cnt]) => (
                   <div key={s} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {/* dot — 7px */}
                       <span className="rounded-full flex-shrink-0"
                         style={{ width: 7, height: 7, background: STATUS_DOT[s] ?? "#d4d4d8" }} />
                       <span className={`inline-block px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`}
@@ -277,68 +341,68 @@ export default function RoadmapPage() {
               </div>
             </section>
 
-            {/* System Diagnostic Panel */}
+            {/* System Diagnostic Panel — LLM 감사 결과 기반 */}
             <div className="border-t border-zinc-200 pt-4">
               <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-3" style={{ fontSize: 13 }}>
                 시스템 종합 진단
               </p>
               <div>
-                <DiagSection icon="✅" title="잘된 점">
-                  <p>
-                    전체 {totalCount}개 노드 중 <strong className="text-emerald-600">{activeCount}개({Math.round(activeCount / totalCount * 100)}%)</strong>가 정상 작동 중입니다.
-                    {activeCount >= totalCount * 0.7
-                      ? " 파이프라인 전반이 안정적으로 운영되고 있습니다."
-                      : " 핵심 수집·처리 파이프라인이 부분 가동 중입니다."}
-                  </p>
-                </DiagSection>
+                {/* 종합 판정 */}
+                {diagnosis.system_verdict && (
+                  <DiagSection icon="✅" title="종합 판정">
+                    <p>{diagnosis.system_verdict}</p>
+                  </DiagSection>
+                )}
 
-                <DiagSection icon="⚠️" title="개선 필요">
-                  {warningCount + todoCount === 0 ? (
-                    <p>경고·미완성 노드가 없습니다.</p>
-                  ) : (
-                    <>
-                      {warnList.length > 0 && (
-                        <p><strong>경고:</strong> {warnList.map(n => n.label).join(", ")} 등 {warningCount}개 — 데이터 품질 또는 연결 지연 가능성.</p>
-                      )}
-                      {todoList.length > 0 && (
-                        <p className="mt-1"><strong>미완성:</strong> {todoList.map(n => n.label).join(", ")} 등 {todoCount}개 — 구현 또는 연동 대기 중.</p>
-                      )}
-                    </>
-                  )}
-                </DiagSection>
-
+                {/* 즉시 조치 — critical_bottlenecks */}
                 <DiagSection icon="🔴" title="즉시 조치 필요">
-                  {brokenList.length === 0 ? (
-                    <p>장애 노드 없음. 모든 연결이 유효합니다.</p>
+                  {diagnosis.critical_bottlenecks.length === 0 ? (
+                    <p>장애 노드 없음.</p>
                   ) : (
-                    <p><strong className="text-red-600">{brokenList.map(n => n.label).join(", ")}</strong> — {brokenList.length}개 장애. 즉시 점검이 필요합니다.</p>
-                  )}
-                </DiagSection>
-
-                <DiagSection icon="📈" title="확장 우선순위">
-                  {topImpact.length === 0 ? <p>데이터 없음</p> : (
-                    <ul className="space-y-1">
-                      {topImpact.map(n => (
-                        <li key={n.node_id} className="flex items-start gap-1.5">
-                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
-                          <span><strong>{n.label}</strong> (impact {n.user_impact_score}/10) — {TYPE_EXPANSION[n.type?.toUpperCase()]?.[0] ?? "고도화 권장"}</span>
+                    <ul className="space-y-1.5">
+                      {diagnosis.critical_bottlenecks.map(b => (
+                        <li key={b.node_id} className="flex items-start gap-1.5">
+                          <span className="font-bold text-zinc-400 flex-shrink-0">{b.rank}.</span>
+                          <span><strong className="text-red-600">[{b.node_id}]</strong> {b.impact}</span>
                         </li>
                       ))}
                     </ul>
                   )}
                 </DiagSection>
 
+                {/* 파이프라인 리스크 */}
+                {diagnosis.pipeline_risk && (
+                  <DiagSection icon="⚠️" title="파이프라인 리스크">
+                    <p>{diagnosis.pipeline_risk}</p>
+                  </DiagSection>
+                )}
+
+                {/* 확장 우선순위 */}
+                <DiagSection icon="📈" title="확장 우선순위">
+                  {topImpact.length === 0 ? <p>데이터 없음</p> : (
+                    <ul className="space-y-1">
+                      {topImpact.map(n => (
+                        <li key={n.node_id} className="flex items-start gap-1.5">
+                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
+                          <span><strong>{n.label}</strong> (impact {n.user_impact_score}/10)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </DiagSection>
+
+                {/* 아키텍처 인사이트 */}
                 <DiagSection icon="🧠" title="아키텍처 인사이트">
                   {spofList.length === 0 ? (
-                    <p>단일 장애점 후보 없음. 의존성이 분산되어 있습니다.</p>
+                    <p>단일 장애점 후보 없음.</p>
                   ) : (
                     <>
-                      <p className="mb-1">다음 노드는 연결 수가 많아 <strong>SPOF 위험</strong>이 있습니다:</p>
+                      <p className="mb-1">연결 수 多 — <strong>SPOF 위험</strong>:</p>
                       <ul className="space-y-1">
                         {spofList.map(n => (
                           <li key={n.node_id} className="flex items-start gap-1.5">
                             <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#fbbf24", display: "inline-block" }} />
-                            <span><strong>{n.label}</strong> — 연결 {edgeCnt[n.node_id]}개, 이중화 또는 캐싱 권장</span>
+                            <span><strong>{n.label}</strong> — 연결 {edgeCnt[n.node_id]}개</span>
                           </li>
                         ))}
                       </ul>
@@ -346,6 +410,7 @@ export default function RoadmapPage() {
                   )}
                 </DiagSection>
 
+                {/* 다음 개발 액션 */}
                 <DiagSection icon="💡" title="다음 개발 액션">
                   {nextActions.length === 0 ? (
                     <p>전체 정상. 신규 데이터소스 확장을 검토하세요.</p>
@@ -361,10 +426,17 @@ export default function RoadmapPage() {
                   )}
                 </DiagSection>
               </div>
+
+              {/* 마지막 감사 시각 */}
+              {graph.last_audited_at && (
+                <p className="text-zinc-400 mt-3 pt-3 border-t border-zinc-100" style={{ fontSize: 11 }}>
+                  마지막 감사: {fmtDate(graph.last_audited_at)}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Drag handle — right border */}
+          {/* Drag handle */}
           <div
             className="absolute right-0 top-0 h-full w-1.5 hover:bg-blue-300 transition-colors z-20"
             style={{ cursor: "col-resize" }}
@@ -394,7 +466,6 @@ export default function RoadmapPage() {
         {/* ════ Right Detail Panel ════ */}
         {selected && (
           <aside className="flex-shrink-0 border-l border-zinc-200 bg-white relative overflow-y-auto" style={{ width: rightW }}>
-            {/* Drag handle — left border */}
             <div
               className="absolute left-0 top-0 h-full w-1.5 hover:bg-blue-300 transition-colors z-20"
               style={{ cursor: "col-resize" }}
@@ -430,6 +501,29 @@ export default function RoadmapPage() {
                 </div>
               </div>
 
+              {/* 감사 점수 게이지 */}
+              {nodeAudit && nodeAudit.audit_score !== null ? (
+                <div className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-semibold text-zinc-600" style={{ fontSize: 13 }}>감사 점수</p>
+                    <div className="flex items-center gap-2">
+                      {nodeAudit.gap_severity && (
+                        <span className="px-2 py-0.5 rounded-full font-medium text-white" style={{ fontSize: 11, background: SEVERITY_COLOR[nodeAudit.gap_severity] ?? "#a1a1aa" }}>
+                          {nodeAudit.gap_severity}
+                        </span>
+                      )}
+                      <span className="font-bold text-zinc-900" style={{ fontSize: 18 }}>{nodeAudit.audit_score.toFixed(0)}</span>
+                      <span className="text-zinc-400" style={{ fontSize: 12 }}>/100</span>
+                    </div>
+                  </div>
+                  <AuditScoreBar score={nodeAudit.audit_score} severity={nodeAudit.gap_severity ?? "medium"} />
+                </div>
+              ) : nodeAudit === null ? null : (
+                <div className="mb-4 rounded-xl border border-zinc-100 bg-zinc-50 p-3 text-center text-zinc-400" style={{ fontSize: 13 }}>
+                  🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
+                </div>
+              )}
+
               {/* Detail items */}
               {selected.detail && selected.detail.length > 0 && (
                 <div className="mb-4">
@@ -443,41 +537,43 @@ export default function RoadmapPage() {
                 </div>
               )}
 
-              {/* Section A: 역할 및 기능 */}
+              {/* Section A: 문제점 / 개선점 (LLM 감사 결과) */}
               <div className="mt-4 pt-4 border-t border-zinc-200">
-                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>역할 및 기능</p>
-                <div className="bg-zinc-50 rounded-xl px-4 py-3">
-                  <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{roleText}</p>
-                </div>
-              </div>
-
-              {/* Section B: 확장 가능성 */}
-              {expansions.length > 0 && (
-                <div className="mt-3 pt-4 border-t border-zinc-200">
-                  <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>확장 가능성</p>
-                  <div className="bg-zinc-50 rounded-xl px-4 py-3">
-                    <ul className="space-y-1.5">
-                      {expansions.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2 text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>
-                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-
-              {/* Section C: 문제점 / 개선점 */}
-              <div className="mt-3 pt-4 border-t border-zinc-200">
                 <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>🔧 문제점 / 개선점</p>
                 <div className="rounded-xl px-4 py-3" style={{ background: "#f4f4f5" }}>
-                  <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{issueText}</p>
+                  {nodeAudit?.issues ? (
+                    <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{nodeAudit.issues}</p>
+                  ) : (
+                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>
+                      🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
+                    </p>
+                  )}
                 </div>
               </div>
 
+              {/* Section B: 확장 가능성 (LLM 감사 결과) */}
+              <div className="mt-3 pt-4 border-t border-zinc-200">
+                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>📈 확장 가능성</p>
+                <div className="bg-zinc-50 rounded-xl px-4 py-3">
+                  {nodeAudit?.opportunities ? (
+                    <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{nodeAudit.opportunities}</p>
+                  ) : (
+                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>
+                      🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 감사 타임스탬프 */}
+              {nodeAudit?.audited_at && (
+                <p className="text-zinc-400 mt-3" style={{ fontSize: 11 }}>
+                  마지막 분석: {fmtDate(nodeAudit.audited_at)}
+                </p>
+              )}
+
               {selected.updated_at && (
-                <p className="text-zinc-400 mt-4" style={{ fontSize: 12 }}>
+                <p className="text-zinc-400 mt-2" style={{ fontSize: 12 }}>
                   업데이트: {new Date(selected.updated_at).toLocaleString("ko-KR")}
                 </p>
               )}
