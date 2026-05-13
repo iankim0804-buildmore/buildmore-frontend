@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import RoadmapMap from "@/components/RoadmapMap"
 import type { RoadmapGraph, RoadmapNode, NodeStatus } from "@/types/roadmap"
 
@@ -108,7 +108,7 @@ export default function RoadmapPage() {
           </div>
         </div>
 
-        {/* ── Filter pills ── */}
+        {/* Filter pills */}
         <div className="flex gap-1.5 mt-3 flex-wrap">
           {STATUS_FILTERS.map(f => (
             <button
@@ -121,7 +121,7 @@ export default function RoadmapPage() {
                   : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300",
               ].join(" ")}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${f.dot} ${filterStatus === f.value ? "opacity-100 bg-white" : ""}`} />
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${filterStatus === f.value ? "bg-white" : f.dot}`} />
               {f.label}
               {f.value && health.by_status[f.value] !== undefined && (
                 <span className={filterStatus === f.value ? "text-zinc-300" : "text-zinc-400"}>
@@ -148,11 +148,9 @@ export default function RoadmapPage() {
             <div className="mt-3 space-y-1.5">
               {Object.entries(health.by_status).map(([s, cnt]) => (
                 <div key={s} className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block px-1.5 py-0.5 rounded-full border text-[9px] font-medium ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`}>
-                      {s}
-                    </span>
-                  </div>
+                  <span className={`inline-block px-1.5 py-0.5 rounded-full border text-[9px] font-medium ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`}>
+                    {s}
+                  </span>
                   <span className="text-xs font-semibold text-zinc-700">{cnt}</span>
                 </div>
               ))}
@@ -161,7 +159,7 @@ export default function RoadmapPage() {
 
           <div className="border-t border-zinc-100 my-4" />
 
-          {/* Gap Top */}
+          {/* Gap Top — font size +23% (11px → 13.5px) */}
           <section className="mb-5">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
               Gap Top {Math.min(8, insights.gaps.length)}
@@ -169,7 +167,7 @@ export default function RoadmapPage() {
             <ul className="space-y-1.5">
               {insights.gaps.slice(0, 8).map(g => (
                 <li key={g.node_id}
-                  className="text-[11px] text-zinc-600 bg-zinc-50 hover:bg-zinc-100 rounded-lg px-2.5 py-2 border border-zinc-100 transition"
+                  className="text-[13.5px] text-zinc-600 bg-zinc-50 hover:bg-zinc-100 rounded-lg px-2.5 py-2 border border-zinc-100 transition"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -178,7 +176,7 @@ export default function RoadmapPage() {
                       g.status === "todo"    ? "bg-blue-400" : "bg-zinc-300"
                     }`} />
                     <span className="line-clamp-1">{g.label}</span>
-                    <span className="ml-auto text-[10px] text-zinc-400 flex-shrink-0">{g.user_impact_score}</span>
+                    <span className="ml-auto text-[11px] text-zinc-400 flex-shrink-0">{g.user_impact_score}</span>
                   </div>
                 </li>
               ))}
@@ -187,12 +185,12 @@ export default function RoadmapPage() {
 
           <div className="border-t border-zinc-100 my-4" />
 
-          {/* Recommendations */}
+          {/* Recommendations — font size +23% (11px → 13.5px) */}
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">Recommendations</p>
             <ul className="space-y-1.5">
               {insights.recommendations.slice(0, 6).map((r, i) => (
-                <li key={i} className="text-[11px] text-zinc-500 bg-zinc-50 rounded-lg px-2.5 py-2 border border-zinc-100">
+                <li key={i} className="text-[13.5px] text-zinc-500 bg-zinc-50 rounded-lg px-2.5 py-2 border border-zinc-100">
                   {r}
                 </li>
               ))}
@@ -226,16 +224,11 @@ export default function RoadmapPage() {
               <button
                 onClick={() => setSelected(null)}
                 className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition text-sm"
-              >
-                ✕
-              </button>
+              >✕</button>
             </div>
-
             <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 mb-4">
               <div className="flex gap-1.5 flex-wrap mb-2.5">
-                <span className="text-[10px] bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">
-                  {selected.type}
-                </span>
+                <span className="text-[10px] bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full">{selected.type}</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[selected.status] ?? STATUS_COLORS.unknown}`}>
                   {selected.status}
                 </span>
@@ -243,31 +236,25 @@ export default function RoadmapPage() {
               <h2 className="text-sm font-semibold text-zinc-900">{selected.label}</h2>
               {selected.sub && <p className="text-xs text-zinc-500 mt-1">{selected.sub}</p>}
               <div className="mt-3 flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-400">user impact</span>
+                <span className="text-[10px] text-zinc-400">impact</span>
                 <div className="flex gap-0.5">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className={`h-1.5 w-3 rounded-full ${
-                      i < Math.ceil(selected.user_impact_score / 2) ? "bg-blue-400" : "bg-zinc-200"
-                    }`} />
+                    <div key={i} className={`h-1.5 w-3 rounded-full ${i < Math.ceil(selected.user_impact_score / 2) ? "bg-blue-400" : "bg-zinc-200"}`} />
                   ))}
                 </div>
                 <span className="text-[10px] font-medium text-zinc-600">{selected.user_impact_score}/10</span>
               </div>
             </div>
-
             {selected.detail && selected.detail.length > 0 && (
               <div className="mb-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">세부 항목</p>
                 <ul className="space-y-1.5">
                   {selected.detail.map((d, i) => (
-                    <li key={i} className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-lg px-3 py-2">
-                      {d}
-                    </li>
+                    <li key={i} className="text-xs text-zinc-600 bg-zinc-50 border border-zinc-100 rounded-lg px-3 py-2">{d}</li>
                   ))}
                 </ul>
               </div>
             )}
-
             {selected.updated_at && (
               <p className="text-[10px] text-zinc-400 mt-3">
                 업데이트: {new Date(selected.updated_at).toLocaleString("ko-KR")}
