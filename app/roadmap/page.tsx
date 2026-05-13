@@ -149,7 +149,9 @@ export default function RoadmapPage() {
       const res = await fetch("/api/roadmap/audit/run", { method: "POST", cache: "no-store" })
       if (!res.ok) throw new Error(`status ${res.status}`)
       const { audit_run_id } = await res.json()
+      if (!audit_run_id) throw new Error("audit_run_id missing")
       setAuditRunId(audit_run_id)
+      setError(null)
 
       // 5초 간격 폴링 (최대 3분)
       let elapsed = 0
@@ -164,6 +166,7 @@ export default function RoadmapPage() {
           const status = await pr.json()
           if (status.status === "success" || status.status === "failed") {
             clearInterval(pollRef.current!); setAuditLoading(false); setAuditRunId(null)
+            if (status.status === "failed") setError("감사 실행 실패")
             // 그래프 + 노드 감사 갱신
             await loadGraph()
             if (selected) {
@@ -174,6 +177,7 @@ export default function RoadmapPage() {
         } catch { /* ignore */ }
       }, 5000)
     } catch {
+      setError("감사 실행 요청 실패")
       setAuditLoading(false)
     }
   }
