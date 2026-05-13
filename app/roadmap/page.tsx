@@ -55,6 +55,25 @@ const TYPE_EXPANSION: Record<string, string[]> = {
   FRONTEND:   ["UX 개선 및 반응형 최적화", "실시간 데이터 연동 강화"],
 }
 
+const TYPE_ISSUE: Record<string, string> = {
+  SOURCE:
+    "수집 실패 시 재시도 로직 미흡 가능. 공공API 응답 지연·스펙 변경에 취약할 수 있으며, 수집 이상 발생 시 알림 체계 부재 여부를 점검할 것.",
+  COLLECTION:
+    "중복 데이터 필터링 정확도 검증 필요. 수집 범위 변경 시 하위 처리 큐에 미치는 영향도 사전 분석이 필요함.",
+  PROCESSING:
+    "LLM 프롬프트 출력 품질의 일관성 보장 어려움. 처리 실패 건에 대한 dead-letter 처리 및 모니터링 체계 점검 필요.",
+  DATABASE:
+    "테이블 증가에 따른 인덱스 최적화 지속 필요. 대용량 조회 시 쿼리 성능 저하 리스크 존재. TTL 및 아카이빙 정책 수립 권장.",
+  WIKI:
+    "LLM 생성 지식의 사실 오류 및 hallucination 리스크 존재. 정기 lint 자동화 미흡 시 지식 품질 저하 누적 가능.",
+  DELTA:
+    "이상값 탐지 기준선(baseline) 설정의 정확도 의존성 높음. peer_group 샘플 수 부족 시 z-score 신뢰도 저하 리스크.",
+  API:
+    "응답 캐싱 전략 부재 시 LLM 호출 비용 급증 가능. 동시 요청 증가 시 Replit Reserved VM 자원 한계 도달 리스크 점검 필요.",
+  FRONTEND:
+    "정적 빌드 시 최신 데이터 반영 지연 가능. 실시간 연동 미흡 시 사용자에게 stale 데이터 노출 위험.",
+}
+
 function HealthBar({ score }: { score: number }) {
   const color = score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-red-500"
   return (
@@ -82,11 +101,30 @@ export default function RoadmapPage() {
   const [selected, setSelected]         = useState<RoadmapNode | null>(null)
   const [error, setError]               = useState<string | null>(null)
 
-  // Resizable panels
   const [sidebarW, setSidebarW] = useState(268)
   const [rightW,   setRightW]   = useState(320)
-  const dragging = useRef<null | "left" | "right">(null)
+  const dragging    = useRef<null | "left" | "right">(null)
   const [dragCursor, setDragCursor] = useState(false)
+
+  // Sidebar scroll: native wheel handler activated only while mouse is inside sidebar
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  const sidebarHovered   = useRef(false)
+
+  useEffect(() => {
+    const el = sidebarScrollRef.current
+    if (!el) return
+
+    const onWheel = (e: WheelEvent) => {
+      if (!sidebarHovered.current) return
+      e.preventDefault()
+      e.stopPropagation()
+      el.scrollTop += e.deltaY
+    }
+
+    // Attach once with passive:false so preventDefault() is allowed
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => el.removeEventListener("wheel", onWheel)
+  }, [])
 
   async function loadGraph() {
     try {
@@ -101,12 +139,10 @@ export default function RoadmapPage() {
   // Panel resize — global mouse handlers
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (dragging.current === "left") {
+      if (dragging.current === "left")
         setSidebarW(Math.min(480, Math.max(160, e.clientX)))
-      }
-      if (dragging.current === "right") {
+      if (dragging.current === "right")
         setRightW(Math.min(520, Math.max(200, window.innerWidth - e.clientX)))
-      }
     }
     const onUp = () => { dragging.current = null; setDragCursor(false) }
     window.addEventListener("mousemove", onMove)
@@ -114,13 +150,13 @@ export default function RoadmapPage() {
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
   }, [])
 
-  const showDetail = useCallback((node: RoadmapNode) => setSelected(node), [])
-  const deselect   = useCallback(() => setSelected(null), [])
+  const showDetail   = useCallback((node: RoadmapNode) => setSelected(node), [])
+  const deselect     = useCallback(() => setSelected(null), [])
   const toggleFilter = (s: NodeStatus | null) => setFilterStatus(p => p === s ? null : s)
 
   const { health } = graph
 
-  // ── Diagnostic data ──
+  // Diagnostic data
   const activeCount  = health.by_status["active"]  ?? 0
   const warningCount = health.by_status["warning"] ?? 0
   const todoCount    = health.by_status["todo"]    ?? 0
@@ -143,8 +179,8 @@ export default function RoadmapPage() {
     .slice(0, 3)
 
   const nextActions: string[] = []
-  if (brokenList[0]) nextActions.push(`${brokenList[0].label} 즉시 복구`)
-  if (warnList[0])   nextActions.push(`${warnList[0].label} 경고 원인 분석`)
+  if (brokenList[0])  nextActions.push(`${brokenList[0].label} 즉시 복구`)
+  if (warnList[0])    nextActions.push(`${warnList[0].label} 경고 원인 분석`)
   if (topImpact[0] && topImpact[0].status !== "active")
     nextActions.push(`${topImpact[0].label} 활성화로 임팩트 극대화`)
   if (nextActions.length === 0 && topImpact[0])
@@ -154,6 +190,7 @@ export default function RoadmapPage() {
   const nodeTypeKey = selected?.type?.toUpperCase() ?? ""
   const roleText    = TYPE_ROLE[nodeTypeKey]     ?? `${selected?.type ?? ""} 타입 노드입니다.`
   const expansions  = TYPE_EXPANSION[nodeTypeKey] ?? []
+  const issueText   = TYPE_ISSUE[nodeTypeKey]    ?? "해당 노드 타입에 대한 알려진 리스크 또는 개선점을 별도로 점검하세요."
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans" style={{ cursor: dragCursor ? "col-resize" : undefined }}>
@@ -172,19 +209,20 @@ export default function RoadmapPage() {
           )}
         </div>
 
-        {/* Filter pills */}
+        {/* Filter pills — dot 7px */}
         <div className="flex gap-2 mt-4 flex-wrap">
           {STATUS_FILTERS.map(f => (
             <button key={String(f.value)} onClick={() => toggleFilter(f.value)}
               className={[
-                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border font-medium transition",
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border font-medium transition",
                 filterStatus === f.value
                   ? "bg-zinc-900 text-white border-zinc-900"
                   : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300",
               ].join(" ")}
               style={{ fontSize: 13 }}>
+              {/* dot — 7px */}
               <span className="rounded-full flex-shrink-0"
-                style={{ width: 10, height: 10, background: filterStatus === f.value ? "#ffffff" : f.color }} />
+                style={{ width: 7, height: 7, background: filterStatus === f.value ? "#ffffff" : f.color }} />
               {f.label}
               {f.value && health.by_status[f.value] !== undefined && (
                 <span className={filterStatus === f.value ? "text-zinc-300" : "text-zinc-400"}>
@@ -199,13 +237,20 @@ export default function RoadmapPage() {
       <div className="flex flex-1 min-h-0">
         {/* ════ Left Sidebar ════ */}
         <aside
-          className="flex-shrink-0 border-r border-zinc-200 bg-white relative"
+          className="flex-shrink-0 border-r border-zinc-200 bg-white relative flex flex-col"
           style={{ width: sidebarW }}
-          onWheel={e => e.stopPropagation()}
         >
-          {/* Scrollable content */}
-          <div className="h-full p-4 overflow-y-scroll" style={{ scrollbarWidth: "none" }}>
-            <style>{`aside ::-webkit-scrollbar { display: none }`}</style>
+          {/* Scrollable content — native wheel handled above */}
+          <div
+            ref={sidebarScrollRef}
+            className="flex-1 p-4"
+            style={{ overflowY: "auto", scrollbarWidth: "none" }}
+            onMouseEnter={() => { sidebarHovered.current = true }}
+            onMouseLeave={() => { sidebarHovered.current = false }}
+          >
+            <style>{`
+              [data-sidebar-scroll]::-webkit-scrollbar { display: none }
+            `}</style>
 
             {/* Health Score */}
             <section className="mb-4">
@@ -220,8 +265,9 @@ export default function RoadmapPage() {
                 {Object.entries(health.by_status).map(([s, cnt]) => (
                   <div key={s} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                      {/* dot — 7px */}
                       <span className="rounded-full flex-shrink-0"
-                        style={{ width: 10, height: 10, background: STATUS_DOT[s] ?? "#d4d4d8" }} />
+                        style={{ width: 7, height: 7, background: STATUS_DOT[s] ?? "#d4d4d8" }} />
                       <span className={`inline-block px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`}
                         style={{ fontSize: 13 }}>{s}</span>
                     </div>
@@ -231,13 +277,12 @@ export default function RoadmapPage() {
               </div>
             </section>
 
-            {/* ─── System Diagnostic Panel ─── */}
+            {/* System Diagnostic Panel */}
             <div className="border-t border-zinc-200 pt-4">
               <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-3" style={{ fontSize: 13 }}>
                 시스템 종합 진단
               </p>
-              <div className="space-y-0">
-
+              <div>
                 <DiagSection icon="✅" title="잘된 점">
                   <p>
                     전체 {totalCount}개 노드 중 <strong className="text-emerald-600">{activeCount}개({Math.round(activeCount / totalCount * 100)}%)</strong>가 정상 작동 중입니다.
@@ -266,18 +311,16 @@ export default function RoadmapPage() {
                   {brokenList.length === 0 ? (
                     <p>장애 노드 없음. 모든 연결이 유효합니다.</p>
                   ) : (
-                    <p><strong className="text-red-600">{brokenList.map(n => n.label).join(", ")}</strong> — {brokenList.length}개 노드 장애. 즉시 점검이 필요합니다.</p>
+                    <p><strong className="text-red-600">{brokenList.map(n => n.label).join(", ")}</strong> — {brokenList.length}개 장애. 즉시 점검이 필요합니다.</p>
                   )}
                 </DiagSection>
 
                 <DiagSection icon="📈" title="확장 우선순위">
-                  {topImpact.length === 0 ? (
-                    <p>데이터 없음</p>
-                  ) : (
+                  {topImpact.length === 0 ? <p>데이터 없음</p> : (
                     <ul className="space-y-1">
                       {topImpact.map(n => (
                         <li key={n.node_id} className="flex items-start gap-1.5">
-                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-300 flex-shrink-0" />
+                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
                           <span><strong>{n.label}</strong> (impact {n.user_impact_score}/10) — {TYPE_EXPANSION[n.type?.toUpperCase()]?.[0] ?? "고도화 권장"}</span>
                         </li>
                       ))}
@@ -287,14 +330,14 @@ export default function RoadmapPage() {
 
                 <DiagSection icon="🧠" title="아키텍처 인사이트">
                   {spofList.length === 0 ? (
-                    <p>단일 장애점 후보가 없습니다. 의존성이 분산되어 있습니다.</p>
+                    <p>단일 장애점 후보 없음. 의존성이 분산되어 있습니다.</p>
                   ) : (
                     <>
-                      <p className="mb-1">다음 노드는 연결 수가 많아 <strong>SPOF(단일 장애점)</strong> 위험이 있습니다:</p>
+                      <p className="mb-1">다음 노드는 연결 수가 많아 <strong>SPOF 위험</strong>이 있습니다:</p>
                       <ul className="space-y-1">
                         {spofList.map(n => (
                           <li key={n.node_id} className="flex items-start gap-1.5">
-                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                            <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#fbbf24", display: "inline-block" }} />
                             <span><strong>{n.label}</strong> — 연결 {edgeCnt[n.node_id]}개, 이중화 또는 캐싱 권장</span>
                           </li>
                         ))}
@@ -305,7 +348,7 @@ export default function RoadmapPage() {
 
                 <DiagSection icon="💡" title="다음 개발 액션">
                   {nextActions.length === 0 ? (
-                    <p>전체 시스템이 정상입니다. 신규 데이터소스 확장을 검토하세요.</p>
+                    <p>전체 정상. 신규 데이터소스 확장을 검토하세요.</p>
                   ) : (
                     <ol className="space-y-1 list-none">
                       {nextActions.map((a, i) => (
@@ -317,12 +360,11 @@ export default function RoadmapPage() {
                     </ol>
                   )}
                 </DiagSection>
-
               </div>
             </div>
           </div>
 
-          {/* ── Drag handle (right border) ── */}
+          {/* Drag handle — right border */}
           <div
             className="absolute right-0 top-0 h-full w-1.5 hover:bg-blue-300 transition-colors z-20"
             style={{ cursor: "col-resize" }}
@@ -352,7 +394,7 @@ export default function RoadmapPage() {
         {/* ════ Right Detail Panel ════ */}
         {selected && (
           <aside className="flex-shrink-0 border-l border-zinc-200 bg-white relative overflow-y-auto" style={{ width: rightW }}>
-            {/* ── Drag handle (left border) ── */}
+            {/* Drag handle — left border */}
             <div
               className="absolute left-0 top-0 h-full w-1.5 hover:bg-blue-300 transition-colors z-20"
               style={{ cursor: "col-resize" }}
@@ -401,7 +443,7 @@ export default function RoadmapPage() {
                 </div>
               )}
 
-              {/* Section A: 역할 */}
+              {/* Section A: 역할 및 기능 */}
               <div className="mt-4 pt-4 border-t border-zinc-200">
                 <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>역할 및 기능</p>
                 <div className="bg-zinc-50 rounded-xl px-4 py-3">
@@ -417,7 +459,7 @@ export default function RoadmapPage() {
                     <ul className="space-y-1.5">
                       {expansions.map((item, i) => (
                         <li key={i} className="flex items-start gap-2 text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>
-                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-300 flex-shrink-0" />
+                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
                           {item}
                         </li>
                       ))}
@@ -425,6 +467,14 @@ export default function RoadmapPage() {
                   </div>
                 </div>
               )}
+
+              {/* Section C: 문제점 / 개선점 */}
+              <div className="mt-3 pt-4 border-t border-zinc-200">
+                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>🔧 문제점 / 개선점</p>
+                <div className="rounded-xl px-4 py-3" style={{ background: "#f4f4f5" }}>
+                  <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{issueText}</p>
+                </div>
+              </div>
 
               {selected.updated_at && (
                 <p className="text-zinc-400 mt-4" style={{ fontSize: 12 }}>
