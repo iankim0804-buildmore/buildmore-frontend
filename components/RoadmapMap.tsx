@@ -36,17 +36,16 @@ interface Props {
 }
 
 export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, selectedId, onSelect, onDeselect }: Props) {
-  const rawUid    = useId()
-  const uid       = rawUid.replace(/:/g, "")
-  const arrowId   = `arw-${uid}`
-  const arrowOrgId = `arworg-${uid}`
-  const arrowHlId = `arwhl-${uid}`
+  const rawUid  = useId()
+  const uid     = rawUid.replace(/:/g, "")
+  const arrowId = `arw-${uid}`
+  const arwHlId = `arwhl-${uid}`
 
-  const [zoom, setZoom]   = useState(0.6)
-  const [panX, setPanX]   = useState(20)
-  const [panY, setPanY]   = useState(32)
-  const [panning, setPanning]   = useState(false)
-  const [hlEdgeId, setHlEdgeId] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(0.6)
+  const [panX, setPanX] = useState(20)
+  const [panY, setPanY] = useState(32)
+  const [panning, setPanning]     = useState(false)
+  const [hlEdgeId, setHlEdgeId]   = useState<string | null>(null)
   const [edgePopup, setEdgePopup] = useState<EdgePopup | null>(null)
 
   const zoomRef  = useRef(0.6)
@@ -56,20 +55,19 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
   const containerRef = useRef<HTMLDivElement>(null)
 
   const nodeMap = useMemo(() => new Map(nodes.map(n => [n.node_id, n])), [nodes])
+  const edgeMap = useMemo(() => new Map(edges.map(e => [e.edge_id, e])), [edges])
 
-  // Connected edge IDs for selected node
-  const connectedEdgeIds = useMemo(() => {
+  /** edge IDs connected to selectedId (incoming + outgoing) */
+  const connectedEdgeIds = useMemo<Set<string> | null>(() => {
     if (!selectedId) return null
-    const ids = new Set<string>()
-    for (const e of edges) {
-      if (e.source === selectedId || e.target === selectedId) ids.add(e.edge_id)
-    }
-    return ids
+    const s = new Set<string>()
+    for (const e of edges) if (e.source === selectedId || e.target === selectedId) s.add(e.edge_id)
+    return s
   }, [selectedId, edges])
 
   /* ── Auto-fit ── */
   useEffect(() => {
-    if (nodes.length === 0 || !containerRef.current) return
+    if (!nodes.length || !containerRef.current) return
     const { clientWidth, clientHeight } = containerRef.current
     const maxX = Math.max(...nodes.map(n => n.x + NODE_W)) + 60
     const maxY = Math.max(...nodes.map(n => n.y + NODE_H)) + 60
@@ -78,15 +76,13 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
     setZoom(fit); setPanX(10); setPanY(32)
   }, [nodes.length])
 
-  /* ── Wheel zoom ── */
+  /* ── Wheel zoom (native, passive:false) ── */
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const onWheel = (e: WheelEvent) => {
+    const el = containerRef.current; if (!el) return
+    const fn = (e: WheelEvent) => {
       e.preventDefault()
       const rect  = el.getBoundingClientRect()
-      const mx    = e.clientX - rect.left
-      const my    = e.clientY - rect.top
+      const mx    = e.clientX - rect.left, my = e.clientY - rect.top
       const f     = e.deltaY < 0 ? 1.09 : 0.91
       const oldZ  = zoomRef.current
       const newZ  = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZ * f))
@@ -96,33 +92,26 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
       zoomRef.current = newZ; panRef.current = { x: nx, y: ny }
       setZoom(newZ); setPanX(nx); setPanY(ny)
     }
-    el.addEventListener("wheel", onWheel, { passive: false })
-    return () => el.removeEventListener("wheel", onWheel)
+    el.addEventListener("wheel", fn, { passive: false })
+    return () => el.removeEventListener("wheel", fn)
   }, [])
 
-  /* ── Global pan (middle mouse) ── */
+  /* ── Global mouse (pan) ── */
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!isPanRef.current) return
-      const dx = e.clientX - dragRef.current.x
-      const dy = e.clientY - dragRef.current.y
-      const nx = dragRef.current.px + dx
-      const ny = dragRef.current.py + dy
-      panRef.current = { x: nx, y: ny }
-      setPanX(nx); setPanY(ny)
+      const nx = dragRef.current.px + e.clientX - dragRef.current.x
+      const ny = dragRef.current.py + e.clientY - dragRef.current.y
+      panRef.current = { x: nx, y: ny }; setPanX(nx); setPanY(ny)
     }
-    const onUp = (e: MouseEvent) => {
-      if (e.button === 1) { isPanRef.current = false; setPanning(false) }
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
+    const onUp = (e: MouseEvent) => { if (e.button === 1) { isPanRef.current = false; setPanning(false) } }
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp)
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
   }, [])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 1) return
-    e.preventDefault()
-    isPanRef.current = true; setPanning(true)
+    e.preventDefault(); isPanRef.current = true; setPanning(true)
     dragRef.current = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y }
   }
 
@@ -146,12 +135,10 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
 
   const closePopup = () => { setHlEdgeId(null); setEdgePopup(null) }
 
-  /* ── Layer x-positions ── */
+  /* ── Layer column x positions ── */
   const layerXMap = useMemo(() => {
     const m: Record<string, number> = {}
-    for (const n of nodes) {
-      if (!(n.layer in m) || n.x < m[n.layer]) m[n.layer] = n.x
-    }
+    for (const n of nodes) if (!(n.layer in m) || n.x < m[n.layer]) m[n.layer] = n.x
     return m
   }, [nodes])
 
@@ -160,9 +147,8 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
   const canvasW  = contentW * 4
   const canvasH  = contentH * 4
 
-  function edgePath(edge: RoadmapEdge) {
-    const f = nodeMap.get(edge.source)
-    const t = nodeMap.get(edge.target)
+  function calcPath(edge: RoadmapEdge) {
+    const f = nodeMap.get(edge.source), t = nodeMap.get(edge.target)
     if (!f || !t) return null
     const x1 = f.x + NODE_W, y1 = f.y + NODE_H / 2
     const x2 = t.x,          y2 = t.y + NODE_H / 2
@@ -170,8 +156,18 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
     return { x1, y1, x2, y2, mx, d: `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}` }
   }
 
-  const hlEdge  = hlEdgeId ? edges.find(e => e.edge_id === hlEdgeId) ?? null : null
-  const hlPath  = hlEdge ? edgePath(hlEdge) : null
+  /* ── Overlay data: node-connected (black) + edge-clicked (blue) ── */
+  const overlayConnected: Array<{ edge: RoadmapEdge; p: NonNullable<ReturnType<typeof calcPath>> }> = []
+  if (connectedEdgeIds) {
+    for (const id of connectedEdgeIds) {
+      if (id === hlEdgeId) continue   // blue overlay takes priority
+      const edge = edgeMap.get(id); if (!edge) continue
+      const p = calcPath(edge); if (!p) continue
+      overlayConnected.push({ edge, p })
+    }
+  }
+  const hlEdgeObj   = hlEdgeId ? (edgeMap.get(hlEdgeId) ?? null) : null
+  const hlEdgePath  = hlEdgeObj ? calcPath(hlEdgeObj) : null
 
   return (
     <div
@@ -181,97 +177,75 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
       onMouseDown={handleMouseDown}
       onClick={handleCanvasClick}
     >
-      {/* ── Transform canvas ── */}
-      <div
-        style={{
-          position: "absolute", top: 0, left: 0,
-          width: canvasW, height: canvasH,
-          transformOrigin: "0 0",
-          transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-        }}
-      >
+      {/* ═══ Transform canvas ═══ */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, width: canvasW, height: canvasH,
+        transformOrigin: "0 0",
+        transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+      }}>
         {/* Column headers */}
         {Object.entries(layerXMap).map(([layer, x]) => (
           <div key={layer} style={{
             position: "absolute", top: 8, left: x, width: NODE_W,
-            textAlign: "center", fontSize: 14, fontWeight: 800,
-            color: "#000000", letterSpacing: "0.14em",
-            textTransform: "uppercase", pointerEvents: "none",
+            textAlign: "center", fontSize: 14, fontWeight: 800, color: "#000000",
+            letterSpacing: "0.14em", textTransform: "uppercase", pointerEvents: "none",
           }}>
             {layerLabels[layer] ?? layer}
           </div>
         ))}
 
-        {/* ── Edges SVG (z-index 1) ── */}
+        {/* ── Main edges SVG (z-index 1) ── */}
         <svg style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }} width={canvasW} height={canvasH}>
           <defs>
             <marker id={arrowId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0 L0,6 L7,3 z" fill="#f59e0b" />
-            </marker>
-            <marker id={arrowOrgId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L7,3 z" fill="#cbd5e1" />
             </marker>
           </defs>
           {edges.map(edge => {
-            const p = edgePath(edge)
-            if (!p) return null
-            const isEdgeClicked = hlEdgeId === edge.edge_id
-            const isNodeConnected = connectedEdgeIds !== null && connectedEdgeIds.has(edge.edge_id)
+            const p = calcPath(edge); if (!p) return null
+            const isClicked    = hlEdgeId === edge.edge_id
+            const isConnected  = connectedEdgeIds?.has(edge.edge_id) ?? false
 
-            // Opacity
-            let opacity = 1
-            if (isEdgeClicked) {
-              opacity = 0  // overlay SVG handles it
-            } else if (connectedEdgeIds !== null) {
-              opacity = isNodeConnected ? 1.0 : 0.15
-            } else if (filterStatus !== null) {
-              const srcStatus = nodeMap.get(edge.source)?.status
-              const tgtStatus = nodeMap.get(edge.target)?.status
-              if (srcStatus !== filterStatus && tgtStatus !== filterStatus) opacity = 0.06
+            // opacity rules
+            let opacity = 0.9
+            if (isClicked || isConnected) opacity = 0   // drawn in overlay
+            else if (connectedEdgeIds !== null) opacity = 0.1
+            else if (filterStatus !== null) {
+              const ss = nodeMap.get(edge.source)?.status, ts = nodeMap.get(edge.target)?.status
+              if (ss !== filterStatus && ts !== filterStatus) opacity = 0.06
             }
-
-            const stroke = isNodeConnected && connectedEdgeIds !== null
-              ? "#f59e0b"
-              : (edge.dashed ? "#94a3b8" : "#cbd5e1")
-            const sw = isNodeConnected && connectedEdgeIds !== null ? 3 : 1.5
-            const markerId = isNodeConnected && connectedEdgeIds !== null ? arrowId : arrowOrgId
 
             return (
               <g key={edge.edge_id} style={{ opacity }}>
+                {/* Wide invisible hit target */}
                 <path d={p.d} fill="none" stroke="transparent" strokeWidth={14}
                   style={{ pointerEvents: "all", cursor: "pointer" }}
                   onClick={(e) => handleEdgeClick(edge, e as unknown as React.MouseEvent)}
                 />
-                {!isEdgeClicked && (
-                  <path d={p.d} fill="none" stroke={stroke} strokeWidth={sw}
-                    strokeDasharray={edge.dashed ? "5 3" : undefined}
-                    markerEnd={`url(#${markerId})`}
-                    style={{ pointerEvents: "none" }}
-                  />
-                )}
-                {!isEdgeClicked && edge.label && (
-                  <text x={p.mx} y={(p.y1 + p.y2) / 2 - 5}
-                    fill={isNodeConnected && connectedEdgeIds !== null ? "#f59e0b" : "#94a3b8"}
-                    fontSize={9} textAnchor="middle"
-                    fontFamily="ui-sans-serif,system-ui,sans-serif"
-                    style={{ pointerEvents: "none" }}>
-                    {edge.label}
-                  </text>
+                <path d={p.d} fill="none"
+                  stroke={edge.dashed ? "#94a3b8" : "#cbd5e1"} strokeWidth={1.5}
+                  strokeDasharray={edge.dashed ? "5 3" : undefined}
+                  markerEnd={`url(#${arrowId})`}
+                  style={{ pointerEvents: "none" }}
+                />
+                {edge.label && (
+                  <text x={p.mx} y={(p.y1 + p.y2) / 2 - 5} fill="#94a3b8" fontSize={9}
+                    textAnchor="middle" fontFamily="ui-sans-serif,system-ui,sans-serif"
+                    style={{ pointerEvents: "none" }}>{edge.label}</text>
                 )}
               </g>
             )
           })}
         </svg>
 
-        {/* ── Nodes (z-index 2) ── */}
+        {/* ── Node cards (z-index 2) ── */}
         <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>
           {nodes.map(node => {
             const s = STATUS_STYLE[node.status] ?? STATUS_STYLE.unknown
             const isFiltered = connectedEdgeIds === null && filterStatus !== null && node.status !== filterStatus
             const isSelected = node.node_id === selectedId
             return (
-              <button
-                key={node.node_id}
+              <button key={node.node_id}
                 onClick={(e) => { e.stopPropagation(); onSelect(node) }}
                 className={[
                   "absolute rounded-xl border bg-white text-left transition-shadow cursor-pointer shadow-sm hover:shadow-md",
@@ -304,66 +278,73 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
           })}
         </div>
 
-        {/* ── Edge-click highlight overlay (z-index 10) ── */}
-        {hlEdge && hlPath && (
-          <svg style={{ position: "absolute", top: 0, left: 0, zIndex: 10, pointerEvents: "none" }} width={canvasW} height={canvasH}>
+        {/* ═══ Combined highlight overlay (z-index 10, above nodes) ═══ */}
+        {(overlayConnected.length > 0 || hlEdgeObj) && (
+          <svg style={{ position: "absolute", top: 0, left: 0, zIndex: 10, pointerEvents: "none" }}
+            width={canvasW} height={canvasH}>
             <defs>
-              <marker id={arrowHlId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+              <marker id={arwHlId} markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
                 <path d="M0,0 L0,6 L7,3 z" fill="#3b82f6" />
               </marker>
             </defs>
-            <path d={hlPath.d} fill="none" stroke="#3b82f6" strokeWidth={3}
-              strokeDasharray={hlEdge.dashed ? "5 3" : undefined}
-              markerEnd={`url(#${arrowHlId})`}
-            />
-            {hlEdge.label && (
-              <text x={hlPath.mx} y={(hlPath.y1 + hlPath.y2) / 2 - 7}
-                fill="#3b82f6" fontSize={10} fontWeight="700" textAnchor="middle"
-                fontFamily="ui-sans-serif,system-ui,sans-serif">
-                {hlEdge.label}
-              </text>
+
+            {/* Node-connected edges: black, 1.5px + red endpoint dots */}
+            {overlayConnected.map(({ edge, p }) => (
+              <g key={edge.edge_id}>
+                <path d={p.d} fill="none" stroke="#000000" strokeWidth={1.5}
+                  strokeDasharray={edge.dashed ? "5 3" : undefined} />
+                {/* Red dots at connection points */}
+                <circle cx={p.x1} cy={p.y1} r={3} fill="#EF4444" />
+                <circle cx={p.x2} cy={p.y2} r={3} fill="#EF4444" />
+              </g>
+            ))}
+
+            {/* Edge-clicked: blue, 3px */}
+            {hlEdgeObj && hlEdgePath && (
+              <g>
+                <path d={hlEdgePath.d} fill="none" stroke="#3b82f6" strokeWidth={3}
+                  strokeDasharray={hlEdgeObj.dashed ? "5 3" : undefined}
+                  markerEnd={`url(#${arwHlId})`} />
+                {hlEdgeObj.label && (
+                  <text x={hlEdgePath.mx} y={(hlEdgePath.y1 + hlEdgePath.y2) / 2 - 7}
+                    fill="#3b82f6" fontSize={10} fontWeight="700" textAnchor="middle"
+                    fontFamily="ui-sans-serif,system-ui,sans-serif">
+                    {hlEdgeObj.label}
+                  </text>
+                )}
+              </g>
             )}
           </svg>
         )}
       </div>
 
-      {/* ── Edge-click popup (screen space) ── */}
+      {/* ═══ Edge-click popup (screen space) ═══ */}
       {edgePopup && (
-        <div
-          className="absolute z-50 bg-white border border-zinc-200 rounded-xl shadow-xl p-4 w-72"
+        <div className="absolute z-50 bg-white border border-zinc-200 rounded-xl shadow-xl p-4 w-72"
           style={{
             left: Math.min(edgePopup.screenX + 16, (containerRef.current?.clientWidth ?? 800) - 300),
             top:  Math.max(Math.min(edgePopup.screenY - 24, (containerRef.current?.clientHeight ?? 600) - 130), 8),
           }}
-          onClick={e => e.stopPropagation()}
-        >
+          onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">엣지 연결 정보</p>
             <button onClick={closePopup}
-              className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 text-sm transition">
-              ✕
-            </button>
+              className="w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 text-sm transition">✕</button>
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-medium px-2.5 py-1.5 rounded-lg flex-1 truncate">
-              {edgePopup.sourceLabel}
-            </span>
+            <span className="bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-medium px-2.5 py-1.5 rounded-lg flex-1 truncate">{edgePopup.sourceLabel}</span>
             <span className="text-blue-500 flex-shrink-0 font-bold text-sm">→</span>
-            <span className="bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-medium px-2.5 py-1.5 rounded-lg flex-1 truncate">
-              {edgePopup.targetLabel}
-            </span>
+            <span className="bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-medium px-2.5 py-1.5 rounded-lg flex-1 truncate">{edgePopup.targetLabel}</span>
           </div>
           {edgePopup.edge.label && (
             <div className="mt-2.5 pt-2.5 border-t border-zinc-100">
-              <p className="text-[11px] text-zinc-500">
-                <span className="font-semibold text-zinc-700">label:</span> {edgePopup.edge.label}
-              </p>
+              <p className="text-[11px] text-zinc-500"><span className="font-semibold text-zinc-700">label:</span> {edgePopup.edge.label}</p>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Zoom badge ── */}
+      {/* Zoom badge */}
       <div className="absolute bottom-3 right-3 bg-white border border-zinc-200 rounded-lg px-2 py-1 text-[10px] font-medium text-zinc-500 shadow-sm pointer-events-none">
         {Math.round(zoom * 100)}%
       </div>
