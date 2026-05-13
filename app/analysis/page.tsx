@@ -86,30 +86,6 @@ interface AnalysisHistoryItem {
 }
 
 
-interface SearchHistoryItem {
-  address: string
-  timestamp: number
-}
-
-interface AnalysisHistoryItem {
-  address: string
-  score: number
-  dealSignal: string
-  timestamp: number
-}
-
-interface SearchHistoryItem {
-  address: string
-  timestamp: number
-}
-
-interface AnalysisHistoryItem {
-  address: string
-  score: number
-  dealSignal: string
-  timestamp: number
-}
-
 // ============================================================
 // DATA
 // ============================================================
@@ -706,10 +682,30 @@ BuildMore 판단:
     setAddressConfirmed(false)
 
     try {
+      // 카카오 Geocoder로 lat/lng/bjd_code 먼저 조회 후 bootstrap에 함께 전달
+      let _lat: number | null = null
+      let _lng: number | null = null
+      let _bjd_code: string | null = null
+      try {
+        if (typeof window !== 'undefined' && (window as any).kakao?.maps?.services?.Geocoder) {
+          await new Promise<void>((resolve) => {
+            const geocoder = new (window as any).kakao.maps.services.Geocoder()
+            geocoder.addressSearch(confirmedAddress, (result: any[], status: string) => {
+              if (status === 'OK' && result.length > 0) {
+                _lat = parseFloat(result[0].y)
+                _lng = parseFloat(result[0].x)
+                _bjd_code = result[0].address?.b_code ?? null
+              }
+              resolve()
+            })
+          })
+        }
+      } catch { /* geocoding 실패 시 무시 */ }
+
       const resp = await fetch('/api/analysis/bootstrap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_address: confirmedAddress }),
+        body: JSON.stringify({ full_address: confirmedAddress, lat: _lat, lng: _lng, bjd_code: _bjd_code }),
       })
 
       if (!resp.ok) throw new Error('bootstrap 실패')
@@ -762,7 +758,7 @@ BuildMore 판단:
         const newAnalysisHistory: AnalysisHistoryItem[] = [
           { address: confirmedAddress, score, dealSignal, timestamp: Date.now() },
           ...analysisHistory.filter((h: AnalysisHistoryItem) => h.address !== confirmedAddress),
-        ].slice(0, 5)
+        ].slice(0, 20)
         setAnalysisHistory(newAnalysisHistory)
         if (typeof window !== 'undefined') {
           localStorage.setItem('bm_analysis_history', JSON.stringify(newAnalysisHistory))
