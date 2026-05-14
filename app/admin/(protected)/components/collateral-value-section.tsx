@@ -19,14 +19,21 @@ type CollectResponse = {
     road_address?: string | null
     jibun_address?: string | null
     pnu: string
-    sigungu_cd: string
-    bjdong_cd: string
-    bun: string
-    ji: string
   }
   facts: CollateralFact[]
-  estimated_land_value_억원?: number | null
   blocked_or_skipped: string[]
+  [key: string]: unknown
+}
+
+type VitalityIndicator = {
+  metric_key: string
+  metric_name_ko: string
+  unit?: string | null
+  collection_frequency: string
+  data_source: string
+  is_available: boolean
+  stored_count?: number
+  reason?: string | null
 }
 
 type StatusResponse = {
@@ -38,6 +45,15 @@ type StatusResponse = {
   todo_item_count: number
   latest_fetched_at?: string | null
   next_actions: string[]
+  commercial_vitality?: {
+    total: number
+    available: number
+    rate: number
+    snapshot_count: number
+    covered_area_count: number
+    indicators: VitalityIndicator[]
+    manual_connection_required: VitalityIndicator[]
+  }
 }
 
 const badgeClass: Record<string, string> = {
@@ -57,9 +73,7 @@ export function CollateralValueSection() {
 
   async function loadStatus() {
     const response = await fetch('/api/collateral-value/status', { cache: 'no-store' })
-    if (response.ok) {
-      setStatus(await response.json())
-    }
+    if (response.ok) setStatus(await response.json())
   }
 
   useEffect(() => {
@@ -70,6 +84,10 @@ export function CollateralValueSection() {
     if (!status) return 0
     return Object.values(status.configured_required_keys).filter(Boolean).length
   }, [status])
+
+  const collateralPending = (status?.todo_item_count ?? 0) + (status?.warning_item_count ?? 0)
+  const vitality = status?.commercial_vitality
+  const vitalityManualCount = vitality?.manual_connection_required?.length ?? 0
 
   async function runCollect() {
     if (!address.trim()) return
@@ -113,11 +131,69 @@ export function CollateralValueSection() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <Metric label="API 키" value={`${configured}/2`} tone={configured === 2 ? 'active' : 'warning'} />
-        <Metric label="검증 완료" value={`${status?.active_item_count ?? 0}/19`} tone="active" />
-        <Metric label="대기/주의" value={`${(status?.todo_item_count ?? 0) + (status?.warning_item_count ?? 0)}`} tone="warning" />
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-sidebar-foreground">담보가치 API 검증 상태</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            건축물대장, 공시지가, 토지이용계획처럼 담보가치 산정에 직접 쓰는 원천데이터입니다.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Metric label="필수 API 키" value={`${configured}/2`} tone={configured === 2 ? 'active' : 'warning'} />
+          <Metric label="검증 완료" value={`${status?.active_item_count ?? 0}/19`} tone="active" />
+          <Metric label="대기/주의" value={`${collateralPending}`} tone={collateralPending ? 'warning' : 'active'} />
+        </div>
       </div>
+
+      {vitality && (
+        <div className="rounded-md border border-sidebar-border bg-sidebar p-3">
+          <div className="mb-3 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Commercial Vitality
+            </p>
+            <h3 className="text-sm font-semibold text-sidebar-foreground">
+              상권활력 원천데이터 연결 상태
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              주소 입력 후 상권 월매출, 유동인구, 개폐업률 등을 빠르게 불러오기 위한 하위 지표입니다.
+            </p>
+          </div>
+
+          <div className="mb-3 grid gap-3 md:grid-cols-3">
+            <Metric label="상권활력 연결 완료" value={`${vitality.available}/${vitality.total}`} tone={vitality.available ? 'active' : 'warning'} />
+            <Metric label="수동 연결 필요" value={`${vitalityManualCount}`} tone={vitalityManualCount ? 'warning' : 'active'} />
+            <Metric label="캐시 스냅샷" value={`${vitality.snapshot_count}`} tone={vitality.snapshot_count ? 'active' : 'warning'} />
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {vitality.indicators.map((indicator) => (
+              <div
+                key={indicator.metric_key}
+                className="flex min-h-12 items-start gap-2 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-2 text-sm"
+              >
+                {indicator.is_available ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-sidebar-foreground">{indicator.metric_name_ko}</span>
+                    <span className="text-xs text-muted-foreground">{indicator.unit || '-'}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {indicator.data_source} · {indicator.collection_frequency}
+                    {indicator.stored_count ? ` · ${indicator.stored_count.toLocaleString()} rows` : ''}
+                  </p>
+                  {!indicator.is_available && indicator.reason && (
+                    <p className="mt-1 text-xs text-amber-700">{indicator.reason}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 md:flex-row">
         <div className="relative flex-1">
@@ -155,8 +231,9 @@ export function CollateralValueSection() {
 
       {status?.next_actions?.length ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="font-medium">담보가치 API 다음 작업</p>
           {status.next_actions.map((action) => (
-            <p key={action}>{action}</p>
+            <p key={action} className="mt-1">{action}</p>
           ))}
         </div>
       ) : null}
@@ -168,9 +245,6 @@ export function CollateralValueSection() {
               {result.normalized_address.road_address || result.normalized_address.jibun_address}
             </p>
             <p className="mt-1">PNU {result.normalized_address.pnu}</p>
-            {result.estimated_land_value_억원 != null && (
-              <p>추정 토지가치 {result.estimated_land_value_억원}억원</p>
-            )}
           </div>
 
           <div className="overflow-hidden rounded-md border border-sidebar-border">
