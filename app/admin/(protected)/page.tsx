@@ -11,6 +11,7 @@ import { DeltaSection } from './components/delta-section'
 import { DataCoverageSection } from './components/data-coverage-section'
 import { RoadmapSection } from './components/roadmap-section'
 import { DevLogSection } from './components/dev-log-section'
+import { CollateralValueSection } from './components/collateral-value-section'
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null)
@@ -178,7 +179,10 @@ export default function AdminDashboardPage() {
         {/* Section 6: Data Coverage (independent error boundary via component state) */}
         <DataCoverageSection />
 
-        {/* Section 7: Development Roadmap (independent error boundary via component state) */}
+        {/* Section 7: Collateral Value API verification */}
+        <CollateralValueSection />
+
+        {/* Section 8: Development Roadmap (independent error boundary via component state) */}
         <RoadmapSection />
       </main>
     </div>
