@@ -1,0 +1,238 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BuildMore 3주 MVP 로드맵</title>
+<style>
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-text-primary: #171717;
+  --color-text-secondary: #525252;
+  --color-text-tertiary: #8a8a8a;
+  --color-background-secondary: #fafafa;
+  --color-border-secondary: #e5e5e5;
+  --color-border-tertiary: #eeeeee;
+  --border-radius-lg: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.wrap { padding: 1rem 0; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.phase-label { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--color-text-tertiary); margin: 1.25rem 0 .5rem; }
+.week-header { display: grid; grid-template-columns: 180px repeat(21, 1fr); gap: 0; margin-bottom: 4px; }
+.wh-empty { }
+.wh-day { font-size: 10px; color: var(--color-text-tertiary); text-align: center; padding: 2px 0; }
+.wh-day.weekend { color: var(--color-text-tertiary); opacity: .45; }
+.wh-week { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); grid-column: span 7; text-align: center; padding-bottom: 4px; border-bottom: 1px solid var(--color-border-tertiary); margin-bottom: 4px; }
+.gantt { display: flex; flex-direction: column; gap: 3px; }
+.row { display: grid; grid-template-columns: 180px repeat(21, 1fr); align-items: center; min-height: 28px; }
+.row:hover { background: var(--color-background-secondary); border-radius: 6px; }
+.task-label { font-size: 12px; color: var(--color-text-primary); padding: 0 8px 0 0; line-height: 1.3; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.idx { font-size: 10px; font-weight: 500; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 4px; padding: 1px 5px; color: var(--color-text-secondary); flex-shrink: 0; min-width: 24px; text-align: center; }
+.bar-cell { position: relative; height: 28px; display: flex; align-items: center; }
+.bar { height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: flex-start; padding: 0 6px; font-size: 10px; font-weight: 500; white-space: nowrap; overflow: hidden; cursor: pointer; transition: opacity .15s; position: absolute; }
+.bar:hover { opacity: .8; }
+.sep { border-left: 1px dashed var(--color-border-tertiary); height: 100%; position: absolute; top: 0; }
+.week-sep { border-left: 1px solid var(--color-border-secondary); }
+.detail-panel { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-top: 1rem; display: none; }
+.detail-panel.open { display: block; }
+.detail-title { font-size: 14px; font-weight: 500; margin-bottom: .5rem; color: var(--color-text-primary); }
+.detail-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.65; }
+.detail-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: .75rem; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; }
+.grid-line { position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none; }
+@media (max-width: 768px) {
+  body { min-width: 0; overflow-x: hidden; background: #fff; }
+  .wrap { padding: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .legend { gap: 8px 10px; margin-bottom: 14px; }
+  .leg { font-size: 11px; }
+  .week-header, .row { grid-template-columns: 132px repeat(21, 32px); min-width: 804px; }
+  .task-label { font-size: 11px; padding-right: 6px; }
+  .idx { min-width: 22px; padding: 1px 4px; }
+  .bar { height: 20px; font-size: 9px; padding: 0 5px; }
+  .detail-panel { min-width: 0; margin-top: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<h2 class="sr-only">BuildMore 3주 MVP 로드맵 간트차트</h2>
+
+<div class="legend">
+  <div class="leg"><div class="leg-dot" style="background:#7F77DD"></div>기획·데이터</div>
+  <div class="leg"><div class="leg-dot" style="background:#1D9E75"></div>프론트·백엔드 구축</div>
+  <div class="leg"><div class="leg-dot" style="background:#378ADD"></div>핵심 엔진</div>
+  <div class="leg"><div class="leg-dot" style="background:#EF9F27"></div>BM·디자인</div>
+  <div class="leg"><div class="leg-dot" style="background:#E24B4A"></div>마케팅·GTM</div>
+</div>
+
+<div class="week-header">
+  <div></div>
+  <div class="wh-week" style="grid-column:2/9">Week 1 — 기획·구축</div>
+  <div class="wh-week" style="grid-column:9/16">Week 2 — 엔진·자동화</div>
+  <div class="wh-week" style="grid-column:16/23">Week 3 — BM·마케팅</div>
+</div>
+
+<div class="week-header" style="margin-bottom:6px;">
+  <div></div>
+  <div class="wh-day">월</div><div class="wh-day">화</div><div class="wh-day">수</div><div class="wh-day">목</div><div class="wh-day">금</div><div class="wh-day weekend">토</div><div class="wh-day weekend">일</div>
+  <div class="wh-day">월</div><div class="wh-day">화</div><div class="wh-day">수</div><div class="wh-day">목</div><div class="wh-day">금</div><div class="wh-day weekend">토</div><div class="wh-day weekend">일</div>
+  <div class="wh-day">월</div><div class="wh-day">화</div><div class="wh-day">수</div><div class="wh-day">목</div><div class="wh-day">금</div><div class="wh-day weekend">토</div><div class="wh-day weekend">일</div>
+</div>
+
+<div class="gantt" id="gantt"></div>
+<div class="detail-panel" id="detail">
+  <div class="detail-title" id="d-title"></div>
+  <div class="detail-body" id="d-body"></div>
+  <div class="detail-tags" id="d-tags"></div>
+</div>
+</div>
+
+<script>
+const COLS = 21;
+const tasks = [
+  { id:'P1', phase:'📋 기획·데이터 (D1~D4)', label:'서비스 구조 확정', start:0, dur:2, color:'#7F77DD', textColor:'#fff',
+    desc:'타겟별 핵심 니즈 정의, 입력→출력 플로우 최종 확정, 분석 카드 스키마 고정. Quick Simulation 입력값 최소화 원칙 재확인.',
+    tags:['타겟 정의','플로우 확정','스키마 고정'] },
+  { id:'P2', phase:'', label:'데이터 소스 매핑', start:1, dur:2, color:'#7F77DD', textColor:'#fff',
+    desc:'건축HUB API 연결 테스트, 공공데이터포털 상권정보 구조 파악, 임대료·거래사례 데이터 소스 확정. 실API 없으면 mock 구조로 대체.',
+    tags:['건축HUB API','상권정보','거래사례','mock 설계'] },
+  { id:'P3', phase:'', label:'공사비 preset 설계', start:2, dur:2, color:'#7F77DD', textColor:'#fff',
+    desc:'리모델링·증축·신축 × 저비용/표준/고급 × 주거/비주거 매트릭스 작성. 평당단가 초기값 설정. 예비비율 기준 확정.',
+    tags:['공사유형 매트릭스','평단가 기준','예비비율'] },
+  { id:'P4', phase:'', label:'DB 스키마 최종화', start:3, dur:1, color:'#7F77DD', textColor:'#fff',
+    desc:'analysis_service 9개 카드 스키마 확정. peer_group_stats 구조 점검. 사용자 입력값 저장 구조 설계.',
+    tags:['Pydantic 스키마','Neon Postgres','Alembic'] },
+
+  { id:'B1', phase:'🏗️ 프론트·백엔드 구축 (D4~D10)', label:'Quick Simulation API', start:3, dur:3, color:'#1D9E75', textColor:'#fff',
+    desc:'주소 입력 → 건축물대장 자동조회 → 매입가/방향 입력 → 자기자본수익률·순이익·필요자기자본·공사비·최대매입가 출력. FastAPI 엔드포인트 구현.',
+    tags:['FastAPI','건축HUB 연동','수익률 계산','최대매입가'] },
+  { id:'B2', phase:'', label:'후보 저장 & 비교보드 API', start:5, dur:3, color:'#1D9E75', textColor:'#fff',
+    desc:'매물 후보 저장/불러오기 API. 후보별 분석값 캐싱. 자기자본수익률 기준 정렬. 비교 보드 데이터 집계 엔드포인트.',
+    tags:['후보 CRUD','정렬 로직','비교 집계'] },
+  { id:'B3', phase:'', label:'프론트 Quick Sim UI', start:4, dur:4, color:'#1D9E75', textColor:'#fff',
+    desc:'주소 입력창 + 지도 기반 UI (v0/Vercel). 결과 카드 컴포넌트: 수익률·순이익·자기자본·추천용도·공사유형·리스크등급. 모바일 우선 레이아웃.',
+    tags:['v0/Vercel','결과 카드 UI','모바일 우선'] },
+  { id:'B4', phase:'', label:'비교보드 프론트 UI', start:6, dur:2, color:'#1D9E75', textColor:'#fff',
+    desc:'후보 목록 테이블 + 수익률 순위 시각화. 각 후보별 핵심 지표 컬럼 표시. 후보 추가/삭제/순서변경.',
+    tags:['비교 테이블','순위 시각화','후보 관리'] },
+
+  { id:'E1', phase:'⚙️ 핵심 엔진 (D8~D17)', label:'자동분석 매트릭스 엔진', start:7, dur:3, color:'#378ADD', textColor:'#fff',
+    desc:'주거/비주거 선택 시 상세 용도 후보 자동 생성. 용도별 × 공사유형별 × 퀄리티별 전 조합 수익률 계산. 최적 조합 추천 로직.',
+    tags:['분석 매트릭스','조합 계산','최적 추천'] },
+  { id:'E2', phase:'', label:'상권분석 → 용도 추천', start:8, dur:3, color:'#378ADD', textColor:'#fff',
+    desc:'역 접근성·배후세대·오피스 수요·유동인구·주변 임대료·공실률 기반 용도 스코어링. 비주거: F&B/학원/공유오피스/근생 적합도. 주거: 다가구/다세대/원룸 적합도.',
+    tags:['상권 스코어링','용도 적합도','공공데이터'] },
+  { id:'E3', phase:'', label:'민감도 분석', start:9, dur:2, color:'#378ADD', textColor:'#fff',
+    desc:'공사비 ±10%, 매각가 ±5%, 공사기간 ±2개월 변동 시 수익률 변화 계산. 보수/기준/공격 시나리오 3가지 자동 생성.',
+    tags:['민감도 시나리오','보수·기준·공격','수익률 변동'] },
+  { id:'E4', phase:'', label:'인허가·공사 리스크 엔진', start:10, dur:2, color:'#378ADD', textColor:'#fff',
+    desc:'용도지역·건폐율·용적률 초과 여부 자동 체크. 증축 가능성 판단. 인허가 소요기간 예측. 리스크 등급(Low/Mid/High) 산출.',
+    tags:['용도지역 체크','증축 가능성','리스크 등급'] },
+  { id:'E5', phase:'', label:'NOI·임대차 전략 엔진', start:11, dur:2, color:'#378ADD', textColor:'#fff',
+    desc:'상세 용도별 임대료 계수 적용 → 안정화 NOI 산출. 공실반영 NOI. 선임대 필요 여부. 임대차 세팅 순서 추천.',
+    tags:['NOI 계산','공실반영','임대차 전략','선임대 판단'] },
+  { id:'E6', phase:'', label:'공사비 절감 포인트·매각전략', start:12, dur:2, color:'#378ADD', textColor:'#fff',
+    desc:'용도·규모별 공사비 절감 체크리스트 자동 생성. 손익분기 매도가·최대매입가 역산. Cap Rate 기반 예상 매각가.',
+    tags:['공사비 절감','손익분기가','매각 전략','Cap Rate'] },
+  { id:'E7', phase:'', label:'지도 매물 핀 연동', start:12, dur:3, color:'#378ADD', textColor:'#fff',
+    desc:'Kakao Map API 또는 Naver Map API 활용. 분석 결과를 지도 핀으로 표시. 수익률별 색상 코딩. 클릭 시 Quick Sim 결과 팝업.',
+    tags:['지도 API','수익률 핀','팝업 연동'] },
+
+  { id:'D1', phase:'💰 BM·디자인 (D15~D19)', label:'결과 카드 디자인 고도화', start:14, dur:2, color:'#EF9F27', textColor:'#fff',
+    desc:'결론카드·점수카드·금융가능성카드·사업성카드·상권카드·개발법규카드 6종 디자인 완성. 모바일 최적화. Insight Section 4종(긍정·주의·조건·확인필요).',
+    tags:['카드 6종','Insight Section','모바일 최적화'] },
+  { id:'D2', phase:'', label:'심층 리포트 템플릿', start:15, dur:2, color:'#EF9F27', textColor:'#fff',
+    desc:'Level 2 Investor Report PDF 템플릿. Level 3 Developer Feasibility Report. Level 4 Multi-Deal Comparison Report 초안. 공유 링크 + 워터마크 기능.',
+    tags:['PDF 템플릿','공유 링크','워터마크'] },
+  { id:'D3', phase:'', label:'CTA 설계 & BM 연결', start:15, dur:3, color:'#EF9F27', textColor:'#fff',
+    desc:'Free→Starter→Pro 전환 CTA. 심층 보고서 신청 버튼. 전문가 연결 요청 버튼 (설계 가능성/공사비 절감/인허가 리스크). 결제 플로우 기초.',
+    tags:['CTA 설계','결제 플로우','전문가 연결'] },
+  { id:'D4', phase:'', label:'개인투자자 통합 솔루션 보고서', start:16, dur:2, color:'#EF9F27', textColor:'#fff',
+    desc:'Level 5 Value-Add Execution Plan 초안. 밸류애드 포인트·인허가 체크·공사일정·월별자금·임대차전략·매각전략 통합. 전문가 연결 요청 CTA 포함.',
+    tags:['Value-Add Plan','월별 자금표','설계·시공 연결'] },
+
+  { id:'M1', phase:'📣 마케팅·GTM (D18~D21)', label:'강남권 중개사 20명 파일럿', start:17, dur:3, color:'#E24B4A', textColor:'#fff',
+    desc:'매수측 중개사 20명 직접 컨택. 실 매물 5건 분석 제공. 보고서 품질 피드백 수집. 공유 링크 워터마크 바이럴 루프 1번 검증.',
+    tags:['파일럿 20명','피드백 수집','바이럴 루프 검증'] },
+  { id:'M2', phase:'', label:'콘텐츠·리드마그넷 제작', start:18, dur:2, color:'#E24B4A', textColor:'#fff',
+    desc:'무료 매물보고서 샘플, 수익률 계산 엑셀, 3건 비교표 템플릿 제작. 블로그 "실제 매물 분석 시리즈" 1편 작성. SNS 채널 개설.',
+    tags:['리드마그넷','블로그 시리즈','SNS 채널'] },
+  { id:'M3', phase:'', label:'시연 영상 기획·촬영', start:19, dur:2, color:'#E24B4A', textColor:'#fff',
+    desc:'Bloomberg 톤 시연 영상 스크립트 확정 (오프닝→입력→결과→비교→PDF→클로징). 촬영 준비. 중개사 커뮤니티 타겟 배포 채널 확정.',
+    tags:['시연 영상','Bloomberg 톤','중개사 커뮤니티'] },
+];
+
+const phaseStarts = [0,3,7,14,17];
+
+function renderGantt() {
+  const g = document.getElementById('gantt');
+  let lastPhase = '';
+  tasks.forEach(t => {
+    if (t.phase && t.phase !== lastPhase) {
+      const ph = document.createElement('div');
+      ph.className = 'phase-label';
+      ph.textContent = t.phase;
+      g.appendChild(ph);
+      lastPhase = t.phase;
+    }
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lbl = document.createElement('div');
+    lbl.className = 'task-label';
+    lbl.innerHTML = `<span class="idx">${t.id}</span><span>${t.label}</span>`;
+    lbl.onclick = () => showDetail(t);
+    row.appendChild(lbl);
+
+    for (let i = 0; i < COLS; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'bar-cell';
+      cell.style.position = 'relative';
+      if ([7,14].includes(i)) {
+        const sep = document.createElement('div');
+        sep.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--color-border-secondary);pointer-events:none;';
+        cell.appendChild(sep);
+      }
+      if ([5,6,12,13,19,20].includes(i)) {
+        cell.style.opacity = '0.4';
+      }
+      if (i === t.start) {
+        const bar = document.createElement('div');
+        const w = t.dur;
+        bar.className = 'bar';
+        bar.style.cssText = `background:${t.color};color:${t.textColor};left:2px;right:${-(w-1)*100}%;width:calc(${w * 100}% - 4px);z-index:2;`;
+        bar.textContent = t.id;
+        bar.onclick = () => showDetail(t);
+        cell.appendChild(bar);
+      }
+      row.appendChild(cell);
+    }
+    g.appendChild(row);
+  });
+}
+
+function showDetail(t) {
+  const panel = document.getElementById('detail');
+  const title = document.getElementById('d-title');
+  const body = document.getElementById('d-body');
+  const tags = document.getElementById('d-tags');
+  const colorMap = { '#7F77DD':'#EEEDFE','#1D9E75':'#E1F5EE','#378ADD':'#E6F1FB','#EF9F27':'#FAEEDA','#E24B4A':'#FCEBEB' };
+  const textMap = { '#7F77DD':'#3C3489','#1D9E75':'#085041','#378ADD':'#0C447C','#EF9F27':'#633806','#E24B4A':'#791F1F' };
+  panel.style.borderColor = t.color;
+  title.innerHTML = `<span style="background:${t.color};color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:8px;">${t.id}</span>${t.label}`;
+  body.textContent = t.desc;
+  tags.innerHTML = t.tags.map(tag => `<span class="tag" style="background:${colorMap[t.color]};color:${textMap[t.color]}">${tag}</span>`).join('');
+  panel.classList.add('open');
+  panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+renderGantt();
+</script>
+
+</body>
+</html>
+
