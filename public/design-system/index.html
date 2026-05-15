@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuildMore Design System v1.0</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Charcoal */
+  --c900: #1A1A1A;
+  --c800: #2C2C2C;
+  --c700: #3D3D3D;
+  --c600: #555555;
+  --c400: #888888;
+  --c200: #D0D0D0;
+  --c100: #EBEBEB;
+  --c50:  #F5F5F5;
+  /* Point Blue */
+  --b900: #0A1F44;
+  --b700: #1A3F7A;
+  --b600: #1D4ED8;
+  --b500: #2563EB;
+  --b400: #3B82F6;
+  --b100: #DBEAFE;
+  --b50:  #EFF6FF;
+  /* Semantic */
+  --pos-bg: #DCFCE7; --pos-tx: #166534;
+  --wrn-bg: #FEF3C7; --wrn-tx: #92400E;
+  --dng-bg: #FEE2E2; --dng-tx: #991B1B;
+  /* Misc */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-sans: 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+  --font-mono: 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+}
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  background: #F2F2F2;
+  color: var(--c800);
+  line-height: 1.6;
+}
+
+/* ── LAYOUT ── */
+.page-wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 0 80px;
+}
+
+/* ── HEADER ── */
+.site-header {
+  background: var(--c900);
+  padding: 48px 56px 40px;
+  position: relative;
+  overflow: hidden;
+}
+.site-header::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0;
+  width: 3px; height: 100%;
+  background: var(--b600);
+}
+.header-eyebrow {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c400);
+  margin-bottom: 14px;
+}
+.header-title {
+  font-size: 36px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+.header-title span { color: var(--b400); }
+.header-meta {
+  display: flex;
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 0.5px solid #333;
+}
+.header-meta-item { font-size: 11px; color: var(--c400); }
+.header-meta-item strong { color: var(--c200); font-weight: 500; display: block; margin-bottom: 2px; }
+
+/* ── NAV ── */
+.toc {
+  background: var(--c900);
+  border-top: 0.5px solid #2a2a2a;
+  padding: 0 56px;
+  display: flex;
+  gap: 0;
+}
+.toc-link {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--c400);
+  text-decoration: none;
+  padding: 14px 16px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.toc-link:hover { color: #fff; border-color: var(--b600); }
+
+/* ── SECTION ── */
+.section {
+  background: #fff;
+  margin: 20px 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 0.5px solid var(--c100);
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid var(--c900);
+}
+.section-num {
+  
+  font-size: 11px;
+  color: var(--b600);
+  background: var(--b50);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--b100);
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c900);
+  letter-spacing: -0.2px;
+}
+.section-body { padding: 28px 32px; }
+
+/* ── SUBSECTION ── */
+.subsection { margin-bottom: 32px; }
+.subsection:last-child { margin-bottom: 0; }
+.subsection-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c400);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--c100);
+}
+
+/* ── COLOR PALETTE ── */
+.swatch-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.swatch {
+  flex: 1;
+  min-width: 72px;
+  border-radius: var(--radius-sm);
+  padding: 12px 10px 10px;
+  position: relative;
+}
+.swatch-name { font-size: 10px; font-weight: 500; margin-bottom: 3px; display: block; }
+.swatch-hex  { font-size: 9px;  display: block; opacity: 0.8; }
+.swatch-use  { font-size: 9px; margin-top: 4px; display: block; opacity: 0.7; line-height: 1.3; }
+
+/* charcoal swatches */
+.sw-c900 { background: #1A1A1A; } .sw-c900 * { color: #666; }
+.sw-c800 { background: #2C2C2C; } .sw-c800 * { color: #777; }
+.sw-c700 { background: #3D3D3D; } .sw-c700 * { color: #888; }
+.sw-c600 { background: #555555; } .sw-c600 * { color: #aaa; }
+.sw-c400 { background: #888888; } .sw-c400 * { color: #ddd; }
+.sw-c200 { background: #D0D0D0; } .sw-c200 * { color: #666; }
+.sw-c100 { background: #EBEBEB; border: 0.5px solid #ddd; } .sw-c100 * { color: #666; }
+.sw-c50  { background: #F5F5F5; border: 0.5px solid #ddd; } .sw-c50  * { color: #666; }
+/* blue swatches */
+.sw-b900 { background: #0A1F44; } .sw-b900 * { color: #4a72a8; }
+.sw-b700 { background: #1A3F7A; } .sw-b700 * { color: #7aabdf; }
+.sw-b600 { background: #1D4ED8; } .sw-b600 * { color: #c0d5ff; }
+.sw-b500 { background: #2563EB; } .sw-b500 * { color: #c0d5ff; }
+.sw-b400 { background: #3B82F6; } .sw-b400 * { color: #dbeafe; }
+.sw-b100 { background: #DBEAFE; } .sw-b100 * { color: #1A3F7A; }
+.sw-b50  { background: #EFF6FF; border: 0.5px solid #dbeafe; } .sw-b50 * { color: #1A3F7A; }
+/* semantic */
+.sw-pos  { background: #DCFCE7; } .sw-pos * { color: #166534; }
+.sw-wrn  { background: #FEF3C7; } .sw-wrn * { color: #92400E; }
+.sw-dng  { background: #FEE2E2; } .sw-dng * { color: #991B1B; }
+
+.color-rule {
+  background: var(--c50);
+  border: 0.5px solid var(--c100);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-top: 16px;
+}
+.color-rule-title { font-size: 10px; font-weight: 500; color: var(--c400); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+.color-rule-item { font-size: 11px; color: var(--c700); padding: 4px 0; display: flex; gap: 8px; align-items: flex-start; border-bottom: 0.5px solid var(--c100); line-height: 1.5; }
+.color-rule-item:last-child { border-bottom: none; }
+.color-rule-item .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.rule-forbidden { background: var(--dng-bg); border-radius: var(--radius-md); padding: 12px 16px; margin-top: 10px; }
+.rule-forbidden .color-rule-title { color: var(--dng-tx); }
+.rule-forbidden .color-rule-item { color: var(--dng-tx); border-color: #fca5a5; }
+
+/* ── TYPOGRAPHY ── */
+.type-specimen { padding: 18px 0; border-bottom: 0.5px solid var(--c100); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.type-specimen:last-child { border-bottom: none; }
+.type-preview { flex: 1; min-width: 200px; }
+.type-meta { font-size: 10px; color: var(--c400);  white-space: nowrap; min-width: 280px; line-height: 1.6; }
+.type-tag { display: inline-block; background: var(--b50); color: var(--b700); font-size: 9px; padding: 2px 6px; border-radius: 3px; margin-bottom: 4px; font-weight: 500; }
+
+.t-cover  { font-size: 28px; font-weight: 600; color: var(--c900); letter-spacing: -0.5px; line-height: 1.15; }
+.t-h1     { font-size: 18px; font-weight: 600; color: var(--c900); letter-spacing: -0.3px; }
+.t-h2     { font-size: 14px; font-weight: 500; color: var(--c900); }
+.t-label  { font-size: 10px; font-weight: 500; color: var(--c400); letter-spacing: 0.1em; text-transform: uppercase; }
+.t-data   { font-size: 22px; font-weight: 600; color: var(--c900); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.t-data-up { color: var(--pos-tx); }
+.t-data-dn { color: var(--dng-tx); }
+.t-body   { font-size: 12px; font-weight: 400; color: var(--c700); line-height: 1.65; }
+.t-caption{ font-size: 10px; font-weight: 400; color: var(--c400); line-height: 1.5; }
+
+/* ── COMPONENTS ── */
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 24px; }
+
+.metric-card {
+  background: var(--c50);
+  border: 0.5px solid var(--c100);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+.metric-label { font-size: 9px; font-weight: 500; color: var(--c400); letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 6px; }
+.metric-val   { font-size: 22px; font-weight: 600; color: var(--c900); letter-spacing: -0.5px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.metric-sub   { font-size: 10px; color: var(--c400); margin-top: 5px; line-height: 1.4; }
+.metric-val.up { color: var(--pos-tx); }
+.metric-val.dn { color: var(--dng-tx); }
+
+.signal-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+.signal {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 500;
+}
+.signal-buy  { background: var(--b900); color: var(--b100); }
+.signal-nego { background: var(--wrn-bg); color: var(--wrn-tx); border: 0.5px solid #FCD34D; }
+.signal-hold { background: var(--c50);   color: var(--c600);  border: 0.5px solid var(--c200); }
+
+/* Table */
+.bm-table-wrap { overflow-x: auto; margin-bottom: 24px; }
+.bm-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.bm-table thead th {
+  background: var(--c50);
+  text-align: left;
+  font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--c400);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--c900);
+  white-space: nowrap;
+}
+.bm-table tbody td { padding: 8px 10px; border-bottom: 0.5px solid var(--c100); color: var(--c800); vertical-align: middle; }
+.bm-table tbody tr:last-child td { border-bottom: none; }
+.bm-table tbody tr.hl td { background: var(--b50); color: var(--b900); font-weight: 500; }
+
+/* Bar */
+.bar-wrap { height: 6px; background: var(--c100); border-radius: 3px; overflow: hidden; min-width: 72px; display: inline-block; }
+.bar-fill { height: 100%; border-radius: 3px; }
+.bar-hot  { background: var(--b600); }
+.bar-mid  { background: var(--b400); }
+.bar-cool { background: var(--c200); }
+
+.badge { display: inline-block; font-size: 9px; font-weight: 500; padding: 2px 7px; border-radius: 3px; }
+.badge-easy { background: var(--pos-bg); color: var(--pos-tx); }
+.badge-mid  { background: var(--wrn-bg); color: var(--wrn-tx); }
+.badge-hard { background: var(--c50);   color: var(--c600); border: 0.5px solid var(--c200); }
+
+/* Page Header Mock */
+.page-mock {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 0.5px solid var(--c200);
+  margin-bottom: 24px;
+}
+.mock-header {
+  background: var(--c900);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mock-eyebrow { font-size: 9px; color: var(--c400); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+.mock-title { font-size: 20px; font-weight: 600; color: #fff; letter-spacing: -0.3px; line-height: 1.2; }
+.mock-title span { color: var(--b400); }
+.score-ring {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 2.5px solid var(--b400);
+  background: var(--b900);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.score-num { font-size: 16px; font-weight: 600; color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
+.score-lbl { font-size: 8px; color: var(--b100); margin-top: 2px; letter-spacing: 0.05em; }
+.accent-bar { height: 3px; background: var(--b600); }
+.mock-body { background: #fff; padding: 20px 24px; }
+.mock-kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mock-kpi-label { font-size: 9px; font-weight: 500; color: var(--c400); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.mock-kpi-val {  font-size: 15px; font-weight: 600; color: var(--c900); }
+.mock-kpi-val.pos { color: var(--pos-tx); }
+
+/* Section opener */
+.sec-opener { padding: 18px 20px; background: var(--c50); border: 0.5px solid var(--c100); border-radius: var(--radius-md); margin-bottom: 8px; }
+.sec-opener-bar { width: 32px; height: 3px; background: var(--b600); border-radius: 2px; margin-bottom: 8px; }
+.sec-opener-num { font-size: 9px; font-weight: 500; color: var(--c400); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
+.sec-opener-title { font-size: 14px; font-weight: 500; color: var(--c900); }
+
+/* ── SPACING ── */
+.spacing-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; }
+.spacing-item { text-align: center; }
+.spacing-box { background: var(--b100); border: 0.5px solid var(--b400); border-radius: 3px; margin-bottom: 6px; }
+.spacing-val {  font-size: 10px; color: var(--b700); font-weight: 500; }
+.spacing-use { font-size: 9px; color: var(--c400); margin-top: 2px; }
+
+/* ── REPORT STRUCTURE ── */
+.report-pages { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.report-page {
+  border: 0.5px solid var(--c100);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.report-page-header {
+  background: var(--c900);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.report-page-num {  font-size: 10px; color: var(--b400); font-weight: 500; }
+.report-page-tag { font-size: 8px; font-weight: 500; padding: 2px 5px; border-radius: 2px; }
+.tag-hook { background: var(--wrn-bg); color: var(--wrn-tx); }
+.tag-core { background: var(--c700); color: var(--c100); }
+.tag-diff { background: var(--b700); color: var(--b100); }
+.tag-fin  { background: var(--b900); color: var(--b400); }
+.tag-risk { background: var(--dng-bg); color: var(--dng-tx); }
+.tag-cta  { background: var(--pos-bg); color: var(--pos-tx); }
+.report-page-body { padding: 12px; background: #fff; }
+.report-page-title { font-size: 10px; font-weight: 500; color: var(--c900); margin-bottom: 4px; line-height: 1.3; }
+.report-page-desc  { font-size: 9px; color: var(--c400); line-height: 1.4; }
+
+/* ── DO/DONT ── */
+.rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rules-box { border-radius: var(--radius-md); padding: 18px 20px; }
+.rules-do   { background: var(--b900); }
+.rules-dont { background: var(--dng-bg); }
+.rules-title { font-size: 9px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
+.rules-do   .rules-title { color: var(--b400); }
+.rules-dont .rules-title { color: var(--dng-tx); }
+.rules-item { font-size: 11px; padding: 5px 0; border-bottom: 0.5px solid; line-height: 1.5; display: flex; gap: 7px; }
+.rules-do   .rules-item { color: var(--b100); border-color: #1a3060; }
+.rules-dont .rules-item { color: var(--dng-tx); border-color: #fca5a5; }
+.rules-item:last-child { border-bottom: none; }
+.rules-icon { flex-shrink: 0; font-weight: 600; }
+
+/* ── FOOTER ── */
+.site-footer {
+  background: var(--c900);
+  margin-top: 24px;
+  border-radius: var(--radius-lg);
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.footer-brand { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: -0.2px; }
+.footer-brand span { color: var(--b400); }
+.footer-meta { font-size: 10px; color: var(--c600); text-align: right; line-height: 1.6; }
+.footer-link { color: var(--b400); text-decoration: none; }
+
+/* ── UTILS ── */
+.flex { display: flex; }
+.gap-8 { gap: 8px; }
+.gap-12 { gap: 12px; }
+.items-center { align-items: center; }
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.divider { height: 0.5px; background: var(--c100); margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<div class="page-wrap">
+
+<!-- ── HEADER ── -->
+<header class="site-header">
+  <div class="header-eyebrow">BuildMore · Official Design System</div>
+  <div class="header-title">Deal Report<br><span>Design Tokens v1.0</span></div>
+  <div class="header-meta">
+    <div class="header-meta-item"><strong>컨셉</strong>BCG · McKinsey 덱 스타일</div>
+    <div class="header-meta-item"><strong>컬러</strong>Charcoal + Point Blue</div>
+    <div class="header-meta-item"><strong>타겟</strong>30–40대 · 모던 · 간결</div>
+    <div class="header-meta-item"><strong>버전</strong>v1.0 · 2026.05.16</div>
+  </div>
+</header>
+
+<!-- ── TOC ── -->
+<nav class="toc">
+  <a class="toc-link" href="#color">01 Colors</a>
+  <a class="toc-link" href="#type">02 Typography</a>
+  <a class="toc-link" href="#comp">03 Components</a>
+  <a class="toc-link" href="#spacing">04 Spacing</a>
+  <a class="toc-link" href="#report">05 Report Pages</a>
+  <a class="toc-link" href="#rules">06 Do / Don't</a>
+</nav>
+
+<!-- ══════════════════════════════════ -->
+<!-- 01 · COLOR PALETTE -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="color">
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <span class="section-title">Color Palette</span>
+  </div>
+  <div class="section-body">
+
+    <div class="subsection">
+      <div class="subsection-label">Primary — Charcoal</div>
+      <div class="swatch-row">
+        <div class="swatch sw-c900"><span class="swatch-name">900</span><span class="swatch-hex">#1A1A1A</span><span class="swatch-use">표지 배경·헤더</span></div>
+        <div class="swatch sw-c800"><span class="swatch-name">800</span><span class="swatch-hex">#2C2C2C</span><span class="swatch-use">강조 텍스트</span></div>
+        <div class="swatch sw-c700"><span class="swatch-name">700</span><span class="swatch-hex">#3D3D3D</span><span class="swatch-use">본문 텍스트</span></div>
+        <div class="swatch sw-c600"><span class="swatch-name">600</span><span class="swatch-hex">#555555</span><span class="swatch-use">보조 텍스트</span></div>
+        <div class="swatch sw-c400"><span class="swatch-name">400</span><span class="swatch-hex">#888888</span><span class="swatch-use">레이블·힌트</span></div>
+        <div class="swatch sw-c200"><span class="swatch-name">200</span><span class="swatch-hex">#D0D0D0</span><span class="swatch-use">테두리·바</span></div>
+        <div class="swatch sw-c100"><span class="swatch-name">100</span><span class="swatch-hex">#EBEBEB</span><span class="swatch-use">구분선</span></div>
+        <div class="swatch sw-c50"><span class="swatch-name">50</span><span class="swatch-hex">#F5F5F5</span><span class="swatch-use">카드 배경</span></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Accent — Point Blue</div>
+      <div class="swatch-row">
+        <div class="swatch sw-b900"><span class="swatch-name">900</span><span class="swatch-hex">#0A1F44</span><span class="swatch-use">Score Ring</span></div>
+        <div class="swatch sw-b700"><span class="swatch-name">700</span><span class="swatch-hex">#1A3F7A</span><span class="swatch-use">표지 부제</span></div>
+        <div class="swatch sw-b600"><span class="swatch-name">600</span><span class="swatch-hex">#1D4ED8</span><span class="swatch-use">강조 숫자·Accent Bar</span></div>
+        <div class="swatch sw-b500"><span class="swatch-name">500</span><span class="swatch-hex">#2563EB</span><span class="swatch-use">링크·인터랙션</span></div>
+        <div class="swatch sw-b400"><span class="swatch-name">400</span><span class="swatch-hex">#3B82F6</span><span class="swatch-use">Ring 테두리</span></div>
+        <div class="swatch sw-b100"><span class="swatch-name">100</span><span class="swatch-hex">#DBEAFE</span><span class="swatch-use">하이라이트 배경</span></div>
+        <div class="swatch sw-b50"><span class="swatch-name">50</span><span class="swatch-hex">#EFF6FF</span><span class="swatch-use">강조 카드 배경</span></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Semantic — Signal Colors</div>
+      <div class="swatch-row">
+        <div class="swatch sw-pos" style="flex:2;"><span class="swatch-name">Positive · 매수 적합</span><span class="swatch-hex">#166534 on #DCFCE7</span><span class="swatch-use">수익률 상승, 명도 용이</span></div>
+        <div class="swatch sw-wrn" style="flex:2;"><span class="swatch-name">Warning · 가격협상</span><span class="swatch-hex">#92400E on #FEF3C7</span><span class="swatch-use">협상 필요, 주의사항</span></div>
+        <div class="swatch sw-dng" style="flex:2;"><span class="swatch-name">Danger · 보류</span><span class="swatch-hex">#991B1B on #FEE2E2</span><span class="swatch-use">리스크 경고</span></div>
+      </div>
+    </div>
+
+    <div class="color-rule">
+      <div class="color-rule-title">Usage Rules</div>
+      <div class="color-rule-item"><div class="dot" style="background:#1A1A1A;"></div>Charcoal 900 → 표지 배경, 헤더, 섹션 구분선 1px (full-width)</div>
+      <div class="color-rule-item"><div class="dot" style="background:#1D4ED8;"></div>Point Blue 600 → 강조 숫자, 딜 시그널, Accent Bar 3px</div>
+      <div class="color-rule-item"><div class="dot" style="background:#EFF6FF; border:1px solid #DBEAFE;"></div>Blue 50/100 → 하이라이트 행 배경, 강조 카드 배경</div>
+      <div class="color-rule-item"><div class="dot" style="background:#F5F5F5; border:1px solid #ddd;"></div>Charcoal 100/50 → 기본 테이블 배경, 카드 표면</div>
+    </div>
+    <div class="rule-forbidden" style="margin-top:10px;">
+      <div class="color-rule-title">절대 금지</div>
+      <div class="color-rule-item" style="border-color:#fca5a5;">그라디언트, 그림자(Shadow), Blur / Glow 효과</div>
+      <div class="color-rule-item" style="border-color:#fca5a5;">포인트 컬러 3가지 이상 동시 사용</div>
+      <div class="color-rule-item" style="border-bottom:none;">강조 목적으로 빨간색(#FF0000 계열) 사용 — Danger는 #991B1B만 허용</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- 02 · TYPOGRAPHY -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="type">
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <span class="section-title">Typography Scale</span>
+  </div>
+  <div class="section-body">
+
+    <div style="background:var(--b50);border:0.5px solid var(--b100);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:20px;font-size:11px;color:var(--b700);">
+      <strong style="font-weight:500;">폰트 패밀리</strong> — 모든 텍스트 및 수치: <code style="background:var(--b100);padding:1px 5px;border-radius:3px;">Pretendard</code> (한글·영문·숫자 전체 통일 · 수치는 tabular-nums로 자릿수 정렬)
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-cover">합정동 근린생활시설</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">cover-title</div><br>
+        28px / weight 600 / tracking -0.5px<br>color: Charcoal 900 · 표지 건물명
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-h1">임대차 구성 분석 <span style="color:var(--b600);">·</span> 상권 현황</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">section-h1</div><br>
+        18px / weight 600 / tracking -0.3px<br>color: Charcoal 900 · 페이지 섹션 제목
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-h2">현재 임차인 구성 및 계약 잔여기간</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">section-h2</div><br>
+        14px / weight 500<br>color: Charcoal 900 · 서브섹션 제목
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-label">Deal Score · 종합 딜 판단</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">label</div><br>
+        10px / weight 500 / UPPERCASE / tracking 0.1em<br>color: Charcoal 400 · 카드 레이블
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-data">₩38.0억 <span style="font-size:15px;color:var(--c400);">/ 평당 5,952만</span></div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">data-display</div><br>
+        22px / weight 600 / Monospace / tracking -0.5px<br>상승: #166534 · 하락: #991B1B
+      </div>
+    </div>
+
+    <div class="type-specimen">
+      <div class="type-preview">
+        <div class="t-body">현재 호가 기준 반경 내 동일 규모 실거래가 중위값 대비 약 3.1% 고평가 구간입니다. 협상가 36억 진입 시 중위값 하단으로 합리적 매수가 형성됩니다.</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">body</div><br>
+        12px / weight 400 / leading 1.65<br>color: Charcoal 700 · 본문 설명
+      </div>
+    </div>
+
+    <div class="type-specimen" style="border-bottom:none;">
+      <div class="type-preview">
+        <div class="t-caption">* 상기 분석은 2026.05.16 기준 공개 데이터이며, 실제 거래 조건에 따라 달라질 수 있습니다.</div>
+      </div>
+      <div class="type-meta">
+        <div class="type-tag">caption</div><br>
+        10px / weight 400 / leading 1.5<br>color: Charcoal 400 · 각주·출처·면책
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- 03 · COMPONENTS -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="comp">
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <span class="section-title">Core Components</span>
+  </div>
+  <div class="section-body">
+
+    <!-- Metric Cards -->
+    <div class="subsection">
+      <div class="subsection-label">Metric Cards</div>
+      <div class="comp-grid">
+        <div class="metric-card">
+          <div class="metric-label">자기자본수익률</div>
+          <div class="metric-val up">8.3%</div>
+          <div class="metric-sub">입지 평균 6.1% 대비 +2.2%p</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">연간 NOI</div>
+          <div class="metric-val">1.09억</div>
+          <div class="metric-sub">공실 20% 반영</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">DSCR</div>
+          <div class="metric-val dn">0.87x</div>
+          <div class="metric-sub">기준 1.0x 미달 · 협상 필요</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">필요 자기자본</div>
+          <div class="metric-val">16억</div>
+          <div class="metric-sub">LTV 58% 적용</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deal Signal -->
+    <div class="subsection">
+      <div class="subsection-label">Deal Signal Badges</div>
+      <div class="signal-row">
+        <span class="signal signal-buy">매수 적합</span>
+        <span class="signal signal-nego">가격협상 후 매수</span>
+        <span class="signal signal-hold">보류 · 재검토</span>
+      </div>
+    </div>
+
+    <!-- Tenancy Table -->
+    <div class="subsection">
+      <div class="subsection-label">Data Table — 임차인 타임라인</div>
+      <div class="bm-table-wrap">
+        <table class="bm-table">
+          <thead>
+            <tr>
+              <th>층</th><th>업종</th><th>월세</th><th>만료일</th><th>잔여기간</th><th>명도</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>B1</td><td>주차장</td><td style="">80만</td><td>2026.08</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div class="bar-wrap" style="width:72px;"><div class="bar-fill bar-hot" style="width:12%;"></div></div>
+                  <span style="font-size:10px;color:var(--c400);">3개월</span>
+                </div>
+              </td>
+              <td><span class="badge badge-easy">즉시가능</span></td>
+            </tr>
+            <tr>
+              <td>1F</td><td>편의점</td><td style="">280만</td><td>2027.03</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div class="bar-wrap" style="width:72px;"><div class="bar-fill bar-mid" style="width:40%;"></div></div>
+                  <span style="font-size:10px;color:var(--c400);">10개월</span>
+                </div>
+              </td>
+              <td><span class="badge badge-mid">협의필요</span></td>
+            </tr>
+            <tr class="hl">
+              <td>2F</td><td>학원</td><td style="">220만</td><td>2028.06</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div class="bar-wrap" style="width:72px;"><div class="bar-fill bar-cool" style="width:85%;"></div></div>
+                  <span style="font-size:10px;color:var(--b700);">25개월</span>
+                </div>
+              </td>
+              <td><span class="badge badge-hard">장기계속</span></td>
+            </tr>
+            <tr>
+              <td>3F</td><td>네일샵</td><td style="">150만</td><td>2026.12</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div class="bar-wrap" style="width:72px;"><div class="bar-fill bar-mid" style="width:22%;"></div></div>
+                  <span style="font-size:10px;color:var(--c400);">7개월</span>
+                </div>
+              </td>
+              <td><span class="badge badge-easy">단기만료</span></td>
+            </tr>
+            <tr>
+              <td>4F</td><td>사무실</td><td style="">180만</td><td>2029.01</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <div class="bar-wrap" style="width:72px;"><div class="bar-fill bar-cool" style="width:95%;"></div></div>
+                  <span style="font-size:10px;color:var(--c400);">32개월</span>
+                </div>
+              </td>
+              <td><span class="badge badge-hard">장기계속</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Page Header -->
+    <div class="subsection">
+      <div class="subsection-label">Page Header — 표지 스타일</div>
+      <div class="page-mock">
+        <div class="mock-header">
+          <div>
+            <div class="mock-eyebrow">BuildMore Deal Report · 2026.05.16</div>
+            <div class="mock-title">합정동 근린생활시설<br><span>마포구 합정동 000-0</span></div>
+          </div>
+          <div class="score-ring">
+            <div class="score-num">68</div>
+            <div class="score-lbl">DEAL</div>
+          </div>
+        </div>
+        <div class="accent-bar"></div>
+        <div class="mock-body">
+          <div class="mock-kpi-row">
+            <div>
+              <div class="mock-kpi-label">매입가</div>
+              <div class="mock-kpi-val" style="">38.0억원</div>
+            </div>
+            <div>
+              <div class="mock-kpi-label">딜 시그널</div>
+              <span class="signal signal-nego" style="margin-top:4px;display:inline-flex;">가격협상 후 매수</span>
+            </div>
+            <div>
+              <div class="mock-kpi-label">자기자본수익률</div>
+              <div class="mock-kpi-val pos" style="">8.3%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Opener -->
+    <div class="subsection">
+      <div class="subsection-label">Section Opener</div>
+      <div class="sec-opener">
+        <div class="sec-opener-bar"></div>
+        <div class="sec-opener-num">04 · Financial Analysis</div>
+        <div class="sec-opener-title">수익성 및 금융 분석</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- 04 · SPACING -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="spacing">
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <span class="section-title">Layout & Spacing</span>
+  </div>
+  <div class="section-body">
+
+    <div class="subsection">
+      <div class="subsection-label">Spacing Scale</div>
+      <div class="spacing-row">
+        <div class="spacing-item"><div class="spacing-box" style="width:4px;height:4px;"></div><div class="spacing-val">4px</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:8px;height:8px;"></div><div class="spacing-val">8px</div><div class="spacing-use">컴포넌트 내부 gap</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:12px;height:12px;"></div><div class="spacing-val">12px</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:16px;height:16px;"></div><div class="spacing-val">16px</div><div class="spacing-use">카드 padding</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:20px;height:20px;"></div><div class="spacing-val">20px</div><div class="spacing-use">섹션 간 여백</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:24px;height:24px;"></div><div class="spacing-val">24px</div><div class="spacing-use">섹션 padding</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:32px;height:32px;"></div><div class="spacing-val">32px</div><div class="spacing-use">섹션 body padding</div></div>
+        <div class="spacing-item"><div class="spacing-box" style="width:48px;height:48px;"></div><div class="spacing-val">48px</div><div class="spacing-use">헤더 padding</div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="subsection-label">Border Radius</div>
+      <div class="flex gap-12 items-center" style="margin-bottom:24px;flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <div style="width:60px;height:60px;background:var(--b100);border:0.5px solid var(--b400);border-radius:4px;margin-bottom:6px;"></div>
+          <div style="font-size:10px;color:var(--b700);">4px</div>
+          <div style="font-size:9px;color:var(--c400);">badge·tag</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:60px;height:60px;background:var(--b100);border:0.5px solid var(--b400);border-radius:8px;margin-bottom:6px;"></div>
+          <div style="font-size:10px;color:var(--b700);">8px</div>
+          <div style="font-size:9px;color:var(--c400);">card·input</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:60px;height:60px;background:var(--b100);border:0.5px solid var(--b400);border-radius:12px;margin-bottom:6px;"></div>
+          <div style="font-size:10px;color:var(--b700);">12px</div>
+          <div style="font-size:9px;color:var(--c400);">section·modal</div>
+        </div>
+        <div style="text-align:center;opacity:0.4;">
+          <div style="width:60px;height:60px;background:var(--dng-bg);border:0.5px solid var(--dng-tx);border-radius:20px;margin-bottom:6px;position:relative;">
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;color:var(--dng-tx);">✕</div>
+          </div>
+          <div style="font-size:10px;color:var(--dng-tx);">20px+</div>
+          <div style="font-size:9px;color:var(--dng-tx);">사용 금지</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection" style="margin-bottom:0;">
+      <div class="subsection-label">Divider Rules</div>
+      <div style="font-size:11px;color:var(--c700);margin-bottom:12px;">섹션 간 메인 구분선</div>
+      <div style="height:1px;background:var(--c900);margin-bottom:8px;"></div>
+      <div style="font-size:10px;color:var(--c400);margin-bottom:20px;">1px solid #1A1A1A — 강한 구분 (섹션 헤더 하단)</div>
+      <div style="font-size:11px;color:var(--c700);margin-bottom:12px;">컴포넌트 내부 구분선</div>
+      <div style="height:0.5px;background:var(--c100);margin-bottom:8px;"></div>
+      <div style="font-size:10px;color:var(--c400);">0.5px solid #EBEBEB — 약한 구분 (테이블 행, 리스트 항목)</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- 05 · REPORT STRUCTURE -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="report">
+  <div class="section-header">
+    <span class="section-num">05</span>
+    <span class="section-title">7-Page Report Structure</span>
+  </div>
+  <div class="section-body">
+    <div class="report-pages">
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.1</span>
+          <span class="report-page-tag tag-hook">훅</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Cover</div>
+          <div class="report-page-desc">외관 사진 풀블리드 + DEAL SCORE + 한줄 투자포인트</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.2</span>
+          <span class="report-page-tag tag-core">기본</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Property Overview</div>
+          <div class="report-page-desc">건축물대장 자동 파싱 + 층별 개요 + 위치맵</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.3</span>
+          <span class="report-page-tag tag-core">입지</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Location & Commercial</div>
+          <div class="report-page-desc">상권 반경 지도 + 유동인구 차트 + AI 상권 해석</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.4</span>
+          <span class="report-page-tag tag-diff">차별화</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Tenancy & Value-Add</div>
+          <div class="report-page-desc">임차인 타임라인 + 5년 수익 시뮬 + AI Before/After</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.5</span>
+          <span class="report-page-tag tag-fin">수익</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Financial Analysis</div>
+          <div class="report-page-desc">NOI · DSCR · 수익률 카드 + 시나리오 3종</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.6</span>
+          <span class="report-page-tag tag-risk">리스크</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Development & Risk</div>
+          <div class="report-page-desc">용적률 게이지 + 리스크 체크리스트</div>
+        </div>
+      </div>
+
+      <div class="report-page">
+        <div class="report-page-header">
+          <span class="report-page-num">P.7</span>
+          <span class="report-page-tag tag-cta">CTA</span>
+        </div>
+        <div class="report-page-body">
+          <div class="report-page-title">Deal Summary</div>
+          <div class="report-page-desc">딜 시그널 + 실거래가 비교 + 투자포인트·주의사항</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════ -->
+<!-- 06 · DO / DON'T -->
+<!-- ══════════════════════════════════ -->
+<section class="section" id="rules">
+  <div class="section-header">
+    <span class="section-num">06</span>
+    <span class="section-title">Do / Don't</span>
+  </div>
+  <div class="section-body">
+    <div class="rules-grid">
+      <div class="rules-box rules-do">
+        <div class="rules-title">반드시 지킬 것</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>표지 배경: Charcoal 900 (#1A1A1A)</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>강조 숫자: Point Blue 600 (#1D4ED8)</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>섹션 구분: 1px solid Charcoal 900 full-width</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>수치 데이터: Monospace 폰트 고정</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>Blue Accent Bar 3px — 섹션 상단 필수</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>페이지 사이드 마진: 20mm (PDF 기준)</div>
+        <div class="rules-item"><span class="rules-icon">✓</span>border-radius 최대 12px</div>
+      </div>
+      <div class="rules-box rules-dont">
+        <div class="rules-title">절대 금지</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>그라디언트 / 그림자 / Blur / Glow</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>포인트 컬러 3종 이상 동시 사용</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>border-radius 12px 초과</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>font-weight 700 / 800 이상</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>장식적 아이콘 · 이모지 남발</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>빨간색(#FF0000) 강조 사용</div>
+        <div class="rules-item"><span class="rules-icon">✕</span>5가지 이상 컬러 동시 사용</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ── FOOTER ── -->
+<footer class="site-footer">
+  <div>
+    <div class="footer-brand">Build<span>More</span></div>
+    <div style="font-size:10px;color:var(--c600);margin-top:3px;">Deal Report Design System v1.0</div>
+  </div>
+  <div class="footer-meta">
+    <div>확정일 2026.05.16</div>
+    <div><a class="footer-link" href="https://buildmore.co.kr">buildmore.co.kr</a></div>
+  </div>
+</footer>
+
+</div><!-- /page-wrap -->
+</body>
+</html>
