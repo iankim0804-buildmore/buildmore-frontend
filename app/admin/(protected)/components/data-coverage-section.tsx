@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2, RefreshCw, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -226,10 +226,19 @@ function CategoryCard({ category }: { category: Category }) {
   )
 }
 
+interface RefreshResult {
+  updated_to_true: string[]
+  updated_to_false: string[]
+  unchanged: number
+  unmapped: number
+}
+
 export function DataCoverageSection() {
   const [data, setData] = useState<MetricCatalogResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -253,6 +262,28 @@ export function DataCoverageSection() {
       setIsLoading(false)
     }
   }, [])
+
+  const handleRefreshAvailability = useCallback(async () => {
+    setIsRefreshing(true)
+    setRefreshResult(null)
+    try {
+      const res = await fetch('/api/admin/metric-catalog/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+      const result = await res.json()
+      setRefreshResult(result)
+      await fetchData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '갱신 실패')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [fetchData])
 
   useEffect(() => {
     fetchData()
@@ -295,17 +326,45 @@ export function DataCoverageSection() {
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-sidebar-foreground">원천 데이터 적재 현황</h1>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={fetchData}
-          disabled={isLoading}
-          className="h-8 gap-1.5 text-muted-foreground hover:text-sidebar-foreground"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          새로고침
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefreshAvailability}
+            disabled={isLoading || isRefreshing}
+            className="h-8 gap-1.5 text-muted-foreground hover:text-sidebar-foreground"
+          >
+            <Zap className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-pulse' : ''}`} />
+            {isRefreshing ? '갱신 중...' : '자동 갱신'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchData}
+            disabled={isLoading || isRefreshing}
+            className="h-8 gap-1.5 text-muted-foreground hover:text-sidebar-foreground"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            새로고침
+          </Button>
+        </div>
       </div>
+
+      {refreshResult && (
+        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+          <span className="font-medium">갱신 완료 —</span>{' '}
+          {refreshResult.updated_to_true.length > 0 && (
+            <span>연결됨 +{refreshResult.updated_to_true.length}개{' '}</span>
+          )}
+          {refreshResult.updated_to_false.length > 0 && (
+            <span>해제됨 -{refreshResult.updated_to_false.length}개{' '}</span>
+          )}
+          {refreshResult.updated_to_true.length === 0 && refreshResult.updated_to_false.length === 0 && (
+            <span>변경 없음{' '}</span>
+          )}
+          <span className="text-emerald-500/70">(유지 {refreshResult.unchanged}개)</span>
+        </div>
+      )}
 
       <Card className="mb-4 border-sidebar-border bg-sidebar-accent">
         <CardContent className="py-4">
