@@ -481,7 +481,7 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   // Static system info
   const systemInfo: FrontendSystemInfo = {
     backend: {
-      url: 'ai-mvp.replit.app',
+      url: 'buildmore-backend.replit.app',
       spec: 'Reserved VM · 0.5 vCPU / 2 GiB · Asia 리전',
       region: 'Asia',
       status: data.overview?.server_status === 'ok' ? 'ok' : 'error',

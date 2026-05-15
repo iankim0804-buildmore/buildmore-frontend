@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://buildmore-backend.fly.dev'
+const BACKEND_URL = process.env.BACKEND_URL || 'https://buildmore-backend.replit.app'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
 
 export async function POST(request: NextRequest) {

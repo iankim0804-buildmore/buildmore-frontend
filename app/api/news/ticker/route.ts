@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 const BACKEND = (
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_ADMIN_API_URL ||
-  'https://ai-mvp.replit.app'
+  'https://buildmore-backend.replit.app'
 ).replace(/\/$/, '')
 
 const FALLBACK_ITEMS = [
