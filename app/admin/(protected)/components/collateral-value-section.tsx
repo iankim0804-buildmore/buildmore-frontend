@@ -25,7 +25,7 @@ type CollectResponse = {
   [key: string]: unknown
 }
 
-type VitalityIndicator = {
+type SourceIndicator = {
   metric_key: string
   metric_name_ko: string
   unit?: string | null
@@ -34,6 +34,15 @@ type VitalityIndicator = {
   is_available: boolean
   stored_count?: number
   reason?: string | null
+}
+
+type SourceCategoryStatus = {
+  total: number
+  available: number
+  rate: number
+  snapshot_count: number
+  indicators: SourceIndicator[]
+  manual_connection_required: SourceIndicator[]
 }
 
 type StatusResponse = {
@@ -45,15 +54,8 @@ type StatusResponse = {
   todo_item_count: number
   latest_fetched_at?: string | null
   next_actions: string[]
-  commercial_vitality?: {
-    total: number
-    available: number
-    rate: number
-    snapshot_count: number
-    covered_area_count: number
-    indicators: VitalityIndicator[]
-    manual_connection_required: VitalityIndicator[]
-  }
+  commercial_vitality?: SourceCategoryStatus
+  finance_rates?: SourceCategoryStatus
 }
 
 const badgeClass: Record<string, string> = {
@@ -86,8 +88,6 @@ export function CollateralValueSection() {
   }, [status])
 
   const collateralPending = (status?.todo_item_count ?? 0) + (status?.warning_item_count ?? 0)
-  const vitality = status?.commercial_vitality
-  const vitalityManualCount = vitality?.manual_connection_required?.length ?? 0
 
   async function runCollect() {
     if (!address.trim()) return
@@ -145,54 +145,24 @@ export function CollateralValueSection() {
         </div>
       </div>
 
-      {vitality && (
-        <div className="rounded-md border border-sidebar-border bg-sidebar p-3">
-          <div className="mb-3 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Commercial Vitality
-            </p>
-            <h3 className="text-sm font-semibold text-sidebar-foreground">
-              상권활력 원천데이터 연결 상태
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              주소 입력 후 상권 월매출, 유동인구, 개폐업률 등을 빠르게 불러오기 위한 하위 지표입니다.
-            </p>
-          </div>
+      {status?.commercial_vitality && (
+        <SourceStatusPanel
+          eyebrow="Commercial Vitality"
+          title="상권활력 원천데이터 연결 상태"
+          description="주소 입력 후 상권 월매출, 유동인구, 개폐업률 등을 빠르게 불러오기 위한 하위 지표입니다."
+          status={status.commercial_vitality}
+          completeLabel="상권활력 연결 완료"
+        />
+      )}
 
-          <div className="mb-3 grid gap-3 md:grid-cols-3">
-            <Metric label="상권활력 연결 완료" value={`${vitality.available}/${vitality.total}`} tone={vitality.available ? 'active' : 'warning'} />
-            <Metric label="수동 연결 필요" value={`${vitalityManualCount}`} tone={vitalityManualCount ? 'warning' : 'active'} />
-            <Metric label="캐시 스냅샷" value={`${vitality.snapshot_count}`} tone={vitality.snapshot_count ? 'active' : 'warning'} />
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2">
-            {vitality.indicators.map((indicator) => (
-              <div
-                key={indicator.metric_key}
-                className="flex min-h-12 items-start gap-2 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-2 text-sm"
-              >
-                {indicator.is_available ? (
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                ) : (
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-sidebar-foreground">{indicator.metric_name_ko}</span>
-                    <span className="text-xs text-muted-foreground">{indicator.unit || '-'}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {indicator.data_source} · {indicator.collection_frequency}
-                    {indicator.stored_count ? ` · ${indicator.stored_count.toLocaleString()} rows` : ''}
-                  </p>
-                  {!indicator.is_available && indicator.reason && (
-                    <p className="mt-1 text-xs text-amber-700">{indicator.reason}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {status?.finance_rates && (
+        <SourceStatusPanel
+          eyebrow="Finance Rates"
+          title="금융/금리 원천데이터 연결 상태"
+          description="주소 분석에서 DSCR, 추정 대출금리, 환율과 금리 민감도를 계산하기 위한 금융 하위 지표입니다."
+          status={status.finance_rates}
+          completeLabel="금융/금리 연결 완료"
+        />
       )}
 
       <div className="flex flex-col gap-2 md:flex-row">
@@ -279,6 +249,67 @@ export function CollateralValueSection() {
         </div>
       )}
     </section>
+  )
+}
+
+function SourceStatusPanel({
+  eyebrow,
+  title,
+  description,
+  status,
+  completeLabel,
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  status: SourceCategoryStatus
+  completeLabel: string
+}) {
+  const manualCount = status.manual_connection_required?.length ?? 0
+  return (
+    <div className="rounded-md border border-sidebar-border bg-sidebar p-3">
+      <div className="mb-3 space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {eyebrow}
+        </p>
+        <h3 className="text-sm font-semibold text-sidebar-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+
+      <div className="mb-3 grid gap-3 md:grid-cols-3">
+        <Metric label={completeLabel} value={`${status.available}/${status.total}`} tone={status.available ? 'active' : 'warning'} />
+        <Metric label="수동 연결 필요" value={`${manualCount}`} tone={manualCount ? 'warning' : 'active'} />
+        <Metric label="캐시 스냅샷" value={`${status.snapshot_count}`} tone={status.snapshot_count ? 'active' : 'warning'} />
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        {status.indicators.map((indicator) => (
+          <div
+            key={indicator.metric_key}
+            className="flex min-h-12 items-start gap-2 rounded-md border border-sidebar-border bg-sidebar-accent px-3 py-2 text-sm"
+          >
+            {indicator.is_available ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-sidebar-foreground">{indicator.metric_name_ko}</span>
+                <span className="text-xs text-muted-foreground">{indicator.unit || '-'}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {indicator.data_source} · {indicator.collection_frequency}
+                {indicator.stored_count ? ` · ${indicator.stored_count.toLocaleString()} rows` : ''}
+              </p>
+              {!indicator.is_available && indicator.reason && (
+                <p className="mt-1 text-xs text-amber-700">{indicator.reason}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
