@@ -148,7 +148,6 @@ export default function AnalysisPage() {
   const dealAnalysis = useDealAnalysis()
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
   const [isCtaOpen, setIsCtaOpen] = useState(false)
-  const [ctaPulseKey, setCtaPulseKey] = useState(0)
   const [chatProvidedDealFields, setChatProvidedDealFields] = useState<DealInputField[]>([])
   const [chatPendingDealValues, setChatPendingDealValues] = useState<Partial<Record<DealInputField, number>>>({})
   
@@ -411,7 +410,6 @@ export default function AnalysisPage() {
     try {
       // 분석 실행
       await dealAnalysis.runAnalysis(input)
-      setCtaPulseKey((key) => key + 1)
 
       if (process.env.NODE_ENV === 'development') {
         console.log('[analysis] result:', dealAnalysis.result)
@@ -861,7 +859,6 @@ BuildMore 판단:
       if (data.analysis) {
         dealAnalysis.injectResult(data.analysis)
         setHasRunAnalysis(true)
-        setCtaPulseKey((key) => key + 1)
 
         // Save to analysis history
         const score = data.analysis?.score_cards?.bankability_score ?? 0
@@ -1896,7 +1893,6 @@ BuildMore 판단:
               <AnalysisCTA
                 isOpen={isCtaOpen}
                 onToggle={() => setIsCtaOpen((open) => !open)}
-                pulseKey={ctaPulseKey}
               />
             </div>
           </div>
