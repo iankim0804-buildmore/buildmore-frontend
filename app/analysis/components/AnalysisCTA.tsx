@@ -13,20 +13,20 @@ export const AnalysisCTA = ({ isOpen, onToggle, pulseKey }: AnalysisCTAProps) =>
   return (
     <div className="bg-white">
       <button
+        key={pulseKey}
         type="button"
         onClick={onToggle}
         aria-expanded={isOpen}
-        className="w-full bg-[#09090b] px-5 py-2.5 flex items-center justify-between gap-3 text-left"
+        className={cn(
+          "w-full bg-[#09090b] px-5 py-2.5 flex items-center justify-between gap-3 text-left",
+          pulseKey > 0 && "cta-bar-wave"
+        )}
       >
         <div className="flex min-w-0 items-center gap-3">
           <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f59e0b]" />
           <div className="min-w-0">
             <p
-              key={pulseKey}
-              className={cn(
-                "truncate text-[13px] font-semibold text-[#f5f5f5]",
-                pulseKey > 0 && "cta-title-wave"
-              )}
+              className="truncate text-[13px] font-semibold text-[#f5f5f5]"
             >
               분석 이후 다음 액션
             </p>

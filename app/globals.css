@@ -183,20 +183,23 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
-@keyframes cta-title-wave {
+@keyframes cta-bar-wave {
   0% {
+    background-position: 160% 50%;
+    background-color: #09090b;
+  }
+  45% {
     background-position: 0% 50%;
+    background-color: #18181b;
   }
   100% {
-    background-position: 200% 50%;
+    background-position: -160% 50%;
+    background-color: #09090b;
   }
 }
 
-.cta-title-wave {
-  background-image: linear-gradient(90deg, #f5f5f5 0%, #f59e0b 28%, #22c55e 50%, #38bdf8 72%, #f5f5f5 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: cta-title-wave 1.25s ease-out 1;
+.cta-bar-wave {
+  background-image: linear-gradient(100deg, #09090b 0%, #09090b 36%, #ffffff 50%, #09090b 64%, #09090b 100%);
+  background-size: 260% 100%;
+  animation: cta-bar-wave 1.45s ease-in-out 1 both;
 }
