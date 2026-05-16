@@ -78,6 +78,8 @@ interface SearchHistoryItem {
   timestamp: number
 }
 
+type DealInputField = 'price' | 'loan' | 'rate' | 'rent' | 'deposit'
+
 interface AddressSuggestion {
   address_name: string
   display_address?: string
@@ -147,6 +149,8 @@ export default function AnalysisPage() {
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
   const [isCtaOpen, setIsCtaOpen] = useState(false)
   const [ctaPulseKey, setCtaPulseKey] = useState(0)
+  const [chatProvidedDealFields, setChatProvidedDealFields] = useState<DealInputField[]>([])
+  const [chatPendingDealValues, setChatPendingDealValues] = useState<Partial<Record<DealInputField, number>>>({})
   
   // ============================================================
   // B-3. SIDEBAR STATE (New)
@@ -584,6 +588,16 @@ BuildMore 판단:
               ? { verdict: (dealAnalysis.result as any).dealSignal }
               : undefined,
           },
+          dealInputState: {
+            providedFields: chatProvidedDealFields,
+            values: {
+              price: chatPendingDealValues.price ?? price,
+              loan: chatPendingDealValues.loan ?? loan,
+              rate: chatPendingDealValues.rate ?? rate,
+              rent: chatPendingDealValues.rent ?? rent,
+              deposit: chatPendingDealValues.deposit ?? deposit,
+            },
+          },
           history: chatMessages.map((m: any) => ({ role: m.role, content: m.content })),
         })
       })
@@ -604,6 +618,15 @@ BuildMore 판단:
       
       setChatMessages(prev => [...prev, assistantMsg])
 
+      if (data.parsed_deal_fields) {
+        setChatPendingDealValues(prev => ({ ...prev, ...data.parsed_deal_fields }))
+        setChatProvidedDealFields(prev => {
+          const next = new Set<DealInputField>(prev)
+          ;(Object.keys(data.parsed_deal_fields) as DealInputField[]).forEach((field) => next.add(field))
+          return Array.from(next)
+        })
+      }
+
       // apply_to_analyzer: LLM이 제안한 값을 패널에 반영하고 분석 재실행
       if (data.apply_to_analyzer) {
         const apply = data.apply_to_analyzer
@@ -613,6 +636,14 @@ BuildMore 판단:
         if (apply.rent != null) setRent(apply.rent)
         if (apply.deposit != null) setDeposit(apply.deposit)
         if (apply.vacancyRate != null) setVacancyRate(apply.vacancyRate)
+        setChatProvidedDealFields(['price', 'loan', 'rate', 'rent', 'deposit'])
+        setChatPendingDealValues({
+          price: apply.price,
+          loan: apply.loan,
+          rate: apply.rate,
+          rent: apply.rent,
+          deposit: apply.deposit,
+        })
 
         const applyFields = Object.entries(apply)
           .filter(([k]) => ['price','loan','rate','rent','deposit','vacancyRate'].includes(k))
@@ -661,7 +692,19 @@ BuildMore 판단:
     } finally {
       setIsChatLoading(false)
     }
-  }, [dealAnalysis.result, setPrice, setLoan, setRate, setRent, setDeposit, setVacancyRate])
+  }, [
+    address,
+    chatMessages,
+    chatPendingDealValues,
+    chatProvidedDealFields,
+    dealAnalysis.result,
+    deposit,
+    loan,
+    price,
+    rate,
+    rent,
+    vacancyRate,
+  ])
 
   // apply_to_analyzer — 상태 업데이트 후 handleRunAnalysis 안전하게 호출
   useEffect(() => {

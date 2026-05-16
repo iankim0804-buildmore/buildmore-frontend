@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'https://buildmore-backend.replit
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, analysisResult, analysisContext, history = [] } = body
+    const { message, analysisResult, analysisContext, history = [], dealInputState } = body
 
     if (!message) {
       return NextResponse.json(
@@ -16,6 +16,11 @@ export async function POST(request: NextRequest) {
 
     // analysisResult (프론트엔드 모델) → analysisContext (백엔드 형식) 변환
     const context = analysisContext || buildBackendContext(analysisResult)
+
+    const dealInputResponse = buildDealInputResponse(message, dealInputState)
+    if (dealInputResponse) {
+      return NextResponse.json(dealInputResponse)
+    }
 
     const response = await fetch(`${BACKEND_URL}/api/analysis/chat`, {
       method: 'POST',
@@ -63,6 +68,123 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+type DealField = 'price' | 'loan' | 'rate' | 'rent' | 'deposit'
+
+const REQUIRED_DEAL_FIELDS: DealField[] = ['price', 'loan', 'rate', 'rent', 'deposit']
+
+const DEAL_FIELD_LABELS: Record<DealField, string> = {
+  price: '매입가',
+  loan: '대출금',
+  rate: '금리',
+  rent: '월세',
+  deposit: '보증금',
+}
+
+const DEAL_FIELD_UNITS: Record<DealField, string> = {
+  price: '억',
+  loan: '억',
+  rate: '%',
+  rent: '만원',
+  deposit: '만원',
+}
+
+function buildDealInputResponse(message: string, dealInputState: any) {
+  const parsed = parseDealInputs(message)
+  const parsedFields = Object.keys(parsed) as DealField[]
+
+  if (parsedFields.length === 0) {
+    return null
+  }
+
+  const previousProvided = new Set<DealField>(
+    (dealInputState?.providedFields || []).filter((field: string) =>
+      REQUIRED_DEAL_FIELDS.includes(field as DealField)
+    )
+  )
+  const provided = new Set<DealField>([...previousProvided, ...parsedFields])
+  const missing = REQUIRED_DEAL_FIELDS.filter((field) => !provided.has(field))
+
+  if (missing.length > 0) {
+    return {
+      success: true,
+      response:
+        `${formatDealFields(parsed)} 확인했습니다. 입력하신 정보를 반영해 분석하려면 ` +
+        `${missing.map((field) => DEAL_FIELD_LABELS[field]).join(', ')}도 필요합니다. ` +
+        `예: 보증금 5000만원, 월세 320만원처럼 알려주세요.`,
+      apply_to_analyzer: null,
+      parsed_deal_fields: parsed,
+      missing_deal_fields: missing,
+      timestamp: new Date().toISOString(),
+      source: 'deal_input_parser',
+    }
+  }
+
+  const currentValues = dealInputState?.values || {}
+  const apply: Record<DealField, number> = {
+    price: Number(parsed.price ?? currentValues.price),
+    loan: Number(parsed.loan ?? currentValues.loan),
+    rate: Number(parsed.rate ?? currentValues.rate),
+    rent: Number(parsed.rent ?? currentValues.rent),
+    deposit: Number(parsed.deposit ?? currentValues.deposit),
+  }
+
+  return {
+    success: true,
+    response: `${formatDealFields(parsed)} 반영했습니다. 입력하신 정보를 기준으로 분석 조건을 자동 입력하고 분석을 실행하겠습니다.`,
+    apply_to_analyzer: apply,
+    parsed_deal_fields: parsed,
+    missing_deal_fields: [],
+    timestamp: new Date().toISOString(),
+    source: 'deal_input_parser',
+  }
+}
+
+function parseDealInputs(message: string): Partial<Record<DealField, number>> {
+  const parsed: Partial<Record<DealField, number>> = {}
+  const text = message.replace(/,/g, '').replace(/\s+/g, ' ').trim()
+
+  const price = matchMoney(text, /(?:매입가|매입금액|매수가|매매가|가격|매입)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:억|억원|만|만원)?)/)
+  if (price != null) parsed.price = Math.round((price / 100_000_000) * 10) / 10
+
+  const loan = matchMoney(text, /(?:대출금|대출액|대출)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:억|억원|만|만원)?)/)
+  if (loan != null) parsed.loan = Math.round((loan / 100_000_000) * 10) / 10
+
+  const rent = matchMoney(text, /(?:월세|월임대료|임대료|월 임대료)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:억|억원|만|만원)?)/)
+  if (rent != null) parsed.rent = Math.round(rent / 10_000)
+
+  const deposit = matchMoney(text, /(?:보증금|보증|임대보증금)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:억|억원|만|만원)?)/)
+  if (deposit != null) parsed.deposit = Math.round(deposit / 10_000)
+
+  const rateMatch = text.match(/(?:금리|이자율|대출금리)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)\s*%?/)
+  if (rateMatch) parsed.rate = Number(rateMatch[1])
+
+  return parsed
+}
+
+function matchMoney(text: string, pattern: RegExp): number | null {
+  const match = text.match(pattern)
+  if (!match?.[1]) return null
+  return parseKoreanMoneyToWon(match[1])
+}
+
+function parseKoreanMoneyToWon(raw: string): number {
+  const cleaned = raw.replace(/\s+/g, '')
+  const value = Number(cleaned.match(/[0-9]+(?:\.[0-9]+)?/)?.[0] || 0)
+
+  if (cleaned.includes('억')) return value * 100_000_000
+  if (cleaned.includes('만')) return value * 10_000
+
+  return value * 10_000
+}
+
+function formatDealFields(values: Partial<Record<DealField, number>>): string {
+  const parts = (Object.entries(values) as [DealField, number][])
+    .filter(([, value]) => Number.isFinite(value))
+    .map(([field, value]) => `${DEAL_FIELD_LABELS[field]} ${value}${DEAL_FIELD_UNITS[field]}`)
+
+  return parts.length > 0 ? parts.join(', ') : '입력값'
 }
 
 /**
