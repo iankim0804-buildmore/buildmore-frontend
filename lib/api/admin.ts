@@ -1,6 +1,5 @@
 // Admin API Types - matching ACTUAL backend responses
 
-// === Overview API Response ===
 export interface AdminOverview {
   server_status: 'ok' | 'error'
   scheduler_status: 'ok' | 'error'
@@ -9,7 +8,6 @@ export interface AdminOverview {
   last_updated_at: string
 }
 
-// === Scheduler API Response ===
 export interface SchedulerJob {
   job_id: string
   name: string
@@ -34,7 +32,6 @@ export interface AdminScheduler {
   failed_sources: FailedSource[]
 }
 
-// === Wiki API Response ===
 export interface WikiData {
   metric_snapshots: number
   extracted_facts: number
@@ -63,7 +60,6 @@ export interface AdminWiki {
   recent_updates: WikiUpdate[]
 }
 
-// === Usage API Response ===
 export interface UsageStats {
   analysis_requests_today: number
   analysis_requests_week: number
@@ -97,7 +93,6 @@ export interface AdminData {
   usage: AdminUsage | null
 }
 
-// Fetch wrapper with timeout and error handling
 async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000)
@@ -105,17 +100,17 @@ async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: str
   try {
     const res = await fetch(`/api/admin${path}`, {
       signal: controller.signal,
-      credentials: 'include'
+      credentials: 'include',
     })
-    
+
     clearTimeout(timeoutId)
-    
+
     if (!res.ok) {
       const errorText = await res.text().catch(() => '')
       console.error(`[v0] API ${path} failed: ${res.status} ${res.statusText}`, errorText)
       return { data: null, error: `${res.status}: ${res.statusText}` }
     }
-    
+
     const data = await res.json()
     return { data: data as T, error: null }
   } catch (error) {
@@ -126,7 +121,6 @@ async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: str
   }
 }
 
-// Individual fetch functions
 export async function fetchOverview(): Promise<AdminOverview | null> {
   const result = await fetchAdmin<AdminOverview>('/overview')
   return result.data
@@ -152,13 +146,12 @@ export interface FetchResult {
   errors: string[]
 }
 
-// Fetch all admin data at once with error tracking
 export async function fetchAllAdminData(): Promise<FetchResult> {
   const results = await Promise.all([
     fetchAdmin<AdminOverview>('/overview'),
     fetchAdmin<AdminScheduler>('/scheduler'),
     fetchAdmin<AdminWiki>('/wiki'),
-    fetchAdmin<AdminUsage>('/usage')
+    fetchAdmin<AdminUsage>('/usage'),
   ])
 
   const errors: string[] = []
@@ -172,15 +165,11 @@ export async function fetchAllAdminData(): Promise<FetchResult> {
       overview: results[0].data,
       scheduler: results[1].data,
       wiki: results[2].data,
-      usage: results[3].data
+      usage: results[3].data,
     },
-    errors
+    errors,
   }
 }
-
-// ============================================
-// Frontend Data Types (for components)
-// ============================================
 
 export interface FrontendSchedulerJob {
   id: string
@@ -305,13 +294,9 @@ export interface AdminDashboardData {
   lastUpdated: string
 }
 
-// ============================================
-// Transform Functions
-// ============================================
-
 function formatKST(date: Date | null | undefined): string {
   if (!date || isNaN(date.getTime())) return '-'
-  
+
   try {
     return date.toLocaleString('ko-KR', {
       year: 'numeric',
@@ -328,13 +313,13 @@ function formatKST(date: Date | null | undefined): string {
 
 function formatRelativeTime(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
-  
+
   try {
     const now = new Date()
     const date = new Date(timestamp)
-    
+
     if (isNaN(date.getTime())) return '-'
-    
+
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / (1000 * 60))
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
@@ -363,54 +348,52 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   const now = new Date()
   const jobs = data.scheduler?.jobs ?? []
 
-  // Transform overview to systemStatus
   const systemStatus: FrontendSystemStatus = {
     server: {
       status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
       message: data.overview?.server_status === 'ok' ? 'API 응답 정상' : 'API 응답 오류',
     },
     scheduler: {
-      active: jobs.filter(j => j.last_status === 'success' || j.last_status === 'running').length,
+      active: jobs.filter((job) => job.last_status === 'success' || job.last_status === 'running').length,
       total: jobs.length,
     },
     pipeline: {
-      status: data.overview?.pipeline_status === 'ok' ? 'ok' :
-              data.overview?.pipeline_status === 'warning' ? 'warning' : 'danger',
+      status: data.overview?.pipeline_status === 'ok' ? 'ok'
+        : data.overview?.pipeline_status === 'warning' ? 'warning'
+          : 'danger',
       queued: data.overview?.pipeline_queued_count ?? 0,
     },
   }
 
-  // Transform scheduler jobs - using ACTUAL backend field names
   const schedulerJobs: FrontendSchedulerJob[] = jobs
     .filter((job): job is SchedulerJob => job != null)
     .map((job, index) => ({
       id: job.job_id || String(index + 1),
-      name: job.name || '알 수 없음',
+      name: job.name || '이름 없음',
       trigger: job.interval_description || job.trigger_type || '-',
       lastRun: job.last_run_time ? formatKST(new Date(job.last_run_time)) : null,
       nextRun: job.next_run_time ? formatKST(new Date(job.next_run_time)) : '-',
-      lastStatus: job.last_status === 'success' ? 'success' :
-                  job.last_status === 'failure' ? 'failed' : 'pending',
+      lastStatus: job.last_status === 'success'
+        ? 'success'
+        : job.last_status === 'failure' ? 'failed' : 'pending',
       successCount: job.success_count_30d ?? 0,
       lastResult: job.last_message || `성공 ${job.success_count_30d ?? 0}회 / 실패 ${job.fail_count_30d ?? 0}회`,
     }))
 
-  // Data sources from failed_sources
   const failedSources = data.scheduler?.failed_sources ?? []
   const dataSources: FrontendDataSource[] = [
-    { id: '1', name: '서울시 열린데이터광장', isActive: true },
+    { id: '1', name: '서울 열린데이터광장', isActive: true },
     { id: '2', name: '소상공인시장진흥공단', isActive: true },
-    { id: '3', name: '유튜브 채널 (구해줘빌딩)', isActive: true },
-    { id: '4', name: '시공조아 블로그', isActive: true },
+    { id: '3', name: '유튜브 채널 (구해줘월부)', isActive: true },
+    { id: '4', name: '상가조아 블로그', isActive: true },
     ...failedSources.map((fs, i) => ({
       id: `failed-${i}`,
       name: fs.name,
       isActive: false,
       error: fs.error,
-    }))
+    })),
   ]
 
-  // Transform wiki data - using ACTUAL nested structure
   const wikiData = data.wiki?.wiki
   const processingQueue: FrontendProcessingQueue = {
     total: wikiData?.processing_queue?.total ?? 0,
@@ -439,7 +422,6 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       result: update.title || '-',
     }))
 
-  // Transform usage data - using ACTUAL field names
   const stats = data.usage?.stats
   const usageStats: FrontendUsageStats = {
     analysisRequests: {
@@ -459,26 +441,23 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     },
   }
 
-  // Transform recent analyses - using ACTUAL field names
   const recentAnalyses: FrontendRecentAnalysis[] = (data.usage?.recent_analyses ?? [])
     .filter((analysis): analysis is RecentAnalysis => analysis != null)
     .map((analysis, index) => ({
       id: analysis.id || String(index + 1),
       time: formatRelativeTime(analysis.requested_at),
-      inputType: analysis.input_type || '직접입력',
+      inputType: analysis.input_type || '직접 입력',
       grade: mapGrade(analysis.grade),
       score: analysis.bankability_score ?? 0,
       responseTime: analysis.response_time_ms,
     }))
 
-  // Static planned sources
   const plannedSources: FrontendPlannedSource[] = [
-    { id: '1', name: '국토부 실거래가 직연동', version: 'V1.2' },
+    { id: '1', name: '국토부 실거래가 지연분', version: 'V1.2' },
     { id: '2', name: '한국은행 ECOS 금리', version: 'V1.2' },
     { id: '3', name: 'KOSIS 통계청', version: 'V1.3' },
   ]
 
-  // Static system info
   const systemInfo: FrontendSystemInfo = {
     backend: {
       url: 'buildmore-backend.replit.app',
@@ -517,7 +496,6 @@ export interface DashboardResult {
   errors: string[]
 }
 
-// Fetch and transform admin data for frontend use
 export async function fetchAdminDashboardData(): Promise<DashboardResult> {
   const { data: rawData, errors } = await fetchAllAdminData()
   const transformed = transformToFrontendData(rawData)

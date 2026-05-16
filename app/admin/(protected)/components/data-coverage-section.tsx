@@ -173,7 +173,7 @@ function CategoryCard({ category }: { category: Category }) {
 
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          <span>吏??蹂닿린</span>
+          <span>지표 보기</span>
         </div>
       </button>
 
@@ -198,12 +198,12 @@ function CategoryCard({ category }: { category: Category }) {
                   </div>
 
                   <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                    <div>?쒓났泥? <span className="text-sidebar-foreground">{guide.provider}</span></div>
-                    <div>?먯쿇: <span className="text-sidebar-foreground">{metric.data_source || '-'}</span></div>
-                    <div>二쇨린: <span className="text-sidebar-foreground">{metric.collection_frequency || '-'}</span></div>
-                    <div>Replit ?? <span className="text-sidebar-foreground">{guide.secretName}</span></div>
-                    <div>?낅젰 ?꾩튂: <span className="text-sidebar-foreground">{guide.replitLocation}</span></div>
-                    <div>??諛쒓툒泥? <span className="text-sidebar-foreground">{guide.keyLocation}</span></div>
+                    <div>제공처: <span className="text-sidebar-foreground">{guide.provider}</span></div>
+                    <div>원천: <span className="text-sidebar-foreground">{metric.data_source || '-'}</span></div>
+                    <div>주기: <span className="text-sidebar-foreground">{metric.collection_frequency || '-'}</span></div>
+                    <div>Replit 키: <span className="text-sidebar-foreground">{guide.secretName}</span></div>
+                    <div>입력 위치: <span className="text-sidebar-foreground">{guide.replitLocation}</span></div>
+                    <div>키 발급처: <span className="text-sidebar-foreground">{guide.keyLocation}</span></div>
                   </div>
 
                   <p className="mt-2 text-xs text-amber-200/80">{metric.reason || guide.note}</p>

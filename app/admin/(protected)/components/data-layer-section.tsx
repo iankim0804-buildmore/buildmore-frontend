@@ -35,9 +35,7 @@ export function DataLayerSection({
         데이터 레이어
       </h2>
 
-      {/* Data Sources */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Connected Sources */}
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-sidebar-foreground">
@@ -71,7 +69,6 @@ export function DataLayerSection({
           </CardContent>
         </Card>
 
-        {/* Planned Sources */}
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-sidebar-foreground">
@@ -99,9 +96,7 @@ export function DataLayerSection({
         </Card>
       </div>
 
-      {/* System Info */}
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {/* Backend */}
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
@@ -126,7 +121,6 @@ export function DataLayerSection({
           </CardContent>
         </Card>
 
-        {/* Database */}
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
@@ -151,13 +145,12 @@ export function DataLayerSection({
           </CardContent>
         </Card>
 
-        {/* Frontend */}
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium text-sidebar-foreground">
-                프론트
+                프론트엔드
               </span>
               {systemInfo.frontend.status === 'ok' ? (
                 <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-400" />
