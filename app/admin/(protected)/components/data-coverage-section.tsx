@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react'
@@ -16,6 +16,8 @@ interface Metric {
   status?: string
   reason?: string | null
   stored_count?: number
+  source_status?: string
+  availability_basis?: string
 }
 
 interface Category {
@@ -50,44 +52,44 @@ const SOURCE_GUIDES: Record<string, ApiGuide> = {
   ecos: {
     provider: '한국은행 ECOS',
     secretName: 'ECOS_API_KEY',
-    keyLocation: '한국은행 경제통계시스템 ECOS Open API',
+    keyLocation: '한국은행 ECOS Open API',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '키를 새로 발급받아 ECOS_API_KEY로 저장한 뒤 수집을 다시 실행하세요.',
+    note: 'ECOS API 키와 백엔드 상태 점검 결과를 확인하세요.',
   },
   seoul: {
     provider: '서울 열린데이터광장',
     secretName: 'SEOUL_OPENAPI_KEY',
-    keyLocation: '서울 열린데이터광장 인증키 신청',
+    keyLocation: '서울 열린데이터광장 인증키',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '상권분석서비스 API 키가 만료되면 SEOUL_OPENAPI_KEY를 교체하세요.',
+    note: '서울 열린데이터 API 키와 호출 권한을 확인하세요.',
   },
   dataGoKr: {
     provider: '공공데이터포털',
     secretName: 'DATA_GO_KR_SERVICE_KEY',
     keyLocation: '공공데이터포털 활용신청/마이페이지 인증키',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '국토부, 건축물대장, 공시가격 계열 API는 이 키를 우선 확인하세요.',
+    note: '공공데이터포털 키와 백엔드 API 상태 점검 결과를 확인하세요.',
   },
   juso: {
     provider: '도로명주소 개발자센터',
     secretName: 'JUSO_API_KEY',
     keyLocation: '도로명주소 개발자센터 API 승인키',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '주소 정규화가 실패하면 JUSO_API_KEY 상태를 먼저 확인하세요.',
+    note: '주소 정규화 API 키 상태를 확인하세요.',
   },
   kosis: {
     provider: '통계청 KOSIS',
     secretName: 'KOSIS_API_KEY',
     keyLocation: 'KOSIS 공유서비스 Open API',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '인구, 세대, 물가 통계 API 연결 시 KOSIS_API_KEY를 사용하세요.',
+    note: 'KOSIS API 키와 통계 코드 매핑을 확인하세요.',
   },
   rOne: {
     provider: '한국부동산원 R-ONE',
     secretName: 'RONE_API_KEY 또는 DATA_GO_KR_SERVICE_KEY',
     keyLocation: '한국부동산원/공공데이터포털 제공 API',
     replitLocation: REPLIT_SECRET_LOCATION,
-    note: '임대료, 공실률 등 R-ONE 계열 지표의 인증키와 통계코드를 확인하세요.',
+    note: 'R-ONE 계열 API 키와 통계 코드 매핑을 확인하세요.',
   },
   fss: {
     provider: '금융감독원/금융위원회',
@@ -97,14 +99,13 @@ const SOURCE_GUIDES: Record<string, ApiGuide> = {
     note: 'API가 없거나 고시 PDF 기반이면 수동 매핑 테이블로 관리하세요.',
   },
   manual: {
-    provider: '수동 연결 또는 내부 산식',
+    provider: '수동 연결 또는 내부 데이터',
     secretName: '별도 키 없음',
-    keyLocation: '계약서, 현장조사, 보고서, 내부 계산식',
-    replitLocation: 'Replit Secrets가 아니라 DB/관리 테이블에서 관리',
-    note: 'API 제공처가 없으면 수동 입력 또는 파생 계산 로직을 연결하세요.',
+    keyLocation: '계약서, 현장조사, 보고서, 내부 계산값',
+    replitLocation: 'DB/관리 테이블',
+    note: '백엔드가 내려준 상태와 사유를 기준으로 확인하세요.',
   },
 }
-
 function getBarColor(rate: number): string {
   if (rate === 0) return 'bg-muted-foreground/30'
   if (rate <= 30) return 'bg-red-500'
@@ -122,30 +123,20 @@ function getCardBorderColor(rate: number): string {
 function guideForMetric(metric: Metric): ApiGuide {
   const haystack = `${metric.metric_key} ${metric.data_source}`.toLowerCase()
 
-  if (haystack.includes('ecos') || haystack.includes('한국은행') || haystack.includes('bok')) return SOURCE_GUIDES.ecos
-  if (haystack.includes('서울') || haystack.includes('상권분석')) return SOURCE_GUIDES.seoul
+  if (haystack.includes('ecos') || haystack.includes('bok') || haystack.includes('한국은행')) return SOURCE_GUIDES.ecos
+  if (haystack.includes('서울') || haystack.includes('seoul')) return SOURCE_GUIDES.seoul
   if (haystack.includes('kosis') || haystack.includes('통계청')) return SOURCE_GUIDES.kosis
-  if (haystack.includes('r-one') || haystack.includes('rone') || haystack.includes('한국부동산원')) return SOURCE_GUIDES.rOne
+  if (haystack.includes('r-one') || haystack.includes('rone') || haystack.includes('부동산원')) return SOURCE_GUIDES.rOne
   if (haystack.includes('금융감독') || haystack.includes('금융위원') || haystack.includes('fss')) return SOURCE_GUIDES.fss
-  if (
-    haystack.includes('국토') ||
-    haystack.includes('건축물') ||
-    haystack.includes('공시') ||
-    haystack.includes('토지') ||
-    haystack.includes('data.go') ||
-    haystack.includes('nsdi')
-  ) {
-    return SOURCE_GUIDES.dataGoKr
-  }
+  if (haystack.includes('국토') || haystack.includes('건축물') || haystack.includes('공시') || haystack.includes('data.go') || haystack.includes('nsdi')) return SOURCE_GUIDES.dataGoKr
   if (haystack.includes('juso') || haystack.includes('주소')) return SOURCE_GUIDES.juso
   return SOURCE_GUIDES.manual
 }
 
 function statusLabel(metric: Metric): string {
   if (metric.is_available) return 'API 살아있음'
-  const guide = guideForMetric(metric)
-  if (guide.secretName === '별도 키 없음') return '수동 연결 필요'
-  return 'API 죽음/키 확인 필요'
+  if (metric.status === 'manual_required') return '수동 연결 필요'
+  return 'API 죽어있음'
 }
 
 function statusClass(metric: Metric): string {
@@ -182,7 +173,7 @@ function CategoryCard({ category }: { category: Category }) {
 
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          <span>지표 보기</span>
+          <span>吏??蹂닿린</span>
         </div>
       </button>
 
@@ -207,12 +198,12 @@ function CategoryCard({ category }: { category: Category }) {
                   </div>
 
                   <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                    <div>제공처: <span className="text-sidebar-foreground">{guide.provider}</span></div>
-                    <div>원천: <span className="text-sidebar-foreground">{metric.data_source || '-'}</span></div>
-                    <div>주기: <span className="text-sidebar-foreground">{metric.collection_frequency || '-'}</span></div>
-                    <div>Replit 키: <span className="text-sidebar-foreground">{guide.secretName}</span></div>
-                    <div>입력 위치: <span className="text-sidebar-foreground">{guide.replitLocation}</span></div>
-                    <div>키 발급처: <span className="text-sidebar-foreground">{guide.keyLocation}</span></div>
+                    <div>?쒓났泥? <span className="text-sidebar-foreground">{guide.provider}</span></div>
+                    <div>?먯쿇: <span className="text-sidebar-foreground">{metric.data_source || '-'}</span></div>
+                    <div>二쇨린: <span className="text-sidebar-foreground">{metric.collection_frequency || '-'}</span></div>
+                    <div>Replit ?? <span className="text-sidebar-foreground">{guide.secretName}</span></div>
+                    <div>?낅젰 ?꾩튂: <span className="text-sidebar-foreground">{guide.replitLocation}</span></div>
+                    <div>??諛쒓툒泥? <span className="text-sidebar-foreground">{guide.keyLocation}</span></div>
                   </div>
 
                   <p className="mt-2 text-xs text-amber-200/80">{metric.reason || guide.note}</p>
@@ -248,7 +239,7 @@ export function DataCoverageSection() {
 
       setData(await res.json())
     } catch (err) {
-      setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다')
+      setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.')
     } finally {
       setIsLoading(false)
     }
