@@ -78,6 +78,20 @@ interface SearchHistoryItem {
   timestamp: number
 }
 
+interface AddressSuggestion {
+  address_name: string
+  display_address?: string
+  road_address?: string | null
+  jibun_address?: string | null
+  lat: number
+  lng: number
+  bjd_code?: string | null
+  is_bjd_matched?: boolean
+  region_1depth?: string | null
+  region_2depth?: string | null
+  region_3depth?: string | null
+}
+
 interface AnalysisHistoryItem {
   address: string
   score: number
@@ -137,6 +151,24 @@ export default function AnalysisPage() {
   // ============================================================
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [applyTrigger, setApplyTrigger] = useState(0)
+
+  // Address & history
+  const [address, setAddress] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+  const [addressProps, setAddressProps] = useState<AddressProps | null>(null)
+  const [isBootstrapping, setIsBootstrapping] = useState(false)
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
+  const [isSuggestingAddress, setIsSuggestingAddress] = useState(false)
+  const [selectedAddressMeta, setSelectedAddressMeta] = useState<AddressSuggestion | null>(null)
+  const [confirmedLocation, setConfirmedLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('bm_search_history') || '[]') } catch { return [] }
+  })
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('bm_analysis_history') || '[]') } catch { return [] }
+  })
   
   // ============================================================
   // B-4. KAKAO MAP HOOK
@@ -150,25 +182,14 @@ export default function AnalysisPage() {
     initModalMap 
   } = useKakaoMap({
     address: addressConfirmed ? address : '',
+    latitude: addressConfirmed ? confirmedLocation?.lat : undefined,
+    longitude: addressConfirmed ? confirmedLocation?.lng : undefined,
     zoom: 3,
   })
 
   // ============================================================
   // C. ANALYSIS PANEL STATE
   // ============================================================
-  // Address & history
-  const [address, setAddress] = useState('')
-  const [showHistory, setShowHistory] = useState(false)
-  const [addressProps, setAddressProps] = useState<AddressProps | null>(null)
-  const [isBootstrapping, setIsBootstrapping] = useState(false)
-  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(localStorage.getItem('bm_search_history') || '[]') } catch { return [] }
-  })
-  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(localStorage.getItem('bm_analysis_history') || '[]') } catch { return [] }
-  })
   
   // Panel A: 매입조건
   const [price, setPrice] = useState(38.00)
@@ -664,6 +685,43 @@ BuildMore 판단:
   // 동적 인사이트 데이터 (분석 결과 있으면 사용, 없으면 기본값)
   const currentInsights = dealAnalysis.result?.insights
 
+  useEffect(() => {
+    const query = address.trim()
+
+    if (query.length < 2 || addressConfirmed) {
+      setAddressSuggestions([])
+      setIsSuggestingAddress(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setIsSuggestingAddress(true)
+      try {
+        const resp = await fetch(`/api/address/suggest?q=${encodeURIComponent(query)}&size=7`, {
+          signal: controller.signal,
+        })
+        if (!resp.ok) throw new Error('address suggest failed')
+        const data = await resp.json()
+        setAddressSuggestions(Array.isArray(data.suggestions) ? data.suggestions : [])
+        setShowHistory(true)
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setAddressSuggestions([])
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSuggestingAddress(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [address, addressConfirmed])
+
   // ============================================================
   // EVENT HANDLERS
   // ============================================================
@@ -675,19 +733,20 @@ BuildMore 판단:
 
 
 
-  const handleAddressConfirm = useCallback(async (confirmedAddress: string) => {
+  const handleAddressConfirm = useCallback(async (confirmedAddress: string, meta?: AddressSuggestion | null) => {
     if (!confirmedAddress.trim()) return
     setIsBootstrapping(true)
     setShowHistory(false)
     setAddressConfirmed(false)
+    setSelectedAddressMeta(meta ?? null)
 
     try {
       // 카카오 Geocoder로 lat/lng/bjd_code 먼저 조회 후 bootstrap에 함께 전달
-      let _lat: number | null = null
-      let _lng: number | null = null
-      let _bjd_code: string | null = null
+      let _lat: number | null = meta?.lat ?? null
+      let _lng: number | null = meta?.lng ?? null
+      let _bjd_code: string | null = meta?.bjd_code ?? null
       try {
-        if (typeof window !== 'undefined' && (window as any).kakao?.maps?.services?.Geocoder) {
+        if ((!_lat || !_lng || !_bjd_code) && typeof window !== 'undefined' && (window as any).kakao?.maps?.services?.Geocoder) {
           await new Promise<void>((resolve) => {
             const geocoder = new (window as any).kakao.maps.services.Geocoder()
             geocoder.addressSearch(confirmedAddress, (result: any[], status: string) => {
@@ -712,6 +771,11 @@ BuildMore 판단:
       const data = await resp.json()
 
       setAddressProps(data.address_props ?? null)
+      if (_lat && _lng) {
+        setConfirmedLocation({ lat: _lat, lng: _lng })
+      } else {
+        setConfirmedLocation(null)
+      }
       setAddressConfirmed(true)
 
       const si = data.sample_inputs
@@ -784,10 +848,12 @@ BuildMore 판단:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchHistory])
 
-  const handleAddressSelect = (addr: string) => {
-    setAddress(addr)
+  const handleAddressSelect = (addr: string, meta?: AddressSuggestion | null) => {
+    const confirmedAddress = meta?.display_address || meta?.address_name || addr
+    setAddress(confirmedAddress)
     setShowHistory(false)
-    handleAddressConfirm(addr)
+    setAddressSuggestions([])
+    handleAddressConfirm(confirmedAddress, meta)
   }
 
 
@@ -938,7 +1004,12 @@ BuildMore 판단:
           <div className="relative w-[420px]">
             <Input
               value={address}
-              onChange={(e) => { setAddress(e.target.value); setAddressConfirmed(false) }}
+              onChange={(e) => {
+                setAddress(e.target.value)
+                setAddressConfirmed(false)
+                setSelectedAddressMeta(null)
+                setConfirmedLocation(null)
+              }}
               onFocus={() => setShowHistory(true)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && address.trim()) {
@@ -971,7 +1042,45 @@ BuildMore 판단:
             {/* History dropdown */}
             {showHistory && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
-                {searchHistory.length === 0 ? (
+                {address.trim().length >= 2 ? (
+                  <div className="py-1">
+                    {isSuggestingAddress && (
+                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        주소 검색 중
+                      </div>
+                    )}
+                    {!isSuggestingAddress && addressSuggestions.length === 0 && (
+                      <p className="px-3 py-3 text-sm text-muted-foreground">일치하는 주소가 없습니다.</p>
+                    )}
+                    {addressSuggestions.map((item) => {
+                      const label = item.display_address || item.address_name
+                      const subLabel = item.jibun_address && item.jibun_address !== label
+                        ? item.jibun_address
+                        : [item.region_2depth, item.region_3depth].filter(Boolean).join(' ')
+
+                      return (
+                        <button
+                          key={`${label}-${item.bjd_code || item.lat}-${item.lng}`}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => handleAddressSelect(label, item)}
+                          className="w-full px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span className="block truncate text-sm font-medium">{label}</span>
+                          <span className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                            {item.bjd_code ? (
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">BJD {item.bjd_code}</span>
+                            ) : (
+                              <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-600">법정동 코드 없음</span>
+                            )}
+                            {subLabel && <span className="truncate">{subLabel}</span>}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : searchHistory.length === 0 ? (
                   <p className="px-3 py-3 text-sm text-muted-foreground">검색 기록이 없습니다.</p>
                 ) : searchHistory.map((item, i) => (
                   <button
@@ -996,7 +1105,7 @@ BuildMore 판단:
                     </button>
                   </button>
                 ))}
-                {searchHistory.length > 0 && (
+                {address.trim().length < 2 && searchHistory.length > 0 && (
                   <button
                     onClick={() => {
                       setSearchHistory([])
@@ -1179,6 +1288,9 @@ BuildMore 판단:
               <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full text-muted-foreground animate-pulse">토지 정보 조회 중...</span>
             ) : addressProps ? (
               <>
+                {selectedAddressMeta?.bjd_code && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap font-mono">BJD {selectedAddressMeta.bjd_code}</span>
+                )}
                 {addressProps.zoning && (
                   <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">{addressProps.zoning}</span>
                 )}

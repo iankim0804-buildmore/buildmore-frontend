@@ -145,7 +145,10 @@ export const useKakaoMap = (options: MapInitOptions): UseKakaoMapReturn => {
       const { address: inputAddress, latitude, longitude } = options
       
       // 주소가 있으면 Geocoder 사용
-      if (inputAddress) {
+      if (latitude && longitude) {
+        console.log('[kakao-map] Using provided coordinates:', { latitude, longitude })
+        setCoordinates({ lat: latitude, lng: longitude })
+      } else if (inputAddress) {
         console.log('[kakao-map] Using Geocoder for address:', inputAddress)
         
         const geocoder = new window.kakao.maps.services.Geocoder()
