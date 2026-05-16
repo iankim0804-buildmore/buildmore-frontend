@@ -145,6 +145,8 @@ export default function AnalysisPage() {
   // ============================================================
   const dealAnalysis = useDealAnalysis()
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false)
+  const [isCtaOpen, setIsCtaOpen] = useState(false)
+  const [ctaPulseKey, setCtaPulseKey] = useState(0)
   
   // ============================================================
   // B-3. SIDEBAR STATE (New)
@@ -405,6 +407,7 @@ export default function AnalysisPage() {
     try {
       // 분석 실행
       await dealAnalysis.runAnalysis(input)
+      setCtaPulseKey((key) => key + 1)
 
       if (process.env.NODE_ENV === 'development') {
         console.log('[analysis] result:', dealAnalysis.result)
@@ -815,6 +818,7 @@ BuildMore 판단:
       if (data.analysis) {
         dealAnalysis.injectResult(data.analysis)
         setHasRunAnalysis(true)
+        setCtaPulseKey((key) => key + 1)
 
         // Save to analysis history
         const score = data.analysis?.score_cards?.bankability_score ?? 0
@@ -1643,7 +1647,10 @@ BuildMore 판단:
           {/* RIGHT CONTENT AREA */}
           {/* ============================================================ */}
           <div className="relative flex flex-col h-full overflow-hidden">
-          <ScrollArea className="flex-1 p-3.5 pb-[280px]">
+          <ScrollArea className={cn(
+            "flex-1 p-3.5 transition-[padding-bottom] duration-300",
+            isCtaOpen ? "pb-[300px]" : "pb-[72px]"
+          )}>
             <h1 className="text-[26px] font-extrabold text-foreground mb-4">분석 결과</h1>
 
             {/* Top 3 cards */}
@@ -1842,8 +1849,12 @@ BuildMore 판단:
           
           {/* Fixed CTA at bottom */}
           <div className="absolute bottom-0 left-0 right-0 z-30 mx-3.5 mb-3.5">
-            <div className="bg-white rounded-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border border-border overflow-hidden">
-              <AnalysisCTA />
+            <div className="bg-white rounded-[8px] shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border border-border overflow-hidden">
+              <AnalysisCTA
+                isOpen={isCtaOpen}
+                onToggle={() => setIsCtaOpen((open) => !open)}
+                pulseKey={ctaPulseKey}
+              />
             </div>
           </div>
           </div>
