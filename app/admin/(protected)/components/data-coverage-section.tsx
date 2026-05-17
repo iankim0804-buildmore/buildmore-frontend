@@ -204,6 +204,8 @@ function CategoryCard({ category }: { category: Category }) {
                     <div>Replit 키: <span className="text-sidebar-foreground">{guide.secretName}</span></div>
                     <div>입력 위치: <span className="text-sidebar-foreground">{guide.replitLocation}</span></div>
                     <div>키 발급처: <span className="text-sidebar-foreground">{guide.keyLocation}</span></div>
+                    <div>백엔드 상태: <span className="text-sidebar-foreground">{metric.source_status || metric.status || '-'}</span></div>
+                    <div>판정 기준: <span className="text-sidebar-foreground">{metric.availability_basis || '-'}</span></div>
                   </div>
 
                   <p className="mt-2 text-xs text-amber-200/80">{metric.reason || guide.note}</p>
