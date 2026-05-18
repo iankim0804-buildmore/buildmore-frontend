@@ -38,6 +38,106 @@ interface MetricCatalogResponse {
   categories: Category[]
 }
 
+interface SourceFieldDiscovery {
+  id: number
+  source_key: string
+  source_name?: string | null
+  provider?: string | null
+  category_code?: string | null
+  category_name?: string | null
+  field_no?: number | null
+  field_path: string
+  field_name: string
+  field_description?: string | null
+  inferred_value_type?: string | null
+  suggested_metric_key?: string | null
+  suggested_metric_name_ko?: string | null
+  suggested_unit?: string | null
+  suggested_category_code?: string | null
+  suggested_category_name?: string | null
+  suggested_frequency?: string | null
+  suggested_direction?: string | null
+  confidence?: number | null
+  status: string
+  review_note?: string | null
+  first_seen_at?: string | null
+  last_seen_at?: string | null
+  promoted_metric_key?: string | null
+  promoted_at?: string | null
+}
+
+interface SourceFieldDiscoveryResponse {
+  table_ready: boolean
+  summary: {
+    total: number
+    discovered: number
+    reviewing: number
+    promoted: number
+    ignored: number
+  }
+  items: SourceFieldDiscovery[]
+  workflow: string[]
+  next_actions: string[]
+}
+
+interface SourceCollectorRecipe {
+  source_key: string
+  source_name?: string | null
+  provider?: string | null
+  endpoint?: string | null
+  metric_key?: string | null
+  refresh_frequency?: string | null
+  collector_state: string
+  batch_limit?: string | null
+  snapshot_count?: number | null
+  delta_count?: number | null
+  latest_period_start?: string | null
+  latest_snapshot_at?: string | null
+  latest_delta_at?: string | null
+}
+
+interface SourceCollectorCategory {
+  category_code: string
+  category_key: string
+  category_name: string
+  status: string
+  configured_recipe_count: number
+  active_collector_count: number
+  snapshot_count: number
+  delta_count: number
+  frequencies: string[]
+  collector_runner: string
+  recipes: SourceCollectorRecipe[]
+}
+
+interface SourceCollectorStatusResponse {
+  runner: {
+    job_id: string
+    schedule: string
+    current_behavior: string
+    batch_policy: string
+    latest_run?: {
+      status?: string | null
+      ran_at?: string | null
+      items_upserted?: number | null
+      message?: string | null
+    } | null
+  }
+  queues?: {
+    snapshot_processing_queue?: Record<string, number>
+    delta_processing_queue?: Record<string, number>
+  }
+  summary: {
+    category_total: number
+    categories_with_recipes: number
+    categories_with_active_collectors: number
+    recipe_total: number
+    snapshot_total: number
+    delta_total: number
+  }
+  categories: SourceCollectorCategory[]
+}
+
 interface ApiGuide {
   provider: string
   secretName: string
@@ -154,6 +254,36 @@ function statusClass(metric: Metric): string {
   return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
 }
 
+function discoveryStatusLabel(status: string): string {
+  if (status === 'discovered') return '발견됨'
+  if (status === 'reviewing') return '검토 중'
+  if (status === 'promoted') return 'metric 승격'
+  if (status === 'ignored') return '보류'
+  return status
+}
+
+function discoveryStatusClass(status: string): string {
+  if (status === 'promoted') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (status === 'reviewing') return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+  if (status === 'ignored') return 'border-muted-foreground/30 bg-sidebar text-muted-foreground'
+  return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+}
+
+function collectorStatusLabel(status: string): string {
+  if (status === 'active') return '실행 중'
+  if (status === 'partially_active') return '일부 실행'
+  if (status === 'recipes_only') return 'recipe만 있음'
+  if (status === 'not_configured') return '미구현'
+  return status
+}
+
+function collectorStatusClass(status: string): string {
+  if (status === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (status === 'partially_active') return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+  if (status === 'recipes_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+  return 'border-muted-foreground/30 bg-sidebar text-muted-foreground'
+}
+
 function CategoryCard({ category }: { category: Category }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const metrics = useMemo(
@@ -229,14 +359,227 @@ function CategoryCard({ category }: { category: Category }) {
   )
 }
 
+function FieldPromotionPanel({
+  discoveries,
+  error,
+}: {
+  discoveries: SourceFieldDiscoveryResponse | null
+  error: string | null
+}) {
+  const items = discoveries?.items || []
+  const summary = discoveries?.summary
+
+  return (
+    <Card className="mt-4 border-sidebar-border bg-sidebar-accent">
+      <CardContent className="p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-sidebar-foreground">신규 API 필드 발견 및 metric 승격 후보</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              카테고리 collector가 새 필드를 발견하면 raw로 보관한 뒤, 투자 판단 지표만 snapshot 대상으로 승격합니다.
+            </p>
+          </div>
+          {summary && (
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">전체 {summary.total}</span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">발견 {summary.discovered}</span>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">검토 {summary.reviewing}</span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">승격 {summary.promoted}</span>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+            {error}
+          </div>
+        )}
+
+        {!discoveries?.table_ready && (
+          <div className="rounded-md border border-sidebar-border bg-sidebar/40 p-3 text-xs text-muted-foreground">
+            백엔드 migration 적용 전이거나 discovery 테이블이 아직 준비되지 않았습니다.
+          </div>
+        )}
+
+        {discoveries?.table_ready && items.length === 0 && (
+          <div className="rounded-md border border-sidebar-border bg-sidebar/40 p-3 text-xs text-muted-foreground">
+            아직 발견된 신규 필드는 없습니다. 카테고리별 collector가 실시간 도시데이터와 다른 원천 API를 관찰하기 시작하면 이곳에 후보가 쌓입니다.
+          </div>
+        )}
+
+        {items.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left text-xs">
+              <thead className="border-b border-sidebar-border text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">상태</th>
+                  <th className="py-2 pr-3 font-medium">원천</th>
+                  <th className="py-2 pr-3 font-medium">필드</th>
+                  <th className="py-2 pr-3 font-medium">추천 metric</th>
+                  <th className="py-2 pr-3 font-medium">카테고리</th>
+                  <th className="py-2 pr-3 font-medium">신뢰도</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-sidebar-border">
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="py-3 pr-3">
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] ${discoveryStatusClass(item.status)}`}>
+                        {discoveryStatusLabel(item.status)}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      <div className="font-medium text-sidebar-foreground">{item.source_name || item.source_key}</div>
+                      <div>{item.provider || '-'}</div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="font-medium text-sidebar-foreground">
+                        {item.field_no ? `No.${item.field_no} ` : ''}{item.field_name}
+                      </div>
+                      <div className="text-muted-foreground">{item.field_description || item.field_path}</div>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <div className="font-medium text-sidebar-foreground">{item.suggested_metric_name_ko || '-'}</div>
+                      <div className="text-muted-foreground">{item.suggested_metric_key || '-'}</div>
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {item.suggested_category_name || item.category_name || '-'}
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {typeof item.confidence === 'number' ? `${Math.round(item.confidence * 100)}%` : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function CollectorRunnerPanel({
+  status,
+  error,
+}: {
+  status: SourceCollectorStatusResponse | null
+  error: string | null
+}) {
+  return (
+    <Card className="mt-4 border-sidebar-border bg-sidebar-accent">
+      <CardContent className="p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-sidebar-foreground">카테고리 collector runner 현황</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              각 원천 데이터 카테고리가 실제로 수집되고, snapshot/delta까지 연결됐는지 확인합니다.
+            </p>
+          </div>
+          {status && (
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">카테고리 {status.summary.category_total}</span>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">recipe {status.summary.recipe_total}</span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">snapshot {status.summary.snapshot_total}</span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">delta {status.summary.delta_total}</span>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+            {error}
+          </div>
+        )}
+
+        {status && (
+          <div className="mb-4 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+            <div>runner: <span className="text-sidebar-foreground">{status.runner.job_id}</span></div>
+            <div>주기: <span className="text-sidebar-foreground">{status.runner.schedule}</span></div>
+            <div>최근 실행: <span className="text-sidebar-foreground">{status.runner.latest_run?.ran_at || '-'}</span></div>
+            <div>최근 상태: <span className="text-sidebar-foreground">{status.runner.latest_run?.status || '-'}</span></div>
+            <div className="md:col-span-2">현재 동작: <span className="text-sidebar-foreground">{status.runner.current_behavior}</span></div>
+            <div className="md:col-span-2">저장량 정책: <span className="text-sidebar-foreground">{status.runner.batch_policy}</span></div>
+            <div>
+              snapshot queue:{' '}
+              <span className="text-sidebar-foreground">
+                queued {status.queues?.snapshot_processing_queue?.queued ?? 0} / processed {status.queues?.snapshot_processing_queue?.processed ?? 0}
+              </span>
+            </div>
+            <div>
+              delta queue:{' '}
+              <span className="text-sidebar-foreground">
+                queued {status.queues?.delta_processing_queue?.queued ?? 0} / processed {status.queues?.delta_processing_queue?.processed ?? 0}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {status && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[940px] text-left text-xs">
+              <thead className="border-b border-sidebar-border text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">카테고리</th>
+                  <th className="py-2 pr-3 font-medium">상태</th>
+                  <th className="py-2 pr-3 font-medium">주기</th>
+                  <th className="py-2 pr-3 font-medium">recipe</th>
+                  <th className="py-2 pr-3 font-medium">collector</th>
+                  <th className="py-2 pr-3 font-medium">snapshot</th>
+                  <th className="py-2 pr-3 font-medium">delta</th>
+                  <th className="py-2 pr-3 font-medium">저장 자료</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-sidebar-border">
+                {status.categories.map((category) => {
+                  const stored = category.recipes
+                    .filter((recipe) => (recipe.snapshot_count || 0) > 0)
+                    .slice(0, 2)
+                    .map((recipe) => recipe.metric_key || recipe.source_key)
+                    .join(', ')
+                  return (
+                    <tr key={category.category_code}>
+                      <td className="py-3 pr-3">
+                        <div className="font-medium text-sidebar-foreground">{category.category_name}</div>
+                        <div className="text-muted-foreground">{category.category_key}</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] ${collectorStatusClass(category.status)}`}>
+                          {collectorStatusLabel(category.status)}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3 text-muted-foreground">{category.frequencies.join(', ') || '-'}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{category.configured_recipe_count}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{category.active_collector_count}</td>
+                      <td className="py-3 pr-3 text-sidebar-foreground">{category.snapshot_count}</td>
+                      <td className="py-3 pr-3 text-sidebar-foreground">{category.delta_count}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{stored || '-'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function DataCoverageSection() {
   const [data, setData] = useState<MetricCatalogResponse | null>(null)
+  const [discoveries, setDiscoveries] = useState<SourceFieldDiscoveryResponse | null>(null)
+  const [collectorStatus, setCollectorStatus] = useState<SourceCollectorStatusResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+  const [collectorError, setCollectorError] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+    setDiscoveryError(null)
+    setCollectorError(null)
 
     try {
       const res = await fetch('/api/admin/metric-catalog', {
@@ -250,6 +593,30 @@ export function DataCoverageSection() {
       }
 
       setData(await res.json())
+
+      const discoveryRes = await fetch('/api/admin/source-field-discoveries?limit=50', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+
+      if (discoveryRes.ok) {
+        setDiscoveries(await discoveryRes.json())
+      } else {
+        const errorData = await discoveryRes.json().catch(() => ({}))
+        setDiscoveryError(errorData.error || `신규 필드 후보를 불러오지 못했습니다. HTTP ${discoveryRes.status}`)
+      }
+
+      const collectorRes = await fetch('/api/admin/source-collector-status', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+
+      if (collectorRes.ok) {
+        setCollectorStatus(await collectorRes.json())
+      } else {
+        const errorData = await collectorRes.json().catch(() => ({}))
+        setCollectorError(errorData.error || `collector 현황을 불러오지 못했습니다. HTTP ${collectorRes.status}`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '데이터를 불러오지 못했습니다.')
     } finally {
@@ -335,6 +702,10 @@ export function DataCoverageSection() {
           <CategoryCard key={category.category_code} category={category} />
         ))}
       </div>
+
+      <CollectorRunnerPanel status={collectorStatus} error={collectorError} />
+
+      <FieldPromotionPanel discoveries={discoveries} error={discoveryError} />
     </section>
   )
 }

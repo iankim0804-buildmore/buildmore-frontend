@@ -1,0 +1,52 @@
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  const cookieStore = await cookies()
+  const token = cookieStore.get('buildmore_admin_token')?.value
+
+  const _rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
+  const adminApiUrl = (_rawAdminUrl && !_rawAdminUrl.includes('ssmrdesign'))
+    ? _rawAdminUrl
+    : 'https://buildmore-backend.replit.app'
+  const internalKey = process.env.ADMIN_INTERNAL_KEY
+  const adminToken = process.env.ADMIN_TOKEN
+
+  if (!adminToken) {
+    return NextResponse.json({ error: 'Server misconfigured: ADMIN_TOKEN not set' }, { status: 500 })
+  }
+
+  if (token !== adminToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (!adminApiUrl) {
+    return NextResponse.json({ error: 'Server misconfigured: API URL not set' }, { status: 500 })
+  }
+
+  if (!internalKey) {
+    return NextResponse.json({ error: 'Server misconfigured: Internal key not set' }, { status: 500 })
+  }
+
+  try {
+    const backendUrl = new URL('/api/admin/source-field-discoveries', adminApiUrl)
+    request.nextUrl.searchParams.forEach((value, key) => {
+      backendUrl.searchParams.set(key, value)
+    })
+
+    const res = await fetch(backendUrl.toString(), {
+      headers: { 'X-Internal-API-Key': internalKey },
+      cache: 'no-store',
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      return NextResponse.json({ error: `Backend error: ${res.status}`, details: errorText }, { status: res.status })
+    }
+
+    const data = await res.json()
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch from backend', details: String(error) }, { status: 500 })
+  }
+}
