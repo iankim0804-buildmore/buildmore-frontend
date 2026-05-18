@@ -91,6 +91,48 @@ export interface AdminWikiNoteDetail extends AdminWikiNoteSummary {
   versions: AdminWikiNoteVersion[]
 }
 
+export interface AdminSignalTickerItem {
+  id: number
+  headline: string
+  summary: string | null
+  district_name: string
+  signal: string | null
+  signal_strength: string | null
+  frame: string
+  report_date: string
+  rank_score: number
+  wiki_note_id: number | null
+  source_metric_keys: string[]
+  source_delta_ids: number[]
+  click_count: number
+  exposed_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminCardNewsCandidateSummary {
+  id: number
+  headline: string
+  subtitle: string | null
+  region: string | null
+  review_status: string
+  trend_score: number
+  visual_score: number
+  confidence: number | null
+  investment_takeaway: string | null
+  why_promoted: string | null
+  source_metric_keys: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminCardNewsCandidateDetail extends AdminCardNewsCandidateSummary {
+  key_numbers: Array<Record<string, unknown>>
+  source_snapshot_ids: number[]
+  source_delta_ids: number[]
+  draft_payload: Record<string, unknown>
+}
+
 export interface UsageStats {
   analysis_requests_today: number
   analysis_requests_week: number
@@ -176,6 +218,21 @@ export async function fetchWikiNotes(limit = 100): Promise<AdminWikiNoteSummary[
 
 export async function fetchWikiNoteDetail(noteId: number): Promise<AdminWikiNoteDetail | null> {
   const result = await fetchAdmin<AdminWikiNoteDetail>(`/wiki/notes/${noteId}`)
+  return result.data
+}
+
+export async function fetchWikiTickerItems(limit = 50): Promise<AdminSignalTickerItem[]> {
+  const result = await fetchAdmin<AdminSignalTickerItem[]>(`/wiki/ticker-items?limit=${limit}`)
+  return result.data ?? []
+}
+
+export async function fetchCardNewsCandidates(limit = 50): Promise<AdminCardNewsCandidateSummary[]> {
+  const result = await fetchAdmin<AdminCardNewsCandidateSummary[]>(`/wiki/card-news-candidates?limit=${limit}`)
+  return result.data ?? []
+}
+
+export async function fetchCardNewsCandidateDetail(candidateId: number): Promise<AdminCardNewsCandidateDetail | null> {
+  const result = await fetchAdmin<AdminCardNewsCandidateDetail>(`/wiki/card-news-candidates/${candidateId}`)
   return result.data
 }
 

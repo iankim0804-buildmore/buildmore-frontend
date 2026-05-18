@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type {
+  AdminCardNewsCandidateSummary,
+  AdminSignalTickerItem,
   AdminWikiNoteDetail,
   AdminWikiNoteSummary,
   FrontendProcessingQueue,
@@ -10,7 +12,7 @@ import type {
   FrontendWikiStats,
   FrontendWikiUpdate,
 } from '@/lib/api/admin'
-import { fetchWikiNoteDetail, fetchWikiNotes } from '@/lib/api/admin'
+import { fetchCardNewsCandidates, fetchWikiNoteDetail, fetchWikiNotes, fetchWikiTickerItems } from '@/lib/api/admin'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -83,6 +85,8 @@ export function WikiSection({
   wikiUpdates,
 }: WikiSectionProps) {
   const [notes, setNotes] = useState<AdminWikiNoteSummary[]>([])
+  const [tickerItems, setTickerItems] = useState<AdminSignalTickerItem[]>([])
+  const [cardCandidates, setCardCandidates] = useState<AdminCardNewsCandidateSummary[]>([])
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null)
   const [selectedNote, setSelectedNote] = useState<AdminWikiNoteDetail | null>(null)
   const [isNotesLoading, setIsNotesLoading] = useState(false)
@@ -106,6 +110,12 @@ export function WikiSection({
     try {
       const nextNotes = await fetchWikiNotes(100)
       setNotes(nextNotes)
+      const [nextTickerItems, nextCardCandidates] = await Promise.all([
+        fetchWikiTickerItems(20),
+        fetchCardNewsCandidates(20),
+      ])
+      setTickerItems(nextTickerItems)
+      setCardCandidates(nextCardCandidates)
       if (!selectedNoteId && nextNotes[0]) {
         setSelectedNoteId(nextNotes[0].id)
       }
@@ -224,6 +234,116 @@ export function WikiSection({
             <div className="text-xs text-muted-foreground">
               Wiki 문서 {compileWikiCount > 0 && <span>· 갱신 {compileWikiCount}</span>}
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card className="border-sidebar-border bg-sidebar-accent py-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-sidebar-foreground">
+              Delta Ticker News
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Daily signal feed for the Analysis page ticker
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] pr-3">
+              <div className="space-y-2">
+                {tickerItems.map((item) => (
+                  <div key={item.id} className="rounded border border-sidebar-border bg-sidebar px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="line-clamp-2 text-sm font-medium text-sidebar-foreground">
+                          {item.headline}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>{item.district_name}</span>
+                          <span>{item.report_date}</span>
+                          <span>score {item.rank_score}</span>
+                          <span>click {item.click_count}</span>
+                        </div>
+                      </div>
+                      <Badge variant={item.signal === 'favorable' ? 'secondary' : 'outline'} className="shrink-0">
+                        {item.signal ?? 'watch'}
+                      </Badge>
+                    </div>
+                    {item.summary && (
+                      <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                        {item.summary}
+                      </div>
+                    )}
+                    {item.source_metric_keys.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {item.source_metric_keys.slice(0, 4).map((metricKey) => (
+                          <Badge key={metricKey} variant="outline" className="font-mono text-[10px]">
+                            {metricKey}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!isNotesLoading && tickerItems.length === 0 && (
+                  <div className="rounded bg-sidebar px-3 py-8 text-center text-sm text-muted-foreground">
+                    No Delta ticker items yet.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="border-sidebar-border bg-sidebar-accent py-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-sidebar-foreground">
+              Card News Candidates
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Promoted ticker signals stored as structured SNS drafts
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] pr-3">
+              <div className="space-y-2">
+                {cardCandidates.map((candidate) => (
+                  <div key={candidate.id} className="rounded border border-sidebar-border bg-sidebar px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="line-clamp-2 text-sm font-medium text-sidebar-foreground">
+                          {candidate.headline}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>{candidate.region ?? 'global'}</span>
+                          <span>trend {candidate.trend_score}</span>
+                          <span>visual {candidate.visual_score}</span>
+                          <span>{formatDate(candidate.created_at)}</span>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="shrink-0">
+                        {candidate.review_status}
+                      </Badge>
+                    </div>
+                    {candidate.investment_takeaway && (
+                      <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                        {candidate.investment_takeaway}
+                      </div>
+                    )}
+                    {candidate.why_promoted && (
+                      <div className="mt-2 rounded bg-sidebar-accent px-2 py-1.5 text-xs text-muted-foreground">
+                        {candidate.why_promoted}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!isNotesLoading && cardCandidates.length === 0 && (
+                  <div className="rounded bg-sidebar px-3 py-8 text-center text-sm text-muted-foreground">
+                    No card-news candidates yet.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       </div>

@@ -58,7 +58,9 @@ function getOrCreateSessionId(): string {
 }
 
 function signalColor(signal: string) {
-  return signal === 'favorable' ? 'text-blue-600' : 'text-orange-500'
+  if (signal === 'favorable' || signal === 'opportunity') return 'text-blue-600'
+  if (signal === 'neutral' || signal === 'watch') return 'text-slate-500'
+  return 'text-orange-500'
 }
 
 
@@ -353,7 +355,7 @@ export function NewsTicker({ onAddressSelect }: NewsTickerProps) {
               key={`${item.id}-${idx}`}
               type="button"
               onClick={() => handleItemClick(item)}
-              className="shrink-0 text-[13px] font-medium text-gray-900 hover:opacity-70 transition-opacity flex items-center gap-2 cursor-pointer hover:underline underline-offset-2"
+              className={`shrink-0 text-[13px] font-medium ${signalColor(item.signal)} hover:opacity-70 transition-opacity flex items-center gap-2 cursor-pointer hover:underline underline-offset-2`}
             >
               <span className="shrink-0">•</span>
               {item.headline}
