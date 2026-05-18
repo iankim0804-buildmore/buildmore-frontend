@@ -91,7 +91,10 @@ interface SourceCollectorRecipe {
   batch_limit?: string | null
   snapshot_count?: number | null
   delta_count?: number | null
+  observation_count?: number | null
+  observation_status_counts?: Record<string, number> | null
   latest_period_start?: string | null
+  latest_observed_at?: string | null
   latest_snapshot_at?: string | null
   latest_delta_at?: string | null
 }
@@ -272,7 +275,8 @@ function discoveryStatusClass(status: string): string {
 function collectorStatusLabel(status: string): string {
   if (status === 'active') return '실행 중'
   if (status === 'partially_active') return '일부 실행'
-  if (status === 'recipes_only') return 'recipe만 있음'
+  if (status === 'catalog_only') return 'catalog만 있음'
+  if (status === 'recipes_only') return 'catalog만 있음'
   if (status === 'not_configured') return '미구현'
   return status
 }
@@ -280,7 +284,7 @@ function collectorStatusLabel(status: string): string {
 function collectorStatusClass(status: string): string {
   if (status === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   if (status === 'partially_active') return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
-  if (status === 'recipes_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+  if (status === 'catalog_only' || status === 'recipes_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
   return 'border-muted-foreground/30 bg-sidebar text-muted-foreground'
 }
 
@@ -376,7 +380,7 @@ function FieldPromotionPanel({
           <div>
             <h2 className="text-sm font-semibold text-sidebar-foreground">신규 API 필드 발견 및 metric 승격 후보</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              카테고리 collector가 새 필드를 발견하면 raw로 보관한 뒤, 투자 판단 지표만 snapshot 대상으로 승격합니다.
+              새 필드를 metric으로 승격하면 해당 카테고리 collector의 자동 수집 목록에 바로 포함됩니다.
             </p>
           </div>
           {summary && (
@@ -403,7 +407,7 @@ function FieldPromotionPanel({
 
         {discoveries?.table_ready && items.length === 0 && (
           <div className="rounded-md border border-sidebar-border bg-sidebar/40 p-3 text-xs text-muted-foreground">
-            아직 발견된 신규 필드는 없습니다. 카테고리별 collector가 실시간 도시데이터와 다른 원천 API를 관찰하기 시작하면 이곳에 후보가 쌓입니다.
+            아직 발견된 신규 필드는 없습니다. collector가 새 API 응답 필드를 발견하거나 admin에서 API binding을 등록하면 이곳과 catalog에 반영됩니다.
           </div>
         )}
 
@@ -473,13 +477,13 @@ function CollectorRunnerPanel({
           <div>
             <h2 className="text-sm font-semibold text-sidebar-foreground">카테고리 collector runner 현황</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              각 원천 데이터 카테고리가 실제로 수집되고, snapshot/delta까지 연결됐는지 확인합니다.
+              각 카테고리 collector가 catalog 하위 세부지표/API를 자동으로 읽고 snapshot/delta까지 연결했는지 확인합니다.
             </p>
           </div>
           {status && (
             <div className="flex flex-wrap gap-2 text-[11px]">
               <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">카테고리 {status.summary.category_total}</span>
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">recipe {status.summary.recipe_total}</span>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">catalog metric {status.summary.recipe_total}</span>
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">snapshot {status.summary.snapshot_total}</span>
               <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">delta {status.summary.delta_total}</span>
             </div>
@@ -523,8 +527,9 @@ function CollectorRunnerPanel({
                   <th className="py-2 pr-3 font-medium">카테고리</th>
                   <th className="py-2 pr-3 font-medium">상태</th>
                   <th className="py-2 pr-3 font-medium">주기</th>
-                  <th className="py-2 pr-3 font-medium">recipe</th>
+                  <th className="py-2 pr-3 font-medium">catalog metric</th>
                   <th className="py-2 pr-3 font-medium">collector</th>
+                  <th className="py-2 pr-3 font-medium">observation</th>
                   <th className="py-2 pr-3 font-medium">snapshot</th>
                   <th className="py-2 pr-3 font-medium">delta</th>
                   <th className="py-2 pr-3 font-medium">저장 자료</th>
@@ -537,6 +542,7 @@ function CollectorRunnerPanel({
                     .slice(0, 2)
                     .map((recipe) => recipe.metric_key || recipe.source_key)
                     .join(', ')
+                  const observations = category.recipes.reduce((sum, recipe) => sum + (recipe.observation_count || 0), 0)
                   return (
                     <tr key={category.category_code}>
                       <td className="py-3 pr-3">
@@ -551,6 +557,7 @@ function CollectorRunnerPanel({
                       <td className="py-3 pr-3 text-muted-foreground">{category.frequencies.join(', ') || '-'}</td>
                       <td className="py-3 pr-3 text-muted-foreground">{category.configured_recipe_count}</td>
                       <td className="py-3 pr-3 text-muted-foreground">{category.active_collector_count}</td>
+                      <td className="py-3 pr-3 text-sidebar-foreground">{observations}</td>
                       <td className="py-3 pr-3 text-sidebar-foreground">{category.snapshot_count}</td>
                       <td className="py-3 pr-3 text-sidebar-foreground">{category.delta_count}</td>
                       <td className="py-3 pr-3 text-muted-foreground">{stored || '-'}</td>

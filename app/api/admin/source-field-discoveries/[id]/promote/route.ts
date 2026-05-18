@@ -1,0 +1,47 @@
+import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  const cookieStore = await cookies()
+  const token = cookieStore.get('buildmore_admin_token')?.value
+
+  const _rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
+  const adminApiUrl = (_rawAdminUrl && !_rawAdminUrl.includes('ssmrdesign'))
+    ? _rawAdminUrl
+    : 'https://buildmore-backend.replit.app'
+  const internalKey = process.env.ADMIN_INTERNAL_KEY
+  const adminToken = process.env.ADMIN_TOKEN
+
+  if (!adminToken) {
+    return NextResponse.json({ error: 'Server misconfigured: ADMIN_TOKEN not set' }, { status: 500 })
+  }
+
+  if (token !== adminToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (!internalKey) {
+    return NextResponse.json({ error: 'Server misconfigured: Internal key not set' }, { status: 500 })
+  }
+
+  try {
+    const res = await fetch(`${adminApiUrl}/api/admin/source-field-discoveries/${id}/promote`, {
+      method: 'POST',
+      headers: { 'X-Internal-API-Key': internalKey },
+      cache: 'no-store',
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      return NextResponse.json({ error: `Backend error: ${res.status}`, details: errorText }, { status: res.status })
+    }
+
+    return NextResponse.json(await res.json())
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to proxy field promotion', details: String(error) }, { status: 500 })
+  }
+}
