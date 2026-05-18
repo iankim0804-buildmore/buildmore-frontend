@@ -134,13 +134,23 @@ function guideForMetric(metric: Metric): ApiGuide {
 }
 
 function statusLabel(metric: Metric): string {
-  if (metric.is_available) return 'API 살아있음'
+  const sourceStatus = metric.source_status || metric.status
+  if (sourceStatus === 'api_alive') return 'API 살아있음'
+  if (sourceStatus === 'api_dead') return 'API 죽어있음'
+  if (sourceStatus === 'api_key_required') return 'API 키 필요'
+  if (sourceStatus === 'mapping_required') return '매핑 필요'
+  if (sourceStatus === 'table_available') return '데이터 적재됨'
+  if (sourceStatus === 'table_required') return '테이블 필요'
+  if (sourceStatus === 'manual_only' || sourceStatus === 'log_only') return '수동 관리'
+  if (metric.is_available) return '데이터 적재됨'
   if (metric.status === 'manual_required') return '수동 연결 필요'
   return 'API 죽어있음'
 }
 
 function statusClass(metric: Metric): string {
-  if (metric.is_available) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  const sourceStatus = metric.source_status || metric.status
+  if (sourceStatus === 'api_dead') return 'border-red-500/30 bg-red-500/10 text-red-300'
+  if (sourceStatus === 'api_alive' || sourceStatus === 'table_available' || metric.is_available) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
 }
 

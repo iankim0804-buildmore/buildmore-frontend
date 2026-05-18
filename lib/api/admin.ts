@@ -44,15 +44,21 @@ export interface WikiData {
     done: number
     queued: number
     failed: number
-    by_task_type: Record<string, { total: number; done: number; queued: number }>
+    by_task_type: Record<string, Record<string, number>>
   }
 }
 
 export interface WikiUpdate {
-  id: string
-  type: string
-  title: string
-  created_at: string
+  id?: string
+  type?: string
+  title?: string
+  created_at?: string
+  job_id?: string
+  job_name?: string
+  status?: string
+  ran_at?: string | null
+  items_upserted?: number | null
+  message?: string | null
 }
 
 export interface AdminWiki {
@@ -193,11 +199,30 @@ export interface FrontendProcessingQueue {
   total: number
   done: number
   queued: number
+  failed: number
+  processing: number
+  skipped: number
   breakdown: {
     embed: number
     summarize: number
     tag: number
+    extractFacts: number
+    extractMetrics: number
+    compileWiki: number
+    fetchBody: number
   }
+  taskBreakdown: FrontendProcessingTask[]
+}
+
+export interface FrontendProcessingTask {
+  taskType: string
+  label: string
+  total: number
+  done: number
+  queued: number
+  failed: number
+  processing: number
+  skipped: number
 }
 
 export interface FrontendWikiStats {
@@ -205,6 +230,8 @@ export interface FrontendWikiStats {
   facts: number
   signals: number
   rules: number
+  cases: number
+  lastFactExtractedAt: string
 }
 
 export interface FrontendWikiUpdate {
@@ -334,6 +361,67 @@ function formatRelativeTime(timestamp: string | null | undefined): string {
   }
 }
 
+const WIKI_TASK_LABELS: Record<string, string> = {
+  fetch_body: '본문 수집',
+  summarize: '요약',
+  tag: '태깅',
+  embed: '임베딩',
+  extract_facts: 'Facts 추출',
+  extract_metrics: '지표 추출',
+  compile_wiki: 'Wiki 문서화',
+  yt_normalize: 'YouTube 정제',
+  yt_summarize: 'YouTube 요약',
+}
+
+function getQueueStatusCount(
+  byTaskType: WikiData['processing_queue']['by_task_type'] | undefined,
+  taskType: string,
+  status: string,
+): number {
+  return byTaskType?.[taskType]?.[status] ?? 0
+}
+
+function buildWikiTaskBreakdown(
+  byTaskType: WikiData['processing_queue']['by_task_type'] | undefined,
+): FrontendProcessingTask[] {
+  return Object.entries(byTaskType ?? {})
+    .map(([taskType, statuses]) => {
+      const done = statuses.done ?? 0
+      const queued = statuses.queued ?? 0
+      const failed = statuses.failed ?? 0
+      const processing = statuses.processing ?? 0
+      const skipped = statuses.skipped ?? 0
+      const explicitTotal = statuses.total ?? 0
+      const total = explicitTotal || Object.values(statuses).reduce((sum, count) => sum + (count ?? 0), 0)
+
+      return {
+        taskType,
+        label: WIKI_TASK_LABELS[taskType] ?? taskType,
+        total,
+        done,
+        queued,
+        failed,
+        processing,
+        skipped,
+      }
+    })
+    .filter((task) => task.total > 0)
+    .sort((a, b) => {
+      const aOpen = a.queued + a.failed + a.processing
+      const bOpen = b.queued + b.failed + b.processing
+      if (bOpen !== aOpen) return bOpen - aOpen
+      return b.total - a.total
+    })
+}
+
+function formatWikiUpdateResult(update: WikiUpdate): string {
+  if (update.message) return update.message
+  if (update.status && update.items_upserted != null) {
+    return `${update.status} · ${update.items_upserted.toLocaleString()}건`
+  }
+  return update.status || update.title || '-'
+}
+
 function mapGrade(grade: string | null | undefined): 'A' | 'B+' | 'B' | 'C' | 'D' {
   if (!grade) return 'D'
   const normalized = grade.toUpperCase()
@@ -395,15 +483,25 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   ]
 
   const wikiData = data.wiki?.wiki
+  const wikiQueueByTaskType = wikiData?.processing_queue?.by_task_type
+  const wikiTaskBreakdown = buildWikiTaskBreakdown(wikiQueueByTaskType)
   const processingQueue: FrontendProcessingQueue = {
     total: wikiData?.processing_queue?.total ?? 0,
     done: wikiData?.processing_queue?.done ?? 0,
     queued: wikiData?.processing_queue?.queued ?? 0,
+    failed: wikiData?.processing_queue?.failed ?? 0,
+    processing: wikiTaskBreakdown.reduce((sum, task) => sum + task.processing, 0),
+    skipped: wikiTaskBreakdown.reduce((sum, task) => sum + task.skipped, 0),
     breakdown: {
-      embed: wikiData?.processing_queue?.by_task_type?.embed?.queued ?? 0,
-      summarize: wikiData?.processing_queue?.by_task_type?.summarize?.queued ?? 0,
-      tag: wikiData?.processing_queue?.by_task_type?.tag?.queued ?? 0,
+      embed: getQueueStatusCount(wikiQueueByTaskType, 'embed', 'queued'),
+      summarize: getQueueStatusCount(wikiQueueByTaskType, 'summarize', 'queued'),
+      tag: getQueueStatusCount(wikiQueueByTaskType, 'tag', 'queued'),
+      extractFacts: getQueueStatusCount(wikiQueueByTaskType, 'extract_facts', 'queued'),
+      extractMetrics: getQueueStatusCount(wikiQueueByTaskType, 'extract_metrics', 'queued'),
+      compileWiki: getQueueStatusCount(wikiQueueByTaskType, 'compile_wiki', 'queued'),
+      fetchBody: getQueueStatusCount(wikiQueueByTaskType, 'fetch_body', 'queued'),
     },
+    taskBreakdown: wikiTaskBreakdown,
   }
 
   const wikiStats: FrontendWikiStats = {
@@ -411,15 +509,17 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     facts: wikiData?.extracted_facts ?? 0,
     signals: wikiData?.signals ?? 0,
     rules: wikiData?.rules ?? 0,
+    cases: wikiData?.cases ?? 0,
+    lastFactExtractedAt: formatKST(wikiData?.last_fact_extracted_at ? new Date(wikiData.last_fact_extracted_at) : null),
   }
 
   const wikiUpdates: FrontendWikiUpdate[] = (data.wiki?.recent_updates ?? [])
     .filter((update): update is WikiUpdate => update != null)
     .map((update, index) => ({
-      id: update.id || String(index + 1),
-      time: formatRelativeTime(update.created_at),
-      jobName: update.type || '-',
-      result: update.title || '-',
+      id: update.id || update.job_id || String(index + 1),
+      time: formatRelativeTime(update.created_at || update.ran_at),
+      jobName: update.type || update.job_name || update.job_id || '-',
+      result: formatWikiUpdateResult(update),
     }))
 
   const stats = data.usage?.stats
