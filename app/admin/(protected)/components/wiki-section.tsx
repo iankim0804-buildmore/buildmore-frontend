@@ -1,21 +1,31 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import type {
-  FrontendWikiStats,
+  AdminWikiNoteDetail,
+  AdminWikiNoteSummary,
   FrontendProcessingQueue,
-  FrontendWikiUpdate,
   FrontendProcessingTask,
+  FrontendWikiStats,
+  FrontendWikiUpdate,
 } from '@/lib/api/admin'
+import { fetchWikiNoteDetail, fetchWikiNotes } from '@/lib/api/admin'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   Clock,
   Database,
+  FileClock,
   FileText,
-  Layers3,
   Lightbulb,
   Loader2,
+  RefreshCw,
   Scale,
   XCircle,
 } from 'lucide-react'
@@ -35,6 +45,28 @@ function compactCount(value: number): string {
   return String(value)
 }
 
+function formatDate(timestamp: string | null | undefined): string {
+  if (!timestamp) return '-'
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '-'
+
+  return date.toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Seoul',
+  })
+}
+
+function noteStatusLabel(note: AdminWikiNoteSummary): string {
+  if (note.freshness_status === 'watch') return '관찰'
+  if (note.freshness_status === 'stale') return '갱신 필요'
+  if (note.freshness_status === 'compiling') return '컴파일 중'
+  return '최신'
+}
+
 function taskStatusLabel(task: FrontendProcessingTask): string {
   const parts = [
     task.queued > 0 ? `대기 ${formatCount(task.queued)}` : '',
@@ -50,11 +82,67 @@ export function WikiSection({
   processingQueue,
   wikiUpdates,
 }: WikiSectionProps) {
+  const [notes, setNotes] = useState<AdminWikiNoteSummary[]>([])
+  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null)
+  const [selectedNote, setSelectedNote] = useState<AdminWikiNoteDetail | null>(null)
+  const [isNotesLoading, setIsNotesLoading] = useState(false)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [notesError, setNotesError] = useState<string | null>(null)
+
   const progressPercent = processingQueue.total > 0
     ? Math.round((processingQueue.done / processingQueue.total) * 100)
     : 0
   const visibleTasks = processingQueue.taskBreakdown.slice(0, 8)
   const hasQueueRisk = processingQueue.failed > 0 || processingQueue.queued > 0
+
+  const compileWikiCount = useMemo(
+    () => notes.filter((note) => note.version_count > 0 || note.last_compiled_at).length,
+    [notes],
+  )
+
+  const loadNotes = async () => {
+    setIsNotesLoading(true)
+    setNotesError(null)
+    try {
+      const nextNotes = await fetchWikiNotes(100)
+      setNotes(nextNotes)
+      if (!selectedNoteId && nextNotes[0]) {
+        setSelectedNoteId(nextNotes[0].id)
+      }
+    } catch (error) {
+      setNotesError(error instanceof Error ? error.message : 'Wiki 문서 목록을 불러오지 못했습니다.')
+    } finally {
+      setIsNotesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadNotes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!selectedNoteId) return
+
+    let cancelled = false
+    setIsDetailLoading(true)
+    fetchWikiNoteDetail(selectedNoteId)
+      .then((note) => {
+        if (!cancelled) setSelectedNote(note)
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setNotesError(error instanceof Error ? error.message : 'Wiki 문서를 불러오지 못했습니다.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsDetailLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedNoteId])
 
   return (
     <section>
@@ -129,11 +217,13 @@ export function WikiSection({
 
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardContent className="flex flex-col items-center text-center">
-            <Layers3 className="mb-2 h-5 w-5 text-muted-foreground" />
+            <BookOpen className="mb-2 h-5 w-5 text-muted-foreground" />
             <div className="text-2xl font-bold text-sidebar-foreground">
-              {formatCount(wikiStats.cases)}
+              {formatCount(notes.length)}
             </div>
-            <div className="text-xs text-muted-foreground">Cases</div>
+            <div className="text-xs text-muted-foreground">
+              Wiki 문서 {compileWikiCount > 0 && <span>· 갱신 {compileWikiCount}</span>}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -220,6 +310,153 @@ export function WikiSection({
           )}
         </CardContent>
       </Card>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(340px,0.9fr)_minmax(0,1.2fr)]">
+        <Card className="border-sidebar-border bg-sidebar-accent py-4">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
+            <div>
+              <CardTitle className="text-sm font-medium text-sidebar-foreground">
+                LLM Wiki 문서 목록
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                published 문서 {formatCount(notes.length)}건
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={loadNotes}
+              disabled={isNotesLoading}
+              aria-label="Wiki 문서 새로고침"
+            >
+              <RefreshCw className={isNotesLoading ? 'animate-spin' : ''} />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {notesError && (
+              <div className="mb-3 rounded bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {notesError}
+              </div>
+            )}
+            <ScrollArea className="h-[520px] pr-3">
+              <div className="space-y-2">
+                {notes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => setSelectedNoteId(note.id)}
+                    className={`w-full rounded border px-3 py-3 text-left transition-colors ${
+                      selectedNoteId === note.id
+                        ? 'border-emerald-500/70 bg-emerald-500/10'
+                        : 'border-sidebar-border bg-sidebar hover:bg-sidebar/80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-sidebar-foreground">
+                          {note.title}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>갱신 {formatDate(note.updated_at)}</span>
+                          <span>버전 {note.version_count}</span>
+                          <span>출처 {note.source_count}</span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={note.freshness_status === 'watch' ? 'outline' : 'secondary'}
+                        className="shrink-0"
+                      >
+                        {noteStatusLabel(note)}
+                      </Badge>
+                    </div>
+                    {note.latest_change_summary && (
+                      <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                        {note.latest_change_summary}
+                      </div>
+                    )}
+                  </button>
+                ))}
+                {!isNotesLoading && notes.length === 0 && (
+                  <div className="rounded bg-sidebar px-3 py-8 text-center text-sm text-muted-foreground">
+                    표시할 Wiki 문서가 없습니다.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="border-sidebar-border bg-sidebar-accent py-4">
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <CardTitle className="truncate text-sm font-medium text-sidebar-foreground">
+                  {selectedNote?.title ?? 'Wiki 문서 상세'}
+                </CardTitle>
+                {selectedNote && (
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <Badge variant="secondary">{selectedNote.status}</Badge>
+                    <Badge variant="outline">{noteStatusLabel(selectedNote)}</Badge>
+                    <span>last_compiled {formatDate(selectedNote.last_compiled_at)}</span>
+                    <span>updated {formatDate(selectedNote.updated_at)}</span>
+                  </div>
+                )}
+              </div>
+              {isDetailLoading && (
+                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[520px] pr-4">
+              {selectedNote ? (
+                <div className="space-y-5">
+                  <article className="prose prose-invert max-w-none text-sm leading-7 text-sidebar-foreground prose-headings:text-sidebar-foreground prose-strong:text-sidebar-foreground prose-li:marker:text-muted-foreground">
+                    <ReactMarkdown>{selectedNote.content}</ReactMarkdown>
+                  </article>
+
+                  <div className="border-t border-sidebar-border pt-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-sidebar-foreground">
+                      <FileClock className="h-4 w-4" />
+                      업데이트 로그
+                    </div>
+                    <div className="space-y-2">
+                      {selectedNote.versions.map((version) => (
+                        <div
+                          key={version.version_no}
+                          className="rounded bg-sidebar px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-mono text-sidebar-foreground">
+                              v{version.version_no}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatDate(version.created_at)}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            {version.change_summary ?? '변경 요약 없음'}
+                          </div>
+                        </div>
+                      ))}
+                      {selectedNote.versions.length === 0 && (
+                        <div className="rounded bg-sidebar px-3 py-3 text-xs text-muted-foreground">
+                          저장된 버전 로그가 없습니다.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded bg-sidebar px-3 py-8 text-center text-sm text-muted-foreground">
+                  왼쪽 목록에서 문서를 선택하세요.
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="mt-4 border-sidebar-border bg-sidebar-accent py-4">
         <CardHeader className="pb-2">

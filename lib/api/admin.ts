@@ -1,4 +1,4 @@
-// Admin API Types - matching ACTUAL backend responses
+// Admin API Types - matching current backend responses.
 
 export interface AdminOverview {
   server_status: 'ok' | 'error'
@@ -66,16 +66,44 @@ export interface AdminWiki {
   recent_updates: WikiUpdate[]
 }
 
+export interface AdminWikiNoteVersion {
+  version_no: number
+  change_summary: string | null
+  created_at: string
+}
+
+export interface AdminWikiNoteSummary {
+  id: number
+  title: string
+  status: string
+  freshness_status: string | null
+  source_count: number
+  version_count: number
+  latest_change_summary: string | null
+  latest_version_at: string | null
+  last_compiled_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminWikiNoteDetail extends AdminWikiNoteSummary {
+  content: string
+  versions: AdminWikiNoteVersion[]
+}
+
 export interface UsageStats {
   analysis_requests_today: number
   analysis_requests_week: number
   analysis_requests_month: number
-  chat_sessions_today: number
-  chat_sessions_week: number
-  chat_sessions_month: number
+  chat_sessions_today?: number
+  chat_sessions_week?: number
+  chat_sessions_month?: number
+  conversation_sessions_today?: number
+  conversation_sessions_week?: number
+  conversation_sessions_month?: number
   unique_ips_today: number
   unique_ips_week: number
-  unique_ips_month: number
+  unique_ips_month?: number
 }
 
 export interface RecentAnalysis {
@@ -113,16 +141,15 @@ async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: str
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => '')
-      console.error(`[v0] API ${path} failed: ${res.status} ${res.statusText}`, errorText)
+      console.error(`[admin] API ${path} failed: ${res.status} ${res.statusText}`, errorText)
       return { data: null, error: `${res.status}: ${res.statusText}` }
     }
 
-    const data = await res.json()
-    return { data: data as T, error: null }
+    return { data: await res.json() as T, error: null }
   } catch (error) {
     clearTimeout(timeoutId)
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-    console.error(`[v0] API ${path} error:`, errorMsg)
+    console.error(`[admin] API ${path} error:`, errorMsg)
     return { data: null, error: errorMsg }
   }
 }
@@ -139,6 +166,16 @@ export async function fetchScheduler(): Promise<AdminScheduler | null> {
 
 export async function fetchWiki(): Promise<AdminWiki | null> {
   const result = await fetchAdmin<AdminWiki>('/wiki')
+  return result.data
+}
+
+export async function fetchWikiNotes(limit = 100): Promise<AdminWikiNoteSummary[]> {
+  const result = await fetchAdmin<AdminWikiNoteSummary[]>(`/wiki/notes?limit=${limit}`)
+  return result.data ?? []
+}
+
+export async function fetchWikiNoteDetail(noteId: number): Promise<AdminWikiNoteDetail | null> {
+  const result = await fetchAdmin<AdminWikiNoteDetail>(`/wiki/notes/${noteId}`)
   return result.data
 }
 
@@ -195,6 +232,17 @@ export interface FrontendDataSource {
   error?: string
 }
 
+export interface FrontendProcessingTask {
+  taskType: string
+  label: string
+  total: number
+  done: number
+  queued: number
+  failed: number
+  processing: number
+  skipped: number
+}
+
 export interface FrontendProcessingQueue {
   total: number
   done: number
@@ -212,17 +260,6 @@ export interface FrontendProcessingQueue {
     fetchBody: number
   }
   taskBreakdown: FrontendProcessingTask[]
-}
-
-export interface FrontendProcessingTask {
-  taskType: string
-  label: string
-  total: number
-  done: number
-  queued: number
-  failed: number
-  processing: number
-  skipped: number
 }
 
 export interface FrontendWikiStats {
@@ -322,43 +359,33 @@ export interface AdminDashboardData {
 }
 
 function formatKST(date: Date | null | undefined): string {
-  if (!date || isNaN(date.getTime())) return '-'
+  if (!date || Number.isNaN(date.getTime())) return '-'
 
-  try {
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Seoul',
-    })
-  } catch {
-    return '-'
-  }
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Seoul',
+  })
 }
 
 function formatRelativeTime(timestamp: string | null | undefined): string {
   if (!timestamp) return '-'
 
-  try {
-    const now = new Date()
-    const date = new Date(timestamp)
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '-'
 
-    if (isNaN(date.getTime())) return '-'
+  const diffMs = Date.now() - date.getTime()
+  const diffMins = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (diffMins < 1) return '방금 전'
-    if (diffMins < 60) return `${diffMins}분 전`
-    if (diffHours < 24) return `${diffHours}시간 전`
-    return `${diffDays}일 전`
-  } catch {
-    return '-'
-  }
+  if (diffMins < 1) return '방금 전'
+  if (diffMins < 60) return `${diffMins}분 전`
+  if (diffHours < 24) return `${diffHours}시간 전`
+  return `${diffDays}일 전`
 }
 
 const WIKI_TASK_LABELS: Record<string, string> = {
@@ -465,15 +492,15 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
         ? 'success'
         : job.last_status === 'failure' ? 'failed' : 'pending',
       successCount: job.success_count_30d ?? 0,
-      lastResult: job.last_message || `성공 ${job.success_count_30d ?? 0}회 / 실패 ${job.fail_count_30d ?? 0}회`,
+      lastResult: job.last_message || `성공 ${job.success_count_30d ?? 0}건 / 실패 ${job.fail_count_30d ?? 0}건`,
     }))
 
   const failedSources = data.scheduler?.failed_sources ?? []
   const dataSources: FrontendDataSource[] = [
     { id: '1', name: '서울 열린데이터광장', isActive: true },
     { id: '2', name: '소상공인시장진흥공단', isActive: true },
-    { id: '3', name: '유튜브 채널 (구해줘월부)', isActive: true },
-    { id: '4', name: '상가조아 블로그', isActive: true },
+    { id: '3', name: '유튜브 채널', isActive: true },
+    { id: '4', name: '시공/부동산 블로그', isActive: true },
     ...failedSources.map((fs, i) => ({
       id: `failed-${i}`,
       name: fs.name,
@@ -530,9 +557,9 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       thisMonth: stats?.analysis_requests_month ?? 0,
     },
     chatSessions: {
-      today: stats?.chat_sessions_today ?? 0,
-      thisWeek: stats?.chat_sessions_week ?? 0,
-      thisMonth: stats?.chat_sessions_month ?? 0,
+      today: stats?.chat_sessions_today ?? stats?.conversation_sessions_today ?? 0,
+      thisWeek: stats?.chat_sessions_week ?? stats?.conversation_sessions_week ?? 0,
+      thisMonth: stats?.chat_sessions_month ?? stats?.conversation_sessions_month ?? 0,
     },
     uniqueIps: {
       today: stats?.unique_ips_today ?? 0,
@@ -553,7 +580,7 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     }))
 
   const plannedSources: FrontendPlannedSource[] = [
-    { id: '1', name: '국토부 실거래가 지연분', version: 'V1.2' },
+    { id: '1', name: '국토부 실거래가 지표', version: 'V1.2' },
     { id: '2', name: '한국은행 ECOS 금리', version: 'V1.2' },
     { id: '3', name: 'KOSIS 통계청', version: 'V1.3' },
   ]
@@ -561,7 +588,7 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   const systemInfo: FrontendSystemInfo = {
     backend: {
       url: 'buildmore-backend.replit.app',
-      spec: 'Reserved VM · 0.5 vCPU / 2 GiB · Asia 리전',
+      spec: 'Reserved VM · 0.5 vCPU / 2 GiB · Asia region',
       region: 'Asia',
       status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
     },
@@ -598,6 +625,5 @@ export interface DashboardResult {
 
 export async function fetchAdminDashboardData(): Promise<DashboardResult> {
   const { data: rawData, errors } = await fetchAllAdminData()
-  const transformed = transformToFrontendData(rawData)
-  return { data: transformed, errors }
+  return { data: transformToFrontendData(rawData), errors }
 }
