@@ -684,69 +684,72 @@ function CollectorRunnerPanel({
         )}
 
         {status && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-left text-xs">
-              <thead className="border-b border-sidebar-border text-muted-foreground">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">카테고리</th>
-                  <th className="py-2 pr-3 font-medium">동작 상태</th>
-                  <th className="py-2 pr-3 font-medium">수집 주기</th>
-                  <th className="py-2 pr-3 font-medium">관리 지표</th>
-                  <th className="py-2 pr-3 font-medium">동작 수집기</th>
-                  <th className="py-2 pr-3 font-medium">원천 관측값</th>
-                  <th className="py-2 pr-3 font-medium">스냅샷 저장</th>
-                  <th className="py-2 pr-3 font-medium">변화량 계산</th>
-                  <th className="py-2 pr-3 font-medium">저장된 대표 지표</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-sidebar-border">
-                {status.categories.map((category) => {
-                  const stored = category.recipes
-                    .filter((recipe) => (recipe.snapshot_count || 0) > 0)
-                    .slice(0, 2)
-                    .map((recipe) => recipe.metric_key || recipe.source_key)
-                    .join(', ')
-                  const observations = category.recipes.reduce((sum, recipe) => sum + (recipe.observation_count || 0), 0)
-                  const latestActivity = latestCategoryActivity(category)
-                  return (
-                    <tr key={category.category_code}>
-                      <td className="py-3 pr-3">
-                        <div className="font-medium text-sidebar-foreground">{categoryDisplayName(category)}</div>
-                        <div className="text-muted-foreground">{category.category_key}</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <span className={`rounded-full border px-2 py-0.5 text-[11px] ${collectorStatusClass(category.status)}`}>
-                          {collectorStatusLabel(category.status)}
-                        </span>
-                        <div className="mt-1 text-[11px] text-muted-foreground">마지막 동작 {latestActivity}</div>
-                      </td>
-                      <td className="py-3 pr-3 text-muted-foreground">{frequencyListLabel(category.frequencies)}</td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-sidebar-foreground">{category.configured_recipe_count}개</div>
-                        <div className="text-[11px] text-muted-foreground">카탈로그에 등록된 하위 지표</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-sidebar-foreground">{category.active_collector_count}개</div>
-                        <div className="text-[11px] text-muted-foreground">실제로 API/DB를 읽는 수집기</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-sidebar-foreground">{observations}건</div>
-                        <div className="text-[11px] text-muted-foreground">수집 직후 저장된 원천값</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-sidebar-foreground">{category.snapshot_count}건</div>
-                        <div className="text-[11px] text-muted-foreground">기간별로 정리된 값</div>
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-sidebar-foreground">{category.delta_count}건</div>
-                        <div className="text-[11px] text-muted-foreground">이전 값과 비교한 변화량</div>
-                      </td>
-                      <td className="py-3 pr-3 text-muted-foreground">{stored || '-'}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div>
+            <div className="mb-3 rounded-md border border-sidebar-border bg-background/20 p-3 text-[11px] text-muted-foreground">
+              <div className="font-semibold text-sidebar-foreground">표 숫자 의미</div>
+              <div className="mt-1">
+                관리 지표는 카탈로그에 등록된 하위 지표 수, 동작 수집기는 실제 API/DB를 읽은 수집기 수, 원천 관측값은 수집 직후 저장된 원천값입니다. 스냅샷 저장은 기간별로 정리된 값, 변화량 계산은 이전 값과 비교해 만든 증감 데이터입니다.
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1120px] text-left text-xs">
+                <thead className="border-b border-sidebar-border text-sidebar-foreground">
+                  <tr>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">카테고리</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">동작 상태</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">수집 주기</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">관리 지표</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">동작 수집기</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">원천 관측값</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">스냅샷 저장</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">변화량 계산</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">저장된 대표 지표</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-sidebar-border">
+                  {status.categories.map((category) => {
+                    const stored = category.recipes
+                      .filter((recipe) => (recipe.snapshot_count || 0) > 0)
+                      .slice(0, 2)
+                      .map((recipe) => recipe.metric_key || recipe.source_key)
+                      .join(', ')
+                    const observations = category.recipes.reduce((sum, recipe) => sum + (recipe.observation_count || 0), 0)
+                    const latestActivity = latestCategoryActivity(category)
+                    return (
+                      <tr key={category.category_code}>
+                        <td className="py-3 pr-3">
+                          <div className="font-medium text-sidebar-foreground">{categoryDisplayName(category)}</div>
+                          <div className="text-muted-foreground">{category.category_key}</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] ${collectorStatusClass(category.status)}`}>
+                            {collectorStatusLabel(category.status)}
+                          </span>
+                          <div className="mt-1 text-[11px] text-muted-foreground">마지막 동작 {latestActivity}</div>
+                        </td>
+                        <td className="py-3 pr-3 text-muted-foreground">{frequencyListLabel(category.frequencies)}</td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-sidebar-foreground">{category.configured_recipe_count}개</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-sidebar-foreground">{category.active_collector_count}개</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-sidebar-foreground">{observations}건</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-sidebar-foreground">{category.snapshot_count}건</div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div className="font-semibold text-sidebar-foreground">{category.delta_count}건</div>
+                        </td>
+                        <td className="py-3 pr-3 text-muted-foreground">{stored || '-'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </CardContent>
