@@ -470,6 +470,11 @@ function CollectorRunnerPanel({
   status: SourceCollectorStatusResponse | null
   error: string | null
 }) {
+  const runnerJobId =
+    status?.runner.job_id === 'delta_editorial_daily'
+      ? 'metric_insight_daily'
+      : status?.runner.job_id
+
   return (
     <Card className="mt-4 border-sidebar-border bg-sidebar-accent">
       <CardContent className="p-4">
@@ -498,7 +503,7 @@ function CollectorRunnerPanel({
 
         {status && (
           <div className="mb-4 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-            <div>runner: <span className="text-sidebar-foreground">{status.runner.job_id}</span></div>
+            <div>runner: <span className="text-sidebar-foreground">{runnerJobId}</span></div>
             <div>주기: <span className="text-sidebar-foreground">{status.runner.schedule}</span></div>
             <div>최근 실행: <span className="text-sidebar-foreground">{status.runner.latest_run?.ran_at || '-'}</span></div>
             <div>최근 상태: <span className="text-sidebar-foreground">{status.runner.latest_run?.status || '-'}</span></div>
