@@ -570,16 +570,52 @@ function FieldPromotionPanel({
 function CollectorRunnerPanel({
   status,
   error,
+  onRefresh,
 }: {
   status: SourceCollectorStatusResponse | null
   error: string | null
+  onRefresh?: () => void
 }) {
+  const [isRunningCollectors, setIsRunningCollectors] = useState(false)
+  const [runMessage, setRunMessage] = useState<string | null>(null)
+  const [runError, setRunError] = useState<string | null>(null)
   const runnerJobId =
     status?.runner.job_id === 'delta_editorial_daily'
       ? 'metric_insight_daily'
       : status?.runner.job_id
   const snapshotQueue = status?.queues?.snapshot_processing_queue
   const deltaQueue = status?.queues?.delta_processing_queue
+  const handleRunCollectors = useCallback(async () => {
+    setIsRunningCollectors(true)
+    setRunMessage(null)
+    setRunError(null)
+
+    try {
+      const res = await fetch('/api/admin/source-collectors/run?mode=daily', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+
+      const categories =
+        data && typeof data === 'object' && 'categories' in data
+          ? Object.values((data as { categories?: Record<string, { status?: string }> }).categories || {})
+          : []
+      const completedCount = categories.filter((item) => item.status !== 'failed').length
+      const failedCount = categories.filter((item) => item.status === 'failed').length
+
+      setRunMessage(`순회 완료: ${completedCount}개 카테고리 응답${failedCount ? `, 실패 ${failedCount}개` : ''}`)
+      onRefresh?.()
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : '컬렉터 수동 실행에 실패했습니다.')
+    } finally {
+      setIsRunningCollectors(false)
+    }
+  }, [onRefresh])
 
   return (
     <Card className="mt-4 border-sidebar-border bg-sidebar-accent">
@@ -592,14 +628,38 @@ function CollectorRunnerPanel({
             </p>
           </div>
           {status && (
-            <div className="flex flex-wrap gap-2 text-[11px]">
-              <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">관리 카테고리 {status.summary.category_total}개</span>
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">수집 대상 지표 {status.summary.recipe_total}개</span>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">스냅샷 {status.summary.snapshot_total}건</span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">변화량 {status.summary.delta_total}건</span>
+            <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">관리 카테고리 {status.summary.category_total}개</span>
+                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">수집 대상 지표 {status.summary.recipe_total}개</span>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">스냅샷 {status.summary.snapshot_total}건</span>
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">변화량 {status.summary.delta_total}건</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunCollectors}
+                disabled={isRunningCollectors}
+                className="h-8 gap-1.5 border-sky-500/30 bg-sky-500/10 px-3 text-xs text-sky-100 hover:bg-sky-500/20"
+              >
+                {isRunningCollectors ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                12개 컬렉터 1회 순회
+              </Button>
             </div>
           )}
         </div>
+
+        {runMessage && (
+          <div className="mb-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+            {runMessage}
+          </div>
+        )}
+
+        {runError && (
+          <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+            {runError}
+          </div>
+        )}
 
         {error && (
           <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
@@ -888,7 +948,7 @@ export function DataCoverageSection() {
         ))}
       </div>
 
-      <CollectorRunnerPanel status={collectorStatus} error={collectorError} />
+      <CollectorRunnerPanel status={collectorStatus} error={collectorError} onRefresh={fetchData} />
 
       <FieldPromotionPanel discoveries={discoveries} error={discoveryError} />
     </section>
