@@ -282,6 +282,21 @@ const PIPELINE_STEPS = [
   { label: '투자 시그널 생성', detail: 'insight events' },
 ]
 
+const CATEGORY_LABELS: Record<string, string> = {
+  collateral_value: '담보가치',
+  rental_profitability: '임대수익성',
+  commercial_vitality: '상권활력',
+  finance_rate: '금융/금리',
+  demographics: '인구/수요',
+  development_legal: '개발/법규',
+  market_price: '시세/가격',
+  transport_access: '교통접근성',
+  cost_construction: '공사비/원가',
+  business_feasibility: '사업성',
+  macro_market: '거시시장',
+  environment_esg: '환경/ESG',
+}
+
 function runnerDisplayName(jobId?: string): string {
   if (!jobId) return '-'
   if (jobId === 'delta_editorial_daily' || jobId === 'metric_insight_daily') return 'Metric Insight Daily'
@@ -320,11 +335,50 @@ function formatDateTimeKst(value?: string | null): string {
   }).format(date)} KST`
 }
 
+function categoryDisplayName(category: SourceCollectorCategory): string {
+  return CATEGORY_LABELS[category.category_key] || CATEGORY_LABELS[category.category_code] || category.category_name
+}
+
+function frequencyLabel(frequency: string): string {
+  if (frequency === 'hourly') return '매시간'
+  if (frequency === 'daily') return '매일'
+  if (frequency === 'monthly') return '매월'
+  if (frequency === 'quarterly') return '분기'
+  if (frequency === 'annual' || frequency === 'yearly') return '매년'
+  if (frequency === 'static') return '고정값'
+  return frequency
+}
+
+function frequencyListLabel(frequencies: string[]): string {
+  if (frequencies.length === 0) return '-'
+  return frequencies.map(frequencyLabel).join(', ')
+}
+
+function latestCategoryActivity(category: SourceCollectorCategory): string {
+  const timestamps = category.recipes.flatMap((recipe) => [
+    recipe.latest_observed_at,
+    recipe.latest_snapshot_at,
+    recipe.latest_delta_at,
+  ]).filter((value): value is string => Boolean(value))
+
+  if (timestamps.length === 0) return '-'
+
+  const latest = timestamps.reduce((currentLatest, value) => {
+    const currentTime = new Date(currentLatest).getTime()
+    const nextTime = new Date(value).getTime()
+    if (Number.isNaN(nextTime)) return currentLatest
+    if (Number.isNaN(currentTime)) return value
+    return nextTime > currentTime ? value : currentLatest
+  })
+
+  return formatDateTimeKst(latest)
+}
+
 function collectorStatusLabel(status: string): string {
   if (status === 'active') return '실행 중'
   if (status === 'partially_active') return '일부 실행'
-  if (status === 'catalog_only') return 'catalog만 있음'
-  if (status === 'recipes_only') return 'catalog만 있음'
+  if (status === 'catalog_only') return '카탈로그만 있음'
+  if (status === 'recipes_only') return '수집 설정만 있음'
   if (status === 'not_configured') return '미구현'
   return status
 }
@@ -629,18 +683,18 @@ function CollectorRunnerPanel({
 
         {status && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[940px] text-left text-xs">
+            <table className="w-full min-w-[1120px] text-left text-xs">
               <thead className="border-b border-sidebar-border text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-medium">카테고리</th>
-                  <th className="py-2 pr-3 font-medium">상태</th>
-                  <th className="py-2 pr-3 font-medium">주기</th>
-                  <th className="py-2 pr-3 font-medium">catalog metric</th>
-                  <th className="py-2 pr-3 font-medium">collector</th>
-                  <th className="py-2 pr-3 font-medium">observation</th>
-                  <th className="py-2 pr-3 font-medium">snapshot</th>
-                  <th className="py-2 pr-3 font-medium">delta</th>
-                  <th className="py-2 pr-3 font-medium">저장 자료</th>
+                  <th className="py-2 pr-3 font-medium">동작 상태</th>
+                  <th className="py-2 pr-3 font-medium">수집 주기</th>
+                  <th className="py-2 pr-3 font-medium">관리 지표</th>
+                  <th className="py-2 pr-3 font-medium">동작 수집기</th>
+                  <th className="py-2 pr-3 font-medium">원천 관측값</th>
+                  <th className="py-2 pr-3 font-medium">스냅샷 저장</th>
+                  <th className="py-2 pr-3 font-medium">변화량 계산</th>
+                  <th className="py-2 pr-3 font-medium">저장된 대표 지표</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-sidebar-border">
@@ -651,23 +705,40 @@ function CollectorRunnerPanel({
                     .map((recipe) => recipe.metric_key || recipe.source_key)
                     .join(', ')
                   const observations = category.recipes.reduce((sum, recipe) => sum + (recipe.observation_count || 0), 0)
+                  const latestActivity = latestCategoryActivity(category)
                   return (
                     <tr key={category.category_code}>
                       <td className="py-3 pr-3">
-                        <div className="font-medium text-sidebar-foreground">{category.category_name}</div>
+                        <div className="font-medium text-sidebar-foreground">{categoryDisplayName(category)}</div>
                         <div className="text-muted-foreground">{category.category_key}</div>
                       </td>
                       <td className="py-3 pr-3">
                         <span className={`rounded-full border px-2 py-0.5 text-[11px] ${collectorStatusClass(category.status)}`}>
                           {collectorStatusLabel(category.status)}
                         </span>
+                        <div className="mt-1 text-[11px] text-muted-foreground">마지막 동작 {latestActivity}</div>
                       </td>
-                      <td className="py-3 pr-3 text-muted-foreground">{category.frequencies.join(', ') || '-'}</td>
-                      <td className="py-3 pr-3 text-muted-foreground">{category.configured_recipe_count}</td>
-                      <td className="py-3 pr-3 text-muted-foreground">{category.active_collector_count}</td>
-                      <td className="py-3 pr-3 text-sidebar-foreground">{observations}</td>
-                      <td className="py-3 pr-3 text-sidebar-foreground">{category.snapshot_count}</td>
-                      <td className="py-3 pr-3 text-sidebar-foreground">{category.delta_count}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{frequencyListLabel(category.frequencies)}</td>
+                      <td className="py-3 pr-3">
+                        <div className="font-semibold text-sidebar-foreground">{category.configured_recipe_count}개</div>
+                        <div className="text-[11px] text-muted-foreground">카탈로그에 등록된 하위 지표</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="font-semibold text-sidebar-foreground">{category.active_collector_count}개</div>
+                        <div className="text-[11px] text-muted-foreground">실제로 API/DB를 읽는 수집기</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="font-semibold text-sidebar-foreground">{observations}건</div>
+                        <div className="text-[11px] text-muted-foreground">수집 직후 저장된 원천값</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="font-semibold text-sidebar-foreground">{category.snapshot_count}건</div>
+                        <div className="text-[11px] text-muted-foreground">기간별로 정리된 값</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="font-semibold text-sidebar-foreground">{category.delta_count}건</div>
+                        <div className="text-[11px] text-muted-foreground">이전 값과 비교한 변화량</div>
+                      </td>
                       <td className="py-3 pr-3 text-muted-foreground">{stored || '-'}</td>
                     </tr>
                   )
