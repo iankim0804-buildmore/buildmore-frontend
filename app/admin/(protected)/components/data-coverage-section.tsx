@@ -685,12 +685,6 @@ function CollectorRunnerPanel({
 
         {status && (
           <div>
-            <div className="mb-3 rounded-md border border-sidebar-border bg-background/20 p-3 text-[11px] text-muted-foreground">
-              <div className="font-semibold text-sidebar-foreground">표 숫자 의미</div>
-              <div className="mt-1">
-                관리 지표는 카탈로그에 등록된 하위 지표 수, 동작 수집기는 실제 API/DB를 읽은 수집기 수, 원천 관측값은 수집 직후 저장된 원천값입니다. 스냅샷 저장은 기간별로 정리된 값, 변화량 계산은 이전 값과 비교해 만든 증감 데이터입니다.
-              </div>
-            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1120px] text-left text-xs">
                 <thead className="border-b border-sidebar-border text-sidebar-foreground">
@@ -699,8 +693,8 @@ function CollectorRunnerPanel({
                     <th className="py-2 pr-3 text-[12px] font-semibold">동작 상태</th>
                     <th className="py-2 pr-3 text-[12px] font-semibold">수집 주기</th>
                     <th className="py-2 pr-3 text-[12px] font-semibold">관리 지표</th>
-                    <th className="py-2 pr-3 text-[12px] font-semibold">동작 수집기</th>
-                    <th className="py-2 pr-3 text-[12px] font-semibold">원천 관측값</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">동작횟수</th>
+                    <th className="py-2 pr-3 text-[12px] font-semibold">DB적재량</th>
                     <th className="py-2 pr-3 text-[12px] font-semibold">스냅샷 저장</th>
                     <th className="py-2 pr-3 text-[12px] font-semibold">변화량 계산</th>
                     <th className="py-2 pr-3 text-[12px] font-semibold">저장된 대표 지표</th>
