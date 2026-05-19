@@ -475,9 +475,9 @@ function CollectorRunnerPanel({
       <CardContent className="p-4">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-sidebar-foreground">카테고리 collector runner 현황</h2>
+            <h2 className="text-sm font-semibold text-sidebar-foreground">원천지표 인사이트 파이프라인</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              각 카테고리 collector가 catalog 하위 세부지표/API를 자동으로 읽고 snapshot/delta까지 연결했는지 확인합니다.
+              원천데이터 카탈로그의 세부지표/API가 수집, snapshot, delta, 투자 시그널까지 연결되는지 확인합니다.
             </p>
           </div>
           {status && (
