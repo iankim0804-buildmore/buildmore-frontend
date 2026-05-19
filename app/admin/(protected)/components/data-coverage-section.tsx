@@ -272,6 +272,54 @@ function discoveryStatusClass(status: string): string {
   return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
 }
 
+const PIPELINE_STEPS = [
+  { label: '지표 목록 확인', detail: 'wiki_metric_catalog' },
+  { label: '12개 카테고리 수집', detail: 'category collectors' },
+  { label: '원천 관측값 저장', detail: 'source_metric_observations' },
+  { label: '스냅샷 생성 대기열', detail: 'snapshot queue' },
+  { label: '스냅샷 저장', detail: 'metric_snapshots' },
+  { label: '변화량 계산 대기열', detail: 'delta queue' },
+  { label: '투자 시그널 생성', detail: 'insight events' },
+]
+
+function runnerDisplayName(jobId?: string): string {
+  if (!jobId) return '-'
+  if (jobId === 'delta_editorial_daily' || jobId === 'metric_insight_daily') return 'Metric Insight Daily'
+  return jobId
+}
+
+function scheduleLabel(schedule?: string): string {
+  if (!schedule) return '-'
+  if (schedule === 'daily 07:00 KST') return '매일 07:00 KST'
+  return schedule
+}
+
+function runnerStatusLabel(status?: string | null): string {
+  if (!status) return '-'
+  if (status === 'success') return '성공'
+  if (status === 'failed' || status === 'error') return '실패'
+  if (status === 'running') return '실행 중'
+  if (status === 'partial') return '일부 성공'
+  return status
+}
+
+function formatDateTimeKst(value?: string | null): string {
+  if (!value) return '-'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return `${new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)} KST`
+}
+
 function collectorStatusLabel(status: string): string {
   if (status === 'active') return '실행 중'
   if (status === 'partially_active') return '일부 실행'
@@ -474,6 +522,8 @@ function CollectorRunnerPanel({
     status?.runner.job_id === 'delta_editorial_daily'
       ? 'metric_insight_daily'
       : status?.runner.job_id
+  const snapshotQueue = status?.queues?.snapshot_processing_queue
+  const deltaQueue = status?.queues?.delta_processing_queue
 
   return (
     <Card className="mt-4 border-sidebar-border bg-sidebar-accent">
@@ -482,15 +532,15 @@ function CollectorRunnerPanel({
           <div>
             <h2 className="text-sm font-semibold text-sidebar-foreground">원천지표 인사이트 파이프라인</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              원천데이터 카탈로그의 세부지표/API가 수집, snapshot, delta, 투자 시그널까지 연결되는지 확인합니다.
+              원천데이터 카탈로그의 세부지표/API가 수집, 스냅샷, 변화량, 투자 시그널까지 이어지는지 확인합니다.
             </p>
           </div>
           {status && (
             <div className="flex flex-wrap gap-2 text-[11px]">
-              <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">카테고리 {status.summary.category_total}</span>
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">catalog metric {status.summary.recipe_total}</span>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">snapshot {status.summary.snapshot_total}</span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">delta {status.summary.delta_total}</span>
+              <span className="rounded-full border border-sidebar-border px-2 py-1 text-muted-foreground">관리 카테고리 {status.summary.category_total}개</span>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-sky-300">수집 대상 지표 {status.summary.recipe_total}개</span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">스냅샷 {status.summary.snapshot_total}건</span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">변화량 {status.summary.delta_total}건</span>
             </div>
           )}
         </div>
@@ -502,24 +552,77 @@ function CollectorRunnerPanel({
         )}
 
         {status && (
-          <div className="mb-4 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
-            <div>runner: <span className="text-sidebar-foreground">{runnerJobId}</span></div>
-            <div>주기: <span className="text-sidebar-foreground">{status.runner.schedule}</span></div>
-            <div>최근 실행: <span className="text-sidebar-foreground">{status.runner.latest_run?.ran_at || '-'}</span></div>
-            <div>최근 상태: <span className="text-sidebar-foreground">{status.runner.latest_run?.status || '-'}</span></div>
-            <div className="md:col-span-2">현재 동작: <span className="text-sidebar-foreground">{status.runner.current_behavior}</span></div>
-            <div className="md:col-span-2">저장량 정책: <span className="text-sidebar-foreground">{status.runner.batch_policy}</span></div>
-            <div>
-              snapshot queue:{' '}
-              <span className="text-sidebar-foreground">
-                queued {status.queues?.snapshot_processing_queue?.queued ?? 0} / processed {status.queues?.snapshot_processing_queue?.processed ?? 0}
-              </span>
+          <div className="mb-4 space-y-3 text-xs">
+            <div className="grid gap-2 md:grid-cols-4">
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="text-muted-foreground">실행 작업</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{runnerDisplayName(runnerJobId)}</div>
+                <div className="mt-1 font-mono text-[11px] text-muted-foreground">{runnerJobId || '-'}</div>
+              </div>
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="text-muted-foreground">실행 주기</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{scheduleLabel(status.runner.schedule)}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">원천지표를 자동으로 다시 수집합니다.</div>
+              </div>
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="text-muted-foreground">최근 실행</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{formatDateTimeKst(status.runner.latest_run?.ran_at)}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">표시는 한국 시간 기준입니다.</div>
+              </div>
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="text-muted-foreground">최근 결과</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{runnerStatusLabel(status.runner.latest_run?.status)}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">마지막 배치 실행 상태입니다.</div>
+              </div>
             </div>
-            <div>
-              delta queue:{' '}
-              <span className="text-sidebar-foreground">
-                queued {status.queues?.delta_processing_queue?.queued ?? 0} / processed {status.queues?.delta_processing_queue?.processed ?? 0}
-              </span>
+
+            <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-semibold text-sidebar-foreground">처리 흐름</div>
+                  <div className="mt-1 text-muted-foreground">지표 목록을 읽고, 관측값을 저장한 뒤 스냅샷과 변화량을 만들어 투자 시그널로 넘깁니다.</div>
+                </div>
+                <span className="max-w-full break-all rounded-full border border-sidebar-border px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                  {status.runner.current_behavior}
+                </span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-7">
+                {PIPELINE_STEPS.map((step, index) => (
+                  <div key={step.detail} className="rounded-md border border-sidebar-border/70 bg-background/20 p-2">
+                    <div className="mb-2 flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/15 text-[11px] font-semibold text-sky-300">
+                      {index + 1}
+                    </div>
+                    <div className="font-medium text-sidebar-foreground">{step.label}</div>
+                    <div className="mt-1 break-words font-mono text-[10px] leading-4 text-muted-foreground">{step.detail}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="font-semibold text-sidebar-foreground">중복 처리 방지</div>
+                <div className="mt-1 text-muted-foreground">
+                  수집 시점이 된 하위 지표만 읽고, 여러 워커가 동시에 돌아도 같은 작업을 중복 처리하지 않도록 관리합니다.
+                </div>
+                <div className="mt-2 rounded border border-sidebar-border px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {status.runner.batch_policy}
+                </div>
+              </div>
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="font-semibold text-emerald-300">스냅샷 대기열</div>
+                <div className="mt-1 text-sidebar-foreground">
+                  대기 {snapshotQueue?.queued ?? 0}건 / 완료 {snapshotQueue?.processed ?? 0}건
+                </div>
+                <div className="mt-1 text-muted-foreground">원천 관측값을 기간별 스냅샷으로 만드는 작업입니다.</div>
+              </div>
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
+                <div className="font-semibold text-amber-300">변화량 대기열</div>
+                <div className="mt-1 text-sidebar-foreground">
+                  대기 {deltaQueue?.queued ?? 0}건 / 완료 {deltaQueue?.processed ?? 0}건
+                </div>
+                <div className="mt-1 text-muted-foreground">스냅샷끼리 비교해 증감률과 투자 신호 후보를 계산합니다.</div>
+              </div>
             </div>
           </div>
         )}
