@@ -299,12 +299,14 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function runnerDisplayName(jobId?: string): string {
   if (!jobId) return '-'
-  if (jobId === 'delta_editorial_daily' || jobId === 'metric_insight_daily') return 'Metric Insight Daily'
+  if (jobId === 'delta_editorial_daily' || jobId === 'metric_insight_daily') return 'Metric Insight Pipeline'
+  if (jobId === 'metric_insight_hourly') return 'Metric Insight Hourly'
   return jobId
 }
 
 function scheduleLabel(schedule?: string): string {
   if (!schedule) return '-'
+  if (schedule === 'hourly every hour + daily 07:00 KST') return '매시간 정각 + 매일 07:00 KST'
   if (schedule === 'daily 07:00 KST') return '매일 07:00 KST'
   return schedule
 }
