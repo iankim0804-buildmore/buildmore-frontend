@@ -25,11 +25,15 @@ export async function POST(request: NextRequest) {
   const config = await requireAdminProxyConfig()
   if ('error' in config) return config.error
 
-  const mode = request.nextUrl.searchParams.get('mode') || 'queue'
-  const backendMode = mode === 'dry-run' ? 'dry-run' : mode === 'inline' ? 'inline' : 'queue'
+  const search = request.nextUrl.searchParams
+  const mode = search.get('mode') || 'queue'
+  const months = search.get('months') || '12'
+  const metricKey = search.get('metric_key')
+  const backendSearch = new URLSearchParams({ mode, months })
+  if (metricKey) backendSearch.set('metric_key', metricKey)
 
   try {
-    const res = await fetch(`${adminApiUrl()}/api/admin/period-delta/recompute?months=12&mode=${encodeURIComponent(backendMode)}`, {
+    const res = await fetch(`${adminApiUrl()}/api/admin/period-delta/recompute?${backendSearch.toString()}`, {
       method: 'POST',
       headers: { 'X-Internal-API-Key': config.internalKey },
       cache: 'no-store',
@@ -42,6 +46,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(await res.json())
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to run period delta pipeline', details: String(error) }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to recompute period delta engine', details: String(error) }, { status: 500 })
   }
 }

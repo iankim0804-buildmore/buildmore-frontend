@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 function adminApiUrl() {
   const rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
@@ -21,16 +21,12 @@ async function requireAdminProxyConfig() {
   return { internalKey }
 }
 
-export async function POST(request: NextRequest) {
+export async function GET() {
   const config = await requireAdminProxyConfig()
   if ('error' in config) return config.error
 
-  const mode = request.nextUrl.searchParams.get('mode') || 'queue'
-  const backendMode = mode === 'dry-run' ? 'dry-run' : mode === 'inline' ? 'inline' : 'queue'
-
   try {
-    const res = await fetch(`${adminApiUrl()}/api/admin/period-delta/recompute?months=12&mode=${encodeURIComponent(backendMode)}`, {
-      method: 'POST',
+    const res = await fetch(`${adminApiUrl()}/api/admin/period-delta/status`, {
       headers: { 'X-Internal-API-Key': config.internalKey },
       cache: 'no-store',
     })
@@ -42,6 +38,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(await res.json())
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to run period delta pipeline', details: String(error) }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch period delta status', details: String(error) }, { status: 500 })
   }
 }

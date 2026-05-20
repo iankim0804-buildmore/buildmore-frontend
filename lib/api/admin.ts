@@ -34,8 +34,13 @@ export interface AdminScheduler {
 
 export interface WikiData {
   metric_snapshots: number
+  metric_observations?: number
+  growth_scores?: number
+  rank_snapshots?: number
   extracted_facts: number
   signals: number
+  signal_cards?: number
+  signal_card_wiki_documents?: number
   rules: number
   cases: number
   last_fact_extracted_at: string | null
@@ -321,8 +326,13 @@ export interface FrontendProcessingQueue {
 
 export interface FrontendWikiStats {
   metricSnapshots: number
+  metricObservations: number
+  growthScores: number
+  rankSnapshots: number
   facts: number
   signals: number
+  signalCards: number
+  signalCardWikiDocuments: number
   rules: number
   cases: number
   lastFactExtractedAt: string
@@ -455,6 +465,7 @@ const WIKI_TASK_LABELS: Record<string, string> = {
   compile_wiki: 'Wiki 문서화',
   yt_normalize: 'YouTube 정제',
   yt_summarize: 'YouTube 요약',
+  period_delta_recompute: 'Period Delta 재계산',
 }
 
 function getQueueStatusCount(
@@ -590,8 +601,13 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
 
   const wikiStats: FrontendWikiStats = {
     metricSnapshots: wikiData?.metric_snapshots ?? 0,
+    metricObservations: wikiData?.metric_observations ?? 0,
+    growthScores: wikiData?.growth_scores ?? 0,
+    rankSnapshots: wikiData?.rank_snapshots ?? 0,
     facts: wikiData?.extracted_facts ?? 0,
     signals: wikiData?.signals ?? 0,
+    signalCards: wikiData?.signal_cards ?? 0,
+    signalCardWikiDocuments: wikiData?.signal_card_wiki_documents ?? 0,
     rules: wikiData?.rules ?? 0,
     cases: wikiData?.cases ?? 0,
     lastFactExtractedAt: formatKST(wikiData?.last_fact_extracted_at ? new Date(wikiData.last_fact_extracted_at) : null),
