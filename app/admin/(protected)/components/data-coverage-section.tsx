@@ -5,11 +5,14 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Database,
   FileSearch,
+  KeyRound,
   Layers3,
   Loader2,
+  PlugZap,
   RefreshCw,
   Route,
   ServerCog,
@@ -300,6 +303,46 @@ function representativeMetrics(category: SourceCollectorCategory): string {
     .join(', ') || '-'
 }
 
+function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
+  if (recipe.collector_state === 'active') return 'API 활성'
+  if (recipe.collector_state === 'catalog_only') return '카탈로그 대기'
+  if (recipe.collector_state === 'disabled') return '비활성'
+  if (recipe.collector_state === 'failed') return '실패'
+  return recipe.collector_state || '미확인'
+}
+
+function recipeStatusClass(recipe: SourceCollectorRecipe): string {
+  if (recipe.collector_state === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+  if (recipe.collector_state === 'catalog_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
+  if (recipe.collector_state === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-600'
+  return 'border-border bg-muted text-muted-foreground'
+}
+
+function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
+  return recipe.provider || recipe.source_name || recipe.source_key || '-'
+}
+
+function inferRequiredKeys(recipe: SourceCollectorRecipe): string[] {
+  const haystack = [
+    recipe.provider,
+    recipe.source_key,
+    recipe.source_name,
+    recipe.endpoint,
+    recipe.metric_key,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  const keys = new Set<string>()
+  if (haystack.includes('kakao')) keys.add('KAKAO_REST_API_KEY')
+  if (haystack.includes('vworld') || haystack.includes('v-world')) keys.add('VWORLD_API_KEY')
+  if (haystack.includes('seoul')) keys.add('SEOUL_OPENAPI_KEY')
+  if (haystack.includes('kosis')) keys.add('KOSIS_API_KEY')
+  if (haystack.includes('ecos') || haystack.includes('bok') || haystack.includes('bank_of_korea')) keys.add('ECOS_API_KEY')
+  if (haystack.includes('data.go') || haystack.includes('data_go') || haystack.includes('공공데이터')) keys.add('DATA_GO_KR_API_KEY')
+  if (haystack.includes('openai') || haystack.includes('wiki')) keys.add('OPENAI_API_KEY')
+
+  return [...keys]
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: 'include', cache: 'no-store' })
   if (!res.ok) {
@@ -326,52 +369,129 @@ async function fetchCoveragePayload(): Promise<CoveragePayload> {
 }
 
 function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] }) {
+  const [openCategoryKey, setOpenCategoryKey] = useState<string | null>(null)
+
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {categories.map((category) => {
         const observations = countObservations(category)
         const latestRunStatus = category.latest_run?.status || category.status
+        const isOpen = openCategoryKey === category.category_key
+        const visibleRecipes = category.recipes.slice(0, 12)
 
         return (
-          <div key={category.category_key} className="rounded-md border border-sidebar-border bg-background/20 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-sidebar-foreground">{categoryName(category)}</div>
-                <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{category.category_key}</div>
+          <div
+            key={category.category_key}
+            className="rounded-md border border-sidebar-border bg-background/20 p-4 transition-colors hover:bg-muted/30"
+          >
+            <button
+              type="button"
+              onClick={() => setOpenCategoryKey(isOpen ? null : category.category_key)}
+              className="block w-full text-left"
+              aria-expanded={isOpen}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-sidebar-foreground">{categoryName(category)}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{category.category_key}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={statusClass(category.status)}>
+                    {statusLabel(category.status)}
+                  </Badge>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </div>
               </div>
-              <Badge variant="outline" className={statusClass(category.status)}>
-                {statusLabel(category.status)}
-              </Badge>
-            </div>
 
-            <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
-              <div>
-                <div className="text-muted-foreground">지표</div>
-                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.configured_recipe_count)}</div>
+              <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+                <div>
+                  <div className="text-muted-foreground">지표</div>
+                  <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.configured_recipe_count)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">관측값</div>
+                  <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(observations)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">스냅샷</div>
+                  <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.snapshot_count)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">변화량</div>
+                  <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.delta_count)}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-muted-foreground">관측값</div>
-                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(observations)}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">스냅샷</div>
-                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.snapshot_count)}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">변화량</div>
-                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.delta_count)}</div>
-              </div>
-            </div>
 
-            <div className="mt-4 space-y-2 text-[11px] text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Clock3 className="h-3.5 w-3.5" />
-                <span>최근 동작 {latestActivity(category)}</span>
+              <div className="mt-4 space-y-2 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  <span>최근 동작 {latestActivity(category)}</span>
+                </div>
+                <div>주기 {category.frequencies.map(frequencyLabel).join(', ') || '-'}</div>
+                <div>마지막 결과 {runStatusLabel(latestRunStatus)}</div>
+                <div className="truncate">대표 지표 {representativeMetrics(category)}</div>
               </div>
-              <div>주기 {category.frequencies.map(frequencyLabel).join(', ') || '-'}</div>
-              <div>마지막 결과 {runStatusLabel(latestRunStatus)}</div>
-              <div className="truncate">대표 지표 {representativeMetrics(category)}</div>
-            </div>
+            </button>
+
+            {isOpen && (
+              <div className="mt-4 border-t border-sidebar-border pt-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-sidebar-foreground">세부지표 연결상황</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {formatCount(category.recipes.length)}개 중 {formatCount(visibleRecipes.length)}개 표시
+                  </div>
+                </div>
+
+                {visibleRecipes.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-sidebar-border p-3 text-xs text-muted-foreground">
+                    연결된 세부지표가 없습니다.
+                  </div>
+                ) : (
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {visibleRecipes.map((recipe) => {
+                      const requiredKeys = inferRequiredKeys(recipe)
+                      return (
+                        <div
+                          key={`${recipe.source_key}-${recipe.metric_key || recipe.endpoint || recipe.refresh_frequency}`}
+                          className="rounded-md border border-sidebar-border bg-card p-3 text-xs"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-card-foreground">
+                                {recipe.metric_key || recipe.source_key}
+                              </div>
+                              <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                                {recipe.source_key}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className={`shrink-0 ${recipeStatusClass(recipe)}`}>
+                              {recipeStatusLabel(recipe)}
+                            </Badge>
+                          </div>
+
+                          <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <Database className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">제공처 {sourceProviderLabel(recipe)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <KeyRound className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">필요 KEY {requiredKeys.length ? requiredKeys.join(', ') : '별도 키 없음/내부 산출'}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <PlugZap className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">
+                                주기 {frequencyLabel(recipe.refresh_frequency || '')} · 관측 {formatCount(recipe.observation_count)} · 스냅샷 {formatCount(recipe.snapshot_count)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       })}
