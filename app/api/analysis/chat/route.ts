@@ -71,6 +71,35 @@ export async function POST(request: NextRequest) {
 }
 
 type DealField = 'price' | 'loan' | 'rate' | 'rent' | 'deposit'
+type DealInputState = {
+  providedFields?: string[]
+  values?: Partial<Record<DealField, number>>
+}
+
+type ChatAnalysisResult = {
+  input?: {
+    address?: string
+    assetType?: string
+    price?: number
+    loan?: number
+    rent?: number
+    deposit?: number
+    rate?: number
+    vacancyRate?: number
+  }
+  kpi?: {
+    noi?: number
+    dscr?: number
+    ltv?: number
+    capRate?: number
+  }
+  bankability?: {
+    score?: number
+  }
+  dealSignal?: string
+  delta_engine?: Record<string, unknown>
+  deltaEngine?: Record<string, unknown>
+}
 
 const REQUIRED_DEAL_FIELDS: DealField[] = ['price', 'loan', 'rate', 'rent', 'deposit']
 
@@ -90,7 +119,7 @@ const DEAL_FIELD_UNITS: Record<DealField, string> = {
   deposit: '만원',
 }
 
-function buildDealInputResponse(message: string, dealInputState: any) {
+function buildDealInputResponse(message: string, dealInputState?: DealInputState) {
   const parsed = parseDealInputs(message)
   const parsedFields = Object.keys(parsed) as DealField[]
 
@@ -190,7 +219,7 @@ function formatDealFields(values: Partial<Record<DealField, number>>): string {
 /**
  * 프론트엔드 AnalysisResult → 백엔드 analysis_context 변환
  */
-function buildBackendContext(analysisResult: any): Record<string, any> | null {
+function buildBackendContext(analysisResult: ChatAnalysisResult | null): Record<string, unknown> | null {
   if (!analysisResult) return null
 
   const { input, kpi, bankability, dealSignal } = analysisResult || {}
@@ -217,13 +246,14 @@ function buildBackendContext(analysisResult: any): Record<string, any> | null {
         }
       : undefined,
     conclusion_card: dealSignal ? { verdict: dealSignal } : undefined,
+    delta_engine: analysisResult.delta_engine || analysisResult.deltaEngine,
   }
 }
 
 /**
  * 백엔드 연결 실패 시 로컬 폴백 (기존 로직 유지)
  */
-function generateLocalFallback(question: string, analysisResult: any): string {
+function generateLocalFallback(question: string, analysisResult: ChatAnalysisResult | null): string {
   if (!analysisResult) {
     return '분석 결과가 없습니다. 먼저 딜 조건을 입력해 분석을 실행해 주세요.'
   }

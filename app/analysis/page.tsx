@@ -585,6 +585,7 @@ BuildMore 판단:
             conclusion_card: (dealAnalysis.result as any)?.dealSignal
               ? { verdict: (dealAnalysis.result as any).dealSignal }
               : undefined,
+            delta_engine: (dealAnalysis.result as any)?.delta_engine || (dealAnalysis.result as any)?.deltaEngine,
           },
           dealInputState: {
             providedFields: chatProvidedDealFields,

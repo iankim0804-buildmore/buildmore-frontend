@@ -41,9 +41,18 @@ interface PeriodDeltaStatus {
   architecture: string
   uses_storage_dates_as_time_axis: boolean
   counts: PeriodEngineCounts
+  source_bridge?: SourceBridgeStatus
   period_ranges: PeriodRange[]
   queue: Record<string, number>
   deprecated_inputs: string[]
+}
+
+interface SourceBridgeStatus {
+  metric_snapshots_total?: number
+  bridged_observations?: number
+  bridged_metric_count?: number
+  latest_snapshot_at?: string | null
+  latest_bridge_at?: string | null
 }
 
 interface LegacyDeltaSummary {
@@ -51,6 +60,7 @@ interface LegacyDeltaSummary {
     architecture?: string
     uses_storage_dates_as_time_axis?: boolean
     counts?: Partial<PeriodEngineCounts>
+    source_bridge?: SourceBridgeStatus
     queue?: Record<string, number>
   }
   health?: {
@@ -356,6 +366,7 @@ export function DeltaSection({ onRefresh }: DeltaSectionProps) {
   }, [loadData, onRefresh])
 
   const counts = payload?.periodStatus.counts
+  const sourceBridge = payload?.periodStatus.source_bridge || payload?.summary.period_engine?.source_bridge
   const healthStatus = payload?.summary.health?.status
   const periodQueueTotal = queueTotal(payload?.periodStatus.queue)
   const queueText = useMemo(() => {
@@ -443,6 +454,51 @@ export function DeltaSection({ onRefresh }: DeltaSectionProps) {
                   </div>
                   <div className="mt-1 text-2xl font-bold text-sidebar-foreground">{formatCount(counts?.signal_card_wiki_documents)}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">embed 큐로 넘어가는 학습 문서</div>
+                </div>
+              </div>
+
+              <div className="grid gap-2 md:grid-cols-4">
+                <div className="rounded-md border border-cyan-500/25 bg-cyan-500/10 p-3">
+                  <div className="flex items-center gap-2 text-xs text-cyan-200">
+                    <Layers3 className="h-4 w-4" />
+                    Source snapshots
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(sourceBridge?.metric_snapshots_total)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">12개 컬렉터가 정규화한 원천 스냅샷</div>
+                </div>
+                <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 p-3">
+                  <div className="flex items-center gap-2 text-xs text-emerald-200">
+                    <Activity className="h-4 w-4" />
+                    Period bridge
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(sourceBridge?.bridged_observations)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">metric_snapshots → metric_observations</div>
+                </div>
+                <div className="rounded-md border border-sky-500/25 bg-sky-500/10 p-3">
+                  <div className="flex items-center gap-2 text-xs text-sky-200">
+                    <BarChart3 className="h-4 w-4" />
+                    Bridged metrics
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(sourceBridge?.bridged_metric_count)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">시그널 카드 평가 대상으로 승격된 지표</div>
+                </div>
+                <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <CalendarClock className="h-4 w-4" />
+                    Last bridge
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-sidebar-foreground">
+                    {formatDateTime(sourceBridge?.latest_bridge_at)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    latest snapshot {formatDateTime(sourceBridge?.latest_snapshot_at)}
+                  </div>
                 </div>
               </div>
 
