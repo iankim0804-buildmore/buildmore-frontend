@@ -28,6 +28,32 @@ interface MetricCatalogResponse {
     available: number
     rate: number
   }
+  categories?: MetricCatalogCategory[]
+}
+
+interface MetricCatalogCategory {
+  category_code: string
+  category_name: string
+  total: number
+  available: number
+  rate: number
+  metrics: MetricCatalogMetric[]
+}
+
+interface MetricCatalogMetric {
+  metric_key: string
+  metric_name_ko?: string | null
+  unit?: string | null
+  collection_frequency?: string | null
+  data_source?: string | null
+  is_available?: boolean
+  priority?: number | null
+  status?: string | null
+  reason?: string | null
+  source_status?: string | null
+  availability_basis?: string | null
+  stored_count?: number | null
+  probe_value_present?: boolean | null
 }
 
 interface SourceFieldDiscovery {
@@ -73,6 +99,12 @@ interface SourceCollectorRecipe {
   latest_observed_at?: string | null
   latest_snapshot_at?: string | null
   latest_delta_at?: string | null
+  is_available?: boolean | null
+  status?: string | null
+  reason?: string | null
+  source_status?: string | null
+  availability_basis?: string | null
+  probe_value_present?: boolean | null
 }
 
 interface SourceCollectorCategory {
@@ -375,6 +407,14 @@ function representativeMetrics(category: SourceCollectorCategory): string {
 }
 
 function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
+  const liveStatus = recipe.source_status || recipe.status
+  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'API 연결됨'
+  if (liveStatus === 'api_no_value') return '응답값 없음'
+  if (liveStatus === 'api_dead') return 'API 오류'
+  if (liveStatus === 'api_key_required') return 'KEY 필요'
+  if (liveStatus === 'dependency_missing') return '의존 지표 필요'
+  if (liveStatus === 'manual_required') return '수동 필요'
+  if (liveStatus === 'not_implemented') return '미구현'
   if (recipe.collector_state === 'active') return 'API 작동중'
   if (recipe.collector_state === 'failed') return 'API 오류'
   if (recipe.collector_state === 'disabled') return 'API 비활성'
@@ -383,6 +423,11 @@ function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
 }
 
 function recipeStatusClass(recipe: SourceCollectorRecipe): string {
+  const liveStatus = recipe.source_status || recipe.status
+  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+  if (liveStatus === 'api_no_value' || liveStatus === 'dependency_missing') return 'border-sky-500/30 bg-sky-500/10 text-sky-600'
+  if (liveStatus === 'api_dead') return 'border-red-500/30 bg-red-500/10 text-red-600'
+  if (liveStatus === 'api_key_required' || liveStatus === 'manual_required' || liveStatus === 'not_implemented') return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
   if (recipe.collector_state === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
   if (recipe.collector_state === 'catalog_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
   if (recipe.collector_state === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-600'
@@ -391,6 +436,60 @@ function recipeStatusClass(recipe: SourceCollectorRecipe): string {
 
 function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
   return recipe.provider || '내부 산출/카탈로그'
+}
+
+function catalogMetricToRecipe(metric: MetricCatalogMetric): SourceCollectorRecipe {
+  return {
+    source_key: metric.metric_key,
+    source_name: metric.metric_name_ko || metric.metric_key,
+    provider: metric.data_source || null,
+    endpoint: metric.data_source || null,
+    metric_key: metric.metric_key,
+    metric_category: 'collateral_value',
+    refresh_frequency: metric.collection_frequency || null,
+    collector_state: metric.is_available ? 'active' : 'catalog_only',
+    snapshot_count: metric.stored_count || 0,
+    delta_count: 0,
+    observation_count: metric.probe_value_present ? 1 : 0,
+    is_available: metric.is_available,
+    status: metric.status || null,
+    reason: metric.reason || null,
+    source_status: metric.source_status || null,
+    availability_basis: metric.availability_basis || null,
+    probe_value_present: metric.probe_value_present || null,
+  }
+}
+
+function mergeLiveCatalogCategories(
+  categories: SourceCollectorCategory[],
+  catalog: MetricCatalogResponse | null,
+): SourceCollectorCategory[] {
+  const collateralCatalog = catalog?.categories?.find((category) => category.category_code === 'A')
+  if (!collateralCatalog) return categories
+
+  return categories.map((category) => {
+    if (category.category_key !== 'collateral_value') return category
+
+    const recipes = collateralCatalog.metrics
+      .slice()
+      .sort((a, b) => (a.priority || 999) - (b.priority || 999))
+      .map(catalogMetricToRecipe)
+    const activeCount = recipes.filter((recipe) => recipe.is_available).length
+    const status = activeCount === 0
+      ? 'catalog_only'
+      : activeCount === recipes.length
+        ? 'active'
+        : 'partially_active'
+
+    return {
+      ...category,
+      status,
+      configured_recipe_count: collateralCatalog.total,
+      active_collector_count: activeCount,
+      recipes,
+      frequencies: Array.from(new Set(recipes.map((recipe) => recipe.refresh_frequency || '-'))),
+    }
+  })
 }
 
 function inferRequiredKeys(recipe: SourceCollectorRecipe): string[] {
@@ -551,6 +650,11 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                                 주기 {frequencyLabel(recipe.refresh_frequency || '')} · 원천수집 {formatCount(recipe.observation_count)} · 스냅샷 {formatCount(recipe.snapshot_count)}
                               </span>
                             </div>
+                            {recipe.reason ? (
+                              <div className="rounded-md border border-sidebar-border bg-background/30 p-2 text-[11px] leading-4 text-muted-foreground">
+                                {recipe.reason}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       )
@@ -681,8 +785,9 @@ export function DataCoverageSection() {
     : 0
 
   const sortedCategories = useMemo(() => {
-    return [...(collectors?.categories || [])].sort((a, b) => a.category_code.localeCompare(b.category_code))
-  }, [collectors])
+    const categories = mergeLiveCatalogCategories(collectors?.categories || [], payload?.catalog || null)
+    return [...categories].sort((a, b) => a.category_code.localeCompare(b.category_code))
+  }, [collectors, payload?.catalog])
 
   return (
     <section>
