@@ -463,8 +463,6 @@ const WIKI_TASK_LABELS: Record<string, string> = {
   extract_facts: 'Facts 추출',
   extract_metrics: '지표 추출',
   compile_wiki: 'Wiki 문서화',
-  yt_normalize: 'YouTube 정제',
-  yt_summarize: 'YouTube 요약',
   period_delta_recompute: 'Period Delta 재계산',
 }
 
@@ -567,7 +565,6 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
   const dataSources: FrontendDataSource[] = [
     { id: '1', name: '서울 열린데이터광장', isActive: true },
     { id: '2', name: '소상공인시장진흥공단', isActive: true },
-    { id: '3', name: '유튜브 채널', isActive: true },
     { id: '4', name: '시공/부동산 블로그', isActive: true },
     ...failedSources.map((fs, i) => ({
       id: `failed-${i}`,
