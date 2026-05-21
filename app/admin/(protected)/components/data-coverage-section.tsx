@@ -377,7 +377,6 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
         const observations = countObservations(category)
         const latestRunStatus = category.latest_run?.status || category.status
         const isOpen = openCategoryKey === category.category_key
-        const visibleRecipes = category.recipes.slice(0, 12)
 
         return (
           <div
@@ -438,17 +437,17 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="text-xs font-semibold text-sidebar-foreground">세부지표 연결상황</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {formatCount(category.recipes.length)}개 중 {formatCount(visibleRecipes.length)}개 표시
+                    전체 {formatCount(category.recipes.length)}개
                   </div>
                 </div>
 
-                {visibleRecipes.length === 0 ? (
+                {category.recipes.length === 0 ? (
                   <div className="rounded-md border border-dashed border-sidebar-border p-3 text-xs text-muted-foreground">
                     연결된 세부지표가 없습니다.
                   </div>
                 ) : (
                   <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {visibleRecipes.map((recipe) => {
+                    {category.recipes.map((recipe) => {
                       const requiredKeys = inferRequiredKeys(recipe)
                       return (
                         <div
