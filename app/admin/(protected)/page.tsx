@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const initialFetch = setTimeout(fetchData, 0)
 
     const onFocus = () => {
       fetchData()
@@ -65,6 +65,7 @@ export default function AdminDashboardPage() {
 
     return () => {
       window.removeEventListener('focus', onFocus)
+      clearTimeout(initialFetch)
       clearTimeout(initialTimeout)
       if (dailyInterval) clearInterval(dailyInterval)
     }
@@ -72,10 +73,10 @@ export default function AdminDashboardPage() {
 
   if (isLoading && !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
-          <div className="text-muted-foreground">데이터 로딩 중...</div>
+      <div className="admin-shadcn-surface flex min-h-screen items-center justify-center px-4">
+        <div className="rounded-xl border bg-card px-8 py-7 text-center text-card-foreground shadow-sm">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+          <div className="text-sm text-muted-foreground">데이터 로딩 중...</div>
         </div>
       </div>
     )
@@ -83,10 +84,10 @@ export default function AdminDashboardPage() {
 
   if (errors.length > 0 && !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center max-w-lg px-4">
-          <div className="text-destructive text-lg font-medium mb-2">API 연결 오류</div>
-          <div className="text-muted-foreground mb-4 text-left bg-muted/50 rounded-lg p-4">
+      <div className="admin-shadcn-surface flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-lg rounded-xl border bg-card p-6 text-center text-card-foreground shadow-sm">
+          <div className="mb-2 text-lg font-semibold text-destructive">API 연결 오류</div>
+          <div className="mb-4 rounded-lg border bg-muted/40 p-4 text-left text-muted-foreground">
             <p className="mb-2 font-medium">다음 API 호출에서 오류가 발생했습니다:</p>
             <ul className="list-disc list-inside space-y-1 text-sm">
               {errors.map((err, i) => (
@@ -105,7 +106,7 @@ export default function AdminDashboardPage() {
               setErrors([])
               fetchData()
             }}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             다시 시도
           </button>
@@ -116,14 +117,16 @@ export default function AdminDashboardPage() {
 
   if (!data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">데이터가 없습니다.</div>
+      <div className="admin-shadcn-surface flex min-h-screen items-center justify-center px-4">
+        <div className="rounded-xl border bg-card px-8 py-7 text-sm text-muted-foreground shadow-sm">
+          데이터가 없습니다.
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="admin-shadcn-surface min-h-screen pb-12">
       <StatusBar
         systemStatus={data.systemStatus}
         lastRefresh={lastRefresh}

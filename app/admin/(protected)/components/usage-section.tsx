@@ -26,7 +26,7 @@ function getGradeBadgeColor(grade: FrontendRecentAnalysis['grade']) {
     case 'B':
       return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
     case 'C':
-      return 'bg-[#C9A24B]/20 text-[#C9A24B] border-[#C9A24B]/30'
+      return 'bg-amber-500/20 text-amber-500 border-amber-500/30'
     case 'D':
       return 'bg-red-500/20 text-red-400 border-red-500/30'
   }

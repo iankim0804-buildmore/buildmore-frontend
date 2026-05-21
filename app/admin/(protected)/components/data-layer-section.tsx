@@ -82,10 +82,10 @@ export function DataLayerSection({
                   key={source.id}
                   className="flex items-center gap-2 text-sm"
                 >
-                  <Clock className="h-4 w-4 shrink-0 text-[#C9A24B]" />
+                  <Clock className="h-4 w-4 shrink-0 text-amber-500" />
                   <span className="text-muted-foreground">
                     {source.name}{' '}
-                    <span className="text-xs text-[#C9A24B]">
+                    <span className="text-xs text-amber-500">
                       ({source.version})
                     </span>
                   </span>

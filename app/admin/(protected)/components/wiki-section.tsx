@@ -167,7 +167,7 @@ export function WikiSection({
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {hasQueueRisk ? (
-            <AlertTriangle className="h-4 w-4 text-[#C9A24B]" />
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
           ) : (
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           )}
@@ -196,11 +196,11 @@ export function WikiSection({
                 {formatCount(wikiStats.facts)}
               </span>
               {wikiStats.facts < 100 && (
-                <AlertTriangle className="h-4 w-4 text-[#C9A24B]" />
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
               )}
             </div>
             <div className="text-xs text-muted-foreground">
-              Facts {wikiStats.facts < 100 && <span className="text-[#C9A24B]">부족</span>}
+              Facts {wikiStats.facts < 100 && <span className="text-amber-500">부족</span>}
             </div>
           </CardContent>
         </Card>

@@ -25,13 +25,13 @@ function getStatusIcon(status: FrontendSchedulerJob['lastStatus']) {
     case 'failed':
       return <XCircle className="h-4 w-4 text-red-400" />
     case 'pending':
-      return <Clock className="h-4 w-4 text-[#C9A24B]" />
+      return <Clock className="h-4 w-4 text-amber-500" />
   }
 }
 
 function getSuccessRateColor(rate: number) {
   if (rate >= 90) return 'bg-emerald-500'
-  if (rate >= 70) return 'bg-[#C9A24B]'
+  if (rate >= 70) return 'bg-amber-500'
   return 'bg-red-500'
 }
 
@@ -113,9 +113,9 @@ export function SchedulerSection({ jobs, dataSources }: SchedulerSectionProps) {
 
       {/* Inactive Sources Warning */}
       {inactiveSources.length > 0 && (
-        <Card className="mt-4 border-[#C9A24B]/30 bg-[#C9A24B]/5">
+        <Card className="mt-4 border-amber-500/30 bg-amber-500/5">
           <CardContent className="py-4">
-            <div className="flex items-center gap-2 text-[#C9A24B]">
+            <div className="flex items-center gap-2 text-amber-500">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span className="text-sm font-medium">반복 실패 소스</span>
             </div>
@@ -125,7 +125,7 @@ export function SchedulerSection({ jobs, dataSources }: SchedulerSectionProps) {
                   key={source.id}
                   className="flex items-center gap-2 text-sm text-muted-foreground"
                 >
-                  <Pause className="h-3 w-3 text-[#C9A24B]" />
+                  <Pause className="h-3 w-3 text-amber-500" />
                   <span>{source.name}</span>
                   <span className="text-xs">— {source.error}</span>
                 </div>
