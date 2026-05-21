@@ -2,49 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock3,
   Database,
-  KeyRound,
+  FileSearch,
+  Layers3,
   Loader2,
-  PlugZap,
   RefreshCw,
   Route,
-  Search,
   ServerCog,
+  Sparkles,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
-
-interface MetricCatalogMetric {
-  metric_key: string
-  metric_name_ko?: string | null
-  unit?: string | null
-  collection_frequency?: string | null
-  data_source?: string | null
-  is_available?: boolean
-  priority?: number | null
-  status?: string | null
-  reason?: string | null
-  stored_count?: number | null
-  source_status?: string | null
-  availability_basis?: string | null
-}
-
-interface MetricCatalogCategory {
-  category_code: string
-  category_name: string
-  total: number
-  available: number
-  rate: number
-  metrics: MetricCatalogMetric[]
-}
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface MetricCatalogResponse {
   overall?: {
@@ -52,7 +25,32 @@ interface MetricCatalogResponse {
     available: number
     rate: number
   }
-  categories?: MetricCatalogCategory[]
+}
+
+interface SourceFieldDiscovery {
+  id: number
+  source_key: string
+  source_name?: string | null
+  provider?: string | null
+  field_name: string
+  field_path: string
+  suggested_metric_key?: string | null
+  suggested_metric_name_ko?: string | null
+  suggested_category_name?: string | null
+  confidence?: number | null
+  status: string
+}
+
+interface SourceFieldDiscoveryResponse {
+  table_ready: boolean
+  summary: {
+    total: number
+    discovered: number
+    reviewing: number
+    promoted: number
+    ignored: number
+  }
+  items: SourceFieldDiscovery[]
 }
 
 interface SourceCollectorRecipe {
@@ -93,6 +91,9 @@ interface SourceCollectorCategory {
     snapshot_jobs_enqueued?: number | null
     snapshot_rows_upserted?: number | null
     delta_jobs_enqueued?: number | null
+    delta_rows_created?: number | null
+    signal_events_created?: number | null
+    message?: string | null
     error_message?: string | null
   } | null
   recipes: SourceCollectorRecipe[]
@@ -106,6 +107,7 @@ interface SourceCollectorStatusResponse {
     batch_policy: string
     latest_run?: {
       job_id?: string | null
+      job_name?: string | null
       status?: string | null
       ran_at?: string | null
       items_upserted?: number | null
@@ -123,49 +125,17 @@ interface SourceCollectorStatusResponse {
     recipe_total: number
     snapshot_total: number
     delta_total: number
-    bridged_observations?: {
-      total: number
-      metric_count: number
-      latest_bridge_at?: string | null
-    }
-    signal_cards?: number
-    signal_card_wiki_documents?: number
-    wiki_notes?: number
   }
   categories: SourceCollectorCategory[]
 }
 
 interface CoveragePayload {
   catalog: MetricCatalogResponse | null
+  discoveries: SourceFieldDiscoveryResponse | null
   collectors: SourceCollectorStatusResponse
 }
 
-interface MetricRow {
-  metricKey: string
-  metricName: string
-  categoryCode: string
-  categoryKey: string
-  categoryName: string
-  unit?: string | null
-  frequency?: string | null
-  provider?: string | null
-  endpoint?: string | null
-  dataSource?: string | null
-  status: string
-  sourceStatus?: string | null
-  reason?: string | null
-  requiredKeys: string[]
-  storedCount: number
-  observationCount: number
-  snapshotCount: number
-  deltaCount: number
-  latestObservedAt?: string | null
-  latestSnapshotAt?: string | null
-  latestDeltaAt?: string | null
-  batchLimit?: string | null
-}
-
-const CATEGORY_NAMES: Record<string, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   collateral_value: '담보가치',
   rental_profitability: '임대수익성',
   commercial_vitality: '상권활력',
@@ -180,88 +150,154 @@ const CATEGORY_NAMES: Record<string, string> = {
   environment_esg: '환경/ESG',
 }
 
-const REQUIRED_KEY_RULES: Array<{ key: string; tests: string[] }> = [
-  { key: 'DATA_GO_KR_API_KEY', tests: ['국토부', '공공데이터', '건축hub', '건축물대장', '공시지가', 'data.go', 'apis.data.go.kr', '소상공인시장진흥공단'] },
-  { key: 'SEOUL_OPENAPI_KEY', tests: ['서울', 'seoul', 'openapi.seoul.go.kr'] },
-  { key: 'VWORLD_API_KEY', tests: ['vworld', '브이월드', '도시계획', '토지이용', '연속지적도'] },
-  { key: 'KOSIS_API_KEY', tests: ['kosis', '통계청'] },
-  { key: 'ECOS_API_KEY', tests: ['ecos', '한국은행'] },
-  { key: 'KAKAO_REST_API_KEY', tests: ['kakao', '카카오', 'dapi.kakao.com', '교통', '주소'] },
-  { key: 'OPENAI_API_KEY', tests: ['llm', 'wiki', '요약', 'embedding'] },
-]
+const SOURCE_STEPS = [
+  {
+    label: 'Metric Catalog',
+    detail: 'wiki_metric_catalog',
+    description: '관리 대상 지표와 API 바인딩을 읽습니다.',
+    icon: FileSearch,
+  },
+  {
+    label: '12 Category Collectors',
+    detail: 'category runner',
+    description: '카테고리별 due 지표만 골라 API를 순회합니다.',
+    icon: Route,
+  },
+  {
+    label: 'Raw Observations',
+    detail: 'source_metric_observations',
+    description: '수집한 원천 관측값을 중복 없이 저장합니다.',
+    icon: Database,
+  },
+  {
+    label: 'Metric Snapshots',
+    detail: 'snapshot_processing_queue -> metric_snapshots',
+    description: '원천값을 기간별 스냅샷 작업으로 넘깁니다.',
+    icon: Layers3,
+  },
+  {
+    label: 'Period Bridge',
+    detail: 'metric_snapshots -> metric_observations',
+    description: '스냅샷을 시그널 카드 엔진이 읽는 기간 관측값으로 연결합니다.',
+    icon: Database,
+  },
+  {
+    label: 'Delta + Rank',
+    detail: 'delta_processing_queue + growth/rank',
+    description: '스냅샷 비교와 변화율 계산 작업을 예약합니다.',
+    icon: ServerCog,
+  },
+  {
+    label: 'Signal Cards + Wiki',
+    detail: 'signal_cards -> signal_card_wiki_documents -> KnowledgeNote',
+    description: '투자 시그널 후보와 Wiki 업데이트 흐름으로 연결합니다.',
+    icon: Sparkles,
+  },
+] as const
 
 function formatCount(value: number | null | undefined): string {
   return Number(value || 0).toLocaleString('ko-KR')
 }
 
-function formatDateTime(value?: string | null): string {
+function formatDateTimeKst(value?: string | null): string {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
-  return date.toLocaleString('ko-KR', {
+  return `${date.toLocaleString('ko-KR', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Asia/Seoul',
-  })
+  })} KST`
 }
 
-function frequencyLabel(value?: string | null): string {
-  const frequency = (value || '').toLowerCase()
+function frequencyLabel(frequency: string): string {
   if (frequency === 'hourly') return '매시간'
   if (frequency === 'daily') return '매일'
   if (frequency === 'weekly') return '매주'
   if (frequency === 'monthly') return '매월'
   if (frequency === 'quarterly') return '분기'
   if (frequency === 'annual' || frequency === 'yearly') return '매년'
-  if (frequency === 'static' || frequency === 'event/static') return '고정/이벤트'
-  return value || '-'
+  if (frequency === 'static' || frequency === 'event/static') return '고정값'
+  return frequency || '-'
 }
 
-function statusMeta(status: string, isAvailable?: boolean) {
-  if (status === 'active' || status === 'observed' || isAvailable) {
-    return { label: '연결됨', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', icon: CheckCircle2 }
-  }
-  if (status === 'api_key_required') {
-    return { label: 'KEY 필요', className: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300', icon: KeyRound }
-  }
-  if (status === 'api_dead' || status === 'failed') {
-    return { label: '오류', className: 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300', icon: AlertCircle }
-  }
-  if (status === 'manual_required') {
-    return { label: '수동 매핑', className: 'border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300', icon: PlugZap }
-  }
-  return { label: '대기', className: 'border-muted-foreground/30 bg-muted text-muted-foreground', icon: Clock3 }
+function categoryName(category: SourceCollectorCategory): string {
+  return CATEGORY_LABELS[category.category_key] || category.category_name
 }
 
-function categoryLabel(category: SourceCollectorCategory | MetricCatalogCategory): string {
-  if ('category_key' in category) return CATEGORY_NAMES[category.category_key] || category.category_name
-  return category.category_name
+function statusLabel(status: string): string {
+  if (status === 'active') return '실행 중'
+  if (status === 'partially_active') return '일부 실행'
+  if (status === 'catalog_only') return '카탈로그 대기'
+  if (status === 'not_configured') return '미구현'
+  if (status === 'failed') return '실패'
+  return status
 }
 
-function inferRequiredKeys(metric: Partial<MetricRow> | MetricCatalogMetric | SourceCollectorRecipe): string[] {
-  const text = [
-    'dataSource' in metric ? metric.dataSource : undefined,
-    'data_source' in metric ? metric.data_source : undefined,
-    'provider' in metric ? metric.provider : undefined,
-    'endpoint' in metric ? metric.endpoint : undefined,
-    'reason' in metric ? metric.reason : undefined,
-    'metric_key' in metric ? metric.metric_key : undefined,
-    'metricKey' in metric ? metric.metricKey : undefined,
-  ].filter(Boolean).join(' ').toLowerCase()
+function statusClass(status: string): string {
+  if (status === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (status === 'partially_active') return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+  if (status === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-300'
+  if (status === 'catalog_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+  return 'border-muted-foreground/30 bg-sidebar text-muted-foreground'
+}
 
-  const keys = REQUIRED_KEY_RULES
-    .filter((rule) => rule.tests.some((test) => text.includes(test.toLowerCase())))
-    .map((rule) => rule.key)
+function runStatusLabel(status?: string | null): string {
+  if (!status) return '-'
+  if (status === 'success' || status === 'ok') return '성공'
+  if (status === 'partial') return '일부 성공'
+  if (status === 'not_due') return '대상 없음'
+  if (status === 'failed' || status === 'error') return '실패'
+  if (status === 'running') return '실행 중'
+  return status
+}
 
-  if ('reason' in metric && typeof metric.reason === 'string') {
-    const explicit = metric.reason.match(/[A-Z0-9_]+_API_KEY|[A-Z0-9_]+_SERVICE_KEY/g) || []
-    keys.push(...explicit)
-  }
+function latestActivity(category: SourceCollectorCategory): string {
+  const candidates = [
+    category.latest_run?.finished_at,
+    category.latest_run?.started_at,
+    ...category.recipes.flatMap((recipe) => [
+      recipe.latest_observed_at,
+      recipe.latest_snapshot_at,
+      recipe.latest_delta_at,
+    ]),
+  ].filter((value): value is string => Boolean(value))
 
-  return Array.from(new Set(keys))
+  if (candidates.length === 0) return '-'
+
+  const latest = candidates.reduce((current, next) => {
+    const currentTime = new Date(current).getTime()
+    const nextTime = new Date(next).getTime()
+    if (Number.isNaN(nextTime)) return current
+    if (Number.isNaN(currentTime)) return next
+    return nextTime > currentTime ? next : current
+  })
+
+  return formatDateTimeKst(latest)
+}
+
+function queueText(queue?: Record<string, number>): string {
+  const queued = queue?.queued || 0
+  const processing = queue?.processing || 0
+  const processed = queue?.processed || queue?.done || 0
+  const failed = queue?.failed || 0
+  return `대기 ${formatCount(queued)} / 처리중 ${formatCount(processing)} / 완료 ${formatCount(processed)} / 실패 ${formatCount(failed)}`
+}
+
+function countObservations(category: SourceCollectorCategory): number {
+  return category.recipes.reduce((sum, recipe) => sum + (recipe.observation_count || 0), 0)
+}
+
+function representativeMetrics(category: SourceCollectorCategory): string {
+  return category.recipes
+    .filter((recipe) => (recipe.observation_count || recipe.snapshot_count || recipe.delta_count || 0) > 0)
+    .slice(0, 3)
+    .map((recipe) => recipe.metric_key || recipe.source_key)
+    .filter(Boolean)
+    .join(', ') || '-'
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -274,8 +310,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function fetchCoveragePayload(): Promise<CoveragePayload> {
-  const [catalogResult, collectors] = await Promise.allSettled([
+  const [catalogResult, discoveriesResult, collectors] = await Promise.allSettled([
     fetchJson<MetricCatalogResponse>('/api/admin/metric-catalog'),
+    fetchJson<SourceFieldDiscoveryResponse>('/api/admin/source-field-discoveries?limit=12'),
     fetchJson<SourceCollectorStatusResponse>('/api/admin/source-collector-status'),
   ])
 
@@ -283,100 +320,115 @@ async function fetchCoveragePayload(): Promise<CoveragePayload> {
 
   return {
     catalog: catalogResult.status === 'fulfilled' ? catalogResult.value : null,
+    discoveries: discoveriesResult.status === 'fulfilled' ? discoveriesResult.value : null,
     collectors: collectors.value,
   }
 }
 
-function buildMetricRows(payload: CoveragePayload | null): MetricRow[] {
-  if (!payload) return []
+function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {categories.map((category) => {
+        const observations = countObservations(category)
+        const latestRunStatus = category.latest_run?.status || category.status
 
-  const collectorByCode = new Map(payload.collectors.categories.map((category) => [category.category_code, category]))
-  const recipeByMetric = new Map<string, SourceCollectorRecipe>()
-  for (const category of payload.collectors.categories) {
-    for (const recipe of category.recipes || []) {
-      if (recipe.metric_key) recipeByMetric.set(recipe.metric_key, recipe)
-    }
-  }
+        return (
+          <div key={category.category_key} className="rounded-md border border-sidebar-border bg-background/20 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-sidebar-foreground">{categoryName(category)}</div>
+                <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{category.category_key}</div>
+              </div>
+              <Badge variant="outline" className={statusClass(category.status)}>
+                {statusLabel(category.status)}
+              </Badge>
+            </div>
 
-  const rows: MetricRow[] = []
+            <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+              <div>
+                <div className="text-muted-foreground">지표</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.configured_recipe_count)}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">관측값</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(observations)}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">스냅샷</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.snapshot_count)}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">변화량</div>
+                <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.delta_count)}</div>
+              </div>
+            </div>
 
-  for (const catalogCategory of payload.catalog?.categories || []) {
-    const collectorCategory = collectorByCode.get(catalogCategory.category_code)
-    for (const metric of catalogCategory.metrics || []) {
-      const recipe = recipeByMetric.get(metric.metric_key)
-      const status = metric.status || recipe?.collector_state || (metric.is_available ? 'active' : 'catalog_registered')
-      const row: MetricRow = {
-        metricKey: metric.metric_key,
-        metricName: metric.metric_name_ko || recipe?.source_name || metric.metric_key,
-        categoryCode: catalogCategory.category_code,
-        categoryKey: collectorCategory?.category_key || catalogCategory.category_code,
-        categoryName: collectorCategory ? categoryLabel(collectorCategory) : catalogCategory.category_name,
-        unit: metric.unit,
-        frequency: metric.collection_frequency || recipe?.refresh_frequency,
-        provider: recipe?.provider || metric.data_source,
-        endpoint: recipe?.endpoint,
-        dataSource: metric.data_source,
-        status,
-        sourceStatus: metric.source_status,
-        reason: metric.reason,
-        requiredKeys: inferRequiredKeys(metric),
-        storedCount: metric.stored_count || 0,
-        observationCount: recipe?.observation_count || 0,
-        snapshotCount: recipe?.snapshot_count || metric.stored_count || 0,
-        deltaCount: recipe?.delta_count || 0,
-        latestObservedAt: recipe?.latest_observed_at,
-        latestSnapshotAt: recipe?.latest_snapshot_at,
-        latestDeltaAt: recipe?.latest_delta_at,
-        batchLimit: recipe?.batch_limit,
-      }
-      if (row.requiredKeys.length === 0) row.requiredKeys = inferRequiredKeys(row)
-      rows.push(row)
-    }
-  }
-
-  for (const collectorCategory of payload.collectors.categories) {
-    for (const recipe of collectorCategory.recipes || []) {
-      if (!recipe.metric_key || rows.some((row) => row.metricKey === recipe.metric_key)) continue
-      rows.push({
-        metricKey: recipe.metric_key,
-        metricName: recipe.source_name || recipe.metric_key,
-        categoryCode: collectorCategory.category_code,
-        categoryKey: collectorCategory.category_key,
-        categoryName: categoryLabel(collectorCategory),
-        frequency: recipe.refresh_frequency,
-        provider: recipe.provider,
-        endpoint: recipe.endpoint,
-        dataSource: recipe.provider,
-        status: recipe.collector_state || 'catalog_registered',
-        requiredKeys: inferRequiredKeys(recipe),
-        storedCount: recipe.snapshot_count || 0,
-        observationCount: recipe.observation_count || 0,
-        snapshotCount: recipe.snapshot_count || 0,
-        deltaCount: recipe.delta_count || 0,
-        latestObservedAt: recipe.latest_observed_at,
-        latestSnapshotAt: recipe.latest_snapshot_at,
-        latestDeltaAt: recipe.latest_delta_at,
-        batchLimit: recipe.batch_limit,
-      })
-    }
-  }
-
-  return rows.sort((a, b) => a.categoryCode.localeCompare(b.categoryCode) || a.metricKey.localeCompare(b.metricKey))
+            <div className="mt-4 space-y-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Clock3 className="h-3.5 w-3.5" />
+                <span>최근 동작 {latestActivity(category)}</span>
+              </div>
+              <div>주기 {category.frequencies.map(frequencyLabel).join(', ') || '-'}</div>
+              <div>마지막 결과 {runStatusLabel(latestRunStatus)}</div>
+              <div className="truncate">대표 지표 {representativeMetrics(category)}</div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
-function queueLine(queue?: Record<string, number>): string {
-  return `대기 ${formatCount(queue?.queued)} / 처리중 ${formatCount(queue?.processing)} / 완료 ${formatCount(queue?.processed || queue?.done)} / 실패 ${formatCount(queue?.failed)}`
+function DiscoveryPanel({ discoveries }: { discoveries: SourceFieldDiscoveryResponse | null }) {
+  const items = discoveries?.items || []
+
+  return (
+    <Card className="border-sidebar-border bg-sidebar-accent">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold text-sidebar-foreground">신규 필드 승격 후보</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!discoveries ? (
+          <div className="rounded-md border border-sidebar-border p-4 text-xs text-muted-foreground">
+            필드 발견 테이블 상태를 불러오지 못했습니다.
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-md border border-sidebar-border p-4 text-xs text-muted-foreground">
+            현재 검토할 신규 필드 후보가 없습니다.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.slice(0, 6).map((item) => (
+              <div key={item.id} className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-medium text-sidebar-foreground">{item.suggested_metric_name_ko || item.field_name}</div>
+                    <div className="mt-1 font-mono text-[11px] text-muted-foreground">{item.suggested_metric_key || item.field_path}</div>
+                  </div>
+                  <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-300">
+                    {item.status}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                  <span>{item.source_key}</span>
+                  <span>{item.suggested_category_name || '-'}</span>
+                  <span>{typeof item.confidence === 'number' ? `${Math.round(item.confidence * 100)}%` : '-'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export function DataCoverageSection() {
   const [payload, setPayload] = useState<CoveragePayload | null>(null)
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  const [selectedMetric, setSelectedMetric] = useState<string>('all')
-  const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isRunning, setIsRunning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     setError(null)
@@ -384,42 +436,32 @@ export function DataCoverageSection() {
       const nextPayload = await fetchCoveragePayload()
       setPayload(nextPayload)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '원천데이터 연결 현황을 불러오지 못했습니다.')
+      setError(err instanceof Error ? err.message : '원천 데이터 현황을 불러오지 못했습니다.')
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(loadData, 0)
-    return () => clearTimeout(timer)
-  }, [loadData])
+    let cancelled = false
 
-  const categories = useMemo(() => payload?.collectors.categories || [], [payload])
-  const metricRows = useMemo(() => buildMetricRows(payload), [payload])
+    fetchCoveragePayload()
+      .then((nextPayload) => {
+        if (!cancelled) setPayload(nextPayload)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : '원천 데이터 현황을 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
 
-  const visibleMetrics = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    return metricRows.filter((metric) => {
-      const categoryMatched = selectedCategory === 'all' || metric.categoryCode === selectedCategory
-      const metricMatched = selectedMetric === 'all' || metric.metricKey === selectedMetric
-      const queryMatched = !keyword || [
-        metric.metricKey,
-        metric.metricName,
-        metric.provider,
-        metric.dataSource,
-        metric.reason,
-      ].some((value) => String(value || '').toLowerCase().includes(keyword))
-      return categoryMatched && metricMatched && queryMatched
-    })
-  }, [metricRows, query, selectedCategory, selectedMetric])
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-  const selectedCategoryObject = categories.find((category) => category.category_code === selectedCategory)
-  const selectedMetricsForDropdown = metricRows.filter((metric) => selectedCategory === 'all' || metric.categoryCode === selectedCategory)
-  const activeCount = metricRows.filter((metric) => metric.status === 'active' || metric.status === 'observed' || metric.snapshotCount > 0).length
-  const keyRequiredCount = metricRows.filter((metric) => metric.status === 'api_key_required' || metric.requiredKeys.length > 0 && metric.snapshotCount === 0).length
-
-  const runCollectors = useCallback(async () => {
+  const handleRunCollectors = useCallback(async () => {
     setIsRunning(true)
     setMessage(null)
     setError(null)
@@ -430,296 +472,235 @@ export function DataCoverageSection() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`)
-      setMessage('12개 카테고리 수집 작업을 요청했습니다. 잠시 후 상태를 새로고침하세요.')
+
+      const categories = typeof data === 'object' && data !== null && 'categories' in data
+        ? Object.values((data as { categories?: Record<string, { status?: string }> }).categories || {})
+        : []
+      const failed = categories.filter((category) => category.status === 'failed').length
+      setMessage(`12개 카테고리 순회 요청 완료${failed ? `, 실패 ${failed}개 확인 필요` : ''}.`)
       await loadData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '수집 작업 실행에 실패했습니다.')
+      setError(err instanceof Error ? err.message : '컬렉터 순회 실행에 실패했습니다.')
     } finally {
       setIsRunning(false)
     }
   }, [loadData])
 
+  const collectors = payload?.collectors
+  const snapshotQueue = collectors?.queues?.snapshot_processing_queue
+  const deltaQueue = collectors?.queues?.delta_processing_queue
+  const activeRate = collectors
+    ? Math.round((collectors.summary.categories_with_active_collectors / Math.max(collectors.summary.category_total, 1)) * 100)
+    : 0
+
+  const sortedCategories = useMemo(() => {
+    return [...(collectors?.categories || [])].sort((a, b) => a.category_code.localeCompare(b.category_code))
+  }, [collectors])
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <section>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-semibold tracking-tight">원천데이터 세부지표</h2>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            12개 카테고리별 지표 연결상태, 필요 API KEY, 제공처, 스냅샷/델타 적재 현황을 확인합니다.
+          <h1 className="text-xl font-semibold text-sidebar-foreground">원천데이터 수집과 가공 현황</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            12개 카테고리 컬렉터가 metric catalog를 읽고, 원천 관측값을 스냅샷과 변화율 계산 대기열로 넘기는 현재 흐름입니다.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading}>
-            <RefreshCw className={cn('mr-2 h-4 w-4', isLoading && 'animate-spin')} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={isLoading}
+            className="h-8 gap-1.5 border-sidebar-border"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             새로고침
           </Button>
-          <Button size="sm" onClick={runCollectors} disabled={isRunning}>
-            {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Route className="mr-2 h-4 w-4" />}
-            수집 실행
+          <Button
+            size="sm"
+            onClick={handleRunCollectors}
+            disabled={isRunning}
+            className="h-8 gap-1.5"
+          >
+            {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Route className="h-3.5 w-3.5" />}
+            12개 컬렉터 1회 순회
           </Button>
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
       {message && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <div className="mb-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
           {message}
         </div>
       )}
+      {error && (
+        <div className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          {error}
+        </div>
+      )}
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">카테고리</div>
-            <div className="mt-2 text-2xl font-semibold">{formatCount(payload?.collectors.summary.category_total || 12)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">활성 {formatCount(payload?.collectors.summary.categories_with_active_collectors)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">세부지표</div>
-            <div className="mt-2 text-2xl font-semibold">{formatCount(metricRows.length)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">연결 {formatCount(activeCount)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">스냅샷</div>
-            <div className="mt-2 text-2xl font-semibold">{formatCount(payload?.collectors.summary.snapshot_total)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{queueLine(payload?.collectors.queues?.snapshot_processing_queue)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">KEY 확인 필요</div>
-            <div className="mt-2 text-2xl font-semibold">{formatCount(keyRequiredCount)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">API/소스 매핑 대기</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="gap-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <CardTitle>카테고리별 연결 현황</CardTitle>
-              <CardDescription>드롭다운으로 카테고리와 세부지표를 선택하면 연결 정보가 아래 표에 반영됩니다.</CardDescription>
+      <Card className="border-sidebar-border bg-sidebar-accent">
+        <CardContent className="p-4">
+          {isLoading && !payload ? (
+            <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              원천데이터 상태를 불러오는 중
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[680px]">
-              <Select
-                value={selectedCategory}
-                onValueChange={(value) => {
-                  setSelectedCategory(value)
-                  setSelectedMetric('all')
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="카테고리 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체 카테고리</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.category_code} value={category.category_code}>
-                      {category.category_code}. {categoryLabel(category)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="세부지표 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체 세부지표</SelectItem>
-                  {selectedMetricsForDropdown.map((metric) => (
-                    <SelectItem key={metric.metricKey} value={metric.metricKey}>
-                      {metric.metricName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="지표/제공처 검색"
-                  className="pl-8"
-                />
+          ) : collectors ? (
+            <div className="space-y-4">
+              <div className="grid gap-2 md:grid-cols-4">
+                <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                  <div className="text-xs text-muted-foreground">관리 카테고리</div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(collectors.summary.category_total)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">활성 {formatCount(collectors.summary.categories_with_active_collectors)}개 · {activeRate}%</div>
+                </div>
+                <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                  <div className="text-xs text-muted-foreground">수집 대상 지표</div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(collectors.summary.recipe_total)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">catalog 전체 {formatCount(payload?.catalog?.overall?.total)}</div>
+                </div>
+                <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                  <div className="text-xs text-muted-foreground">스냅샷 저장</div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(collectors.summary.snapshot_total)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">{queueText(snapshotQueue)}</div>
+                </div>
+                <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                  <div className="text-xs text-muted-foreground">변화율 계산</div>
+                  <div className="mt-1 text-2xl font-bold text-sidebar-foreground">
+                    {formatCount(collectors.summary.delta_total)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">{queueText(deltaQueue)}</div>
+                </div>
               </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="metrics" className="w-full">
-            <TabsList>
-              <TabsTrigger value="metrics">세부지표</TabsTrigger>
-              <TabsTrigger value="flow">처리 흐름</TabsTrigger>
-              <TabsTrigger value="categories">12개 카테고리</TabsTrigger>
-            </TabsList>
 
-            <TabsContent value="metrics" className="mt-4">
-              {selectedCategoryObject && (
-                <div className="mb-3 rounded-md border bg-muted/30 p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{selectedCategoryObject.category_code}</Badge>
-                    <span className="font-medium">{categoryLabel(selectedCategoryObject)}</span>
-                    <span className="text-muted-foreground">지표 {formatCount(selectedCategoryObject.configured_recipe_count)}개</span>
-                    <span className="text-muted-foreground">스냅샷 {formatCount(selectedCategoryObject.snapshot_count)}</span>
-                    <span className="text-muted-foreground">델타 {formatCount(selectedCategoryObject.delta_count)}</span>
+              <div className="rounded-md border border-sidebar-border bg-background/20 p-3">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-sidebar-foreground">처리 흐름</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      due 지표만 수집하고, 같은 기간 관측값은 중복 없이 저장한 뒤 SKIP LOCKED 워커가 가공 대기열을 나눠 처리합니다.
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-sidebar-border px-2 py-1 text-[11px] text-muted-foreground">
+                    최근 실행 {formatDateTimeKst(collectors.runner.latest_run?.ran_at)} · {runStatusLabel(collectors.runner.latest_run?.status)}
                   </div>
                 </div>
-              )}
 
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[1120px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">세부지표</th>
-                      <th className="px-3 py-2 font-medium">상태</th>
-                      <th className="px-3 py-2 font-medium">필요 KEY</th>
-                      <th className="px-3 py-2 font-medium">데이터 제공처</th>
-                      <th className="px-3 py-2 font-medium">주기</th>
-                      <th className="px-3 py-2 text-right font-medium">관측</th>
-                      <th className="px-3 py-2 text-right font-medium">스냅샷</th>
-                      <th className="px-3 py-2 text-right font-medium">델타</th>
-                      <th className="px-3 py-2 font-medium">최근 적재</th>
-                      <th className="px-3 py-2 font-medium">메모</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {isLoading && !payload ? (
-                      <tr>
-                        <td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">
-                          <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-                          연결 현황을 불러오는 중입니다.
-                        </td>
-                      </tr>
-                    ) : visibleMetrics.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="px-3 py-10 text-center text-muted-foreground">
-                          조건에 맞는 세부지표가 없습니다.
-                        </td>
-                      </tr>
-                    ) : visibleMetrics.map((metric) => {
-                      const meta = statusMeta(metric.status, metric.snapshotCount > 0)
-                      const Icon = meta.icon
-                      return (
-                        <tr key={`${metric.categoryCode}:${metric.metricKey}`} className="align-top">
-                          <td className="px-3 py-3">
-                            <div className="font-medium">{metric.metricName}</div>
-                            <div className="mt-1 font-mono text-xs text-muted-foreground">{metric.metricKey}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">{metric.categoryName}</div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <Badge variant="outline" className={meta.className}>
-                              <Icon className="h-3 w-3" />
-                              {meta.label}
-                            </Badge>
-                            {metric.sourceStatus && <div className="mt-1 text-xs text-muted-foreground">{metric.sourceStatus}</div>}
-                          </td>
-                          <td className="px-3 py-3">
-                            {metric.requiredKeys.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {metric.requiredKeys.map((key) => (
-                                  <Badge key={key} variant="secondary" className="font-mono">
-                                    {key}
-                                  </Badge>
-                                ))}
-                              </div>
+                <div className="grid gap-2 lg:grid-cols-6">
+                  {SOURCE_STEPS.map((step, index) => {
+                    const Icon = step.icon
+                    return (
+                      <div key={step.detail} className="relative">
+                        <div className="h-full rounded-md border border-sidebar-border/70 bg-sidebar/30 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sky-500/10 text-sky-300">
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            {index < 3 ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                             ) : (
-                              <span className="text-muted-foreground">-</span>
+                              <Clock3 className="h-4 w-4 text-amber-300" />
                             )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <div>{metric.provider || metric.dataSource || '-'}</div>
-                            {metric.endpoint && <div className="mt-1 max-w-[260px] truncate font-mono text-xs text-muted-foreground">{metric.endpoint}</div>}
-                          </td>
-                          <td className="px-3 py-3">{frequencyLabel(metric.frequency)}</td>
-                          <td className="px-3 py-3 text-right">{formatCount(metric.observationCount)}</td>
-                          <td className="px-3 py-3 text-right">{formatCount(metric.snapshotCount)}</td>
-                          <td className="px-3 py-3 text-right">{formatCount(metric.deltaCount)}</td>
-                          <td className="px-3 py-3 text-xs text-muted-foreground">
-                            <div>관측 {formatDateTime(metric.latestObservedAt)}</div>
-                            <div>스냅샷 {formatDateTime(metric.latestSnapshotAt)}</div>
-                            <div>델타 {formatDateTime(metric.latestDeltaAt)}</div>
-                          </td>
-                          <td className="px-3 py-3 text-xs text-muted-foreground">
-                            <div className="max-w-[280px]">{metric.reason || metric.batchLimit || '-'}</div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="flow" className="mt-4">
-              <div className="grid gap-3 lg:grid-cols-4">
-                {[
-                  { icon: ServerCog, title: 'Metric Catalog', body: 'wiki_metric_catalog에서 12개 카테고리와 세부지표 정의를 읽습니다.' },
-                  { icon: Route, title: 'Collectors', body: '카테고리별 수집기가 API/테이블에서 원천 관측값을 수집합니다.' },
-                  { icon: Database, title: 'Snapshots', body: 'source_metric_observations를 metric_snapshots로 정규화합니다.' },
-                  { icon: PlugZap, title: 'Delta/Wiki', body: 'metric_observations, rank, signal_cards, Wiki 문서로 연결합니다.' },
-                ].map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <div key={item.title} className="rounded-md border bg-muted/20 p-4">
-                      <Icon className="h-5 w-5 text-primary" />
-                      <div className="mt-3 font-medium">{item.title}</div>
-                      <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="mt-3 rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-                <div className="font-medium text-foreground">현재 큐</div>
-                <div className="mt-1">Snapshot: {queueLine(payload?.collectors.queues?.snapshot_processing_queue)}</div>
-                <div>Delta: {queueLine(payload?.collectors.queues?.delta_processing_queue)}</div>
-                <div className="mt-2">Batch policy: {payload?.collectors.runner.batch_policy || '-'}</div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="categories" className="mt-4">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {categories.map((category) => {
-                  const meta = statusMeta(category.status)
-                  return (
-                    <div key={category.category_code} className="rounded-md border p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="font-medium">{category.category_code}. {categoryLabel(category)}</div>
-                          <div className="mt-1 font-mono text-xs text-muted-foreground">{category.category_key}</div>
+                          </div>
+                          <div className="mt-3 text-[11px] text-muted-foreground">STEP {index + 1}</div>
+                          <div className="mt-1 font-semibold text-sidebar-foreground">{step.label}</div>
+                          <div className="mt-1 font-mono text-[10px] text-muted-foreground">{step.detail}</div>
+                          <p className="mt-3 text-[11px] leading-4 text-muted-foreground">{step.description}</p>
                         </div>
-                        <Badge variant="outline" className={meta.className}>{meta.label}</Badge>
+                        {index < SOURCE_STEPS.length - 1 && (
+                          <ArrowRight className="absolute -right-4 top-1/2 z-10 hidden h-5 w-5 -translate-y-1/2 text-muted-foreground lg:block" />
+                        )}
                       </div>
-                      <div className="mt-4 grid grid-cols-4 gap-2 text-sm">
-                        <div><div className="text-muted-foreground">지표</div><div className="font-semibold">{formatCount(category.configured_recipe_count)}</div></div>
-                        <div><div className="text-muted-foreground">활성</div><div className="font-semibold">{formatCount(category.active_collector_count)}</div></div>
-                        <div><div className="text-muted-foreground">스냅샷</div><div className="font-semibold">{formatCount(category.snapshot_count)}</div></div>
-                        <div><div className="text-muted-foreground">델타</div><div className="font-semibold">{formatCount(category.delta_count)}</div></div>
-                      </div>
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        최근 실행 {formatDateTime(category.latest_run?.finished_at || category.latest_run?.started_at)}
-                      </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+
+                <div className="mt-3 rounded-md border border-sidebar-border bg-background/20 p-3 text-[11px] text-muted-foreground">
+                  <div className="mb-1 font-semibold text-sidebar-foreground">중복 처리 정책</div>
+                  {collectors.runner.batch_policy}
+                </div>
               </div>
-            </TabsContent>
-          </Tabs>
+
+              <CategoryGrid categories={sortedCategories} />
+            </div>
+          ) : (
+            <div className="rounded-md border border-sidebar-border p-4 text-sm text-muted-foreground">
+              원천데이터 상태가 없습니다.
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.7fr]">
+        <Card className="border-sidebar-border bg-sidebar-accent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-sidebar-foreground">카테고리별 세부 적재표</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-left text-xs">
+                <thead className="border-b border-sidebar-border text-sidebar-foreground">
+                  <tr>
+                    <th className="py-2 pr-3 font-semibold">카테고리</th>
+                    <th className="py-2 pr-3 font-semibold">상태</th>
+                    <th className="py-2 pr-3 font-semibold">수집 주기</th>
+                    <th className="py-2 pr-3 text-right font-semibold">지표</th>
+                    <th className="py-2 pr-3 text-right font-semibold">관측값</th>
+                    <th className="py-2 pr-3 text-right font-semibold">스냅샷</th>
+                    <th className="py-2 pr-3 text-right font-semibold">변화량</th>
+                    <th className="py-2 pr-3 font-semibold">최근 동작</th>
+                    <th className="py-2 pr-3 font-semibold">대표 지표</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-sidebar-border">
+                  {sortedCategories.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-6 text-center text-muted-foreground">카테고리 상태가 없습니다.</td>
+                    </tr>
+                  ) : sortedCategories.map((category) => (
+                    <tr key={category.category_key}>
+                      <td className="py-3 pr-3">
+                        <div className="font-medium text-sidebar-foreground">{categoryName(category)}</div>
+                        <div className="font-mono text-[11px] text-muted-foreground">{category.category_key}</div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <Badge variant="outline" className={statusClass(category.status)}>
+                          {statusLabel(category.status)}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-3 text-muted-foreground">{category.frequencies.map(frequencyLabel).join(', ') || '-'}</td>
+                      <td className="py-3 pr-3 text-right text-sidebar-foreground">{formatCount(category.configured_recipe_count)}</td>
+                      <td className="py-3 pr-3 text-right text-sidebar-foreground">{formatCount(countObservations(category))}</td>
+                      <td className="py-3 pr-3 text-right text-sidebar-foreground">{formatCount(category.snapshot_count)}</td>
+                      <td className="py-3 pr-3 text-right text-sidebar-foreground">{formatCount(category.delta_count)}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{latestActivity(category)}</td>
+                      <td className="py-3 pr-3 text-muted-foreground">{representativeMetrics(category)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <DiscoveryPanel discoveries={payload?.discoveries || null} />
+      </div>
+
+      {payload?.collectors?.summary.categories_with_active_collectors === 0 ? (
+        <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4" />
+            <span>활성 컬렉터가 아직 감지되지 않았습니다. API 키, metric catalog의 auto_collect 설정, 최근 source_collector_runs 로그를 확인하세요.</span>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
