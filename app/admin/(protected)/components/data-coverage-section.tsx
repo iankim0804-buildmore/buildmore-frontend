@@ -240,6 +240,77 @@ function statusLabel(status: string): string {
   return status
 }
 
+function metricLabel(recipe: SourceCollectorRecipe): string {
+  if (recipe.source_name) return recipe.source_name
+
+  const key = recipe.metric_key || recipe.source_key
+  const fallbackLabels: Record<string, string> = {
+    area_sales: '상권 매출',
+    floating_population: '유동인구',
+    transaction_count: '거래 건수',
+    exchange_rate_usd: '원/달러 환율',
+    kospi_index: '코스피 지수',
+    cpi_index: '소비자물가지수',
+    ppi_index: '생산자물가지수',
+    oil_price_wti: 'WTI 유가',
+  }
+
+  if (fallbackLabels[key]) return fallbackLabels[key]
+
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map((part) => {
+      const words: Record<string, string> = {
+        access: '접근',
+        age: '연령',
+        apartment: '아파트',
+        area: '면적',
+        bankability: '대출가능성',
+        building: '건물',
+        bus: '버스',
+        cap: '캡',
+        carbon: '탄소',
+        commercial: '상업',
+        construction: '공사',
+        cost: '비용',
+        count: '수',
+        debt: '부채',
+        density: '밀도',
+        distance: '거리',
+        dscr: 'DSCR',
+        esg: 'ESG',
+        flag: '여부',
+        floor: '층',
+        growth: '성장률',
+        household: '가구',
+        income: '소득',
+        index: '지수',
+        interest: '금리',
+        land: '토지',
+        loan: '대출',
+        market: '시장',
+        monthly: '월간',
+        population: '인구',
+        price: '가격',
+        rate: '비율',
+        rent: '임대료',
+        rental: '임대',
+        risk: '위험',
+        sales: '매출',
+        seoul: '서울',
+        subway: '지하철',
+        total: '총',
+        traffic: '교통',
+        value: '가치',
+        vacancy: '공실',
+        yoy: '전년비',
+      }
+      return words[part] || part
+    })
+    .join(' ')
+}
+
 function statusClass(status: string): string {
   if (status === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
   if (status === 'partially_active') return 'border-sky-500/30 bg-sky-500/10 text-sky-300'
@@ -298,17 +369,17 @@ function representativeMetrics(category: SourceCollectorCategory): string {
   return category.recipes
     .filter((recipe) => (recipe.observation_count || recipe.snapshot_count || recipe.delta_count || 0) > 0)
     .slice(0, 3)
-    .map((recipe) => recipe.metric_key || recipe.source_key)
+    .map(metricLabel)
     .filter(Boolean)
     .join(', ') || '-'
 }
 
 function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
-  if (recipe.collector_state === 'active') return 'API 활성'
-  if (recipe.collector_state === 'catalog_only') return '카탈로그 대기'
-  if (recipe.collector_state === 'disabled') return '비활성'
-  if (recipe.collector_state === 'failed') return '실패'
-  return recipe.collector_state || '미확인'
+  if (recipe.collector_state === 'active') return 'API 작동중'
+  if (recipe.collector_state === 'failed') return 'API 오류'
+  if (recipe.collector_state === 'disabled') return 'API 비활성'
+  if (recipe.collector_state === 'catalog_only' || recipe.collector_state === 'not_configured') return 'API 확인불가'
+  return recipe.collector_state ? 'API 확인필요' : 'API 확인불가'
 }
 
 function recipeStatusClass(recipe: SourceCollectorRecipe): string {
@@ -319,7 +390,7 @@ function recipeStatusClass(recipe: SourceCollectorRecipe): string {
 }
 
 function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
-  return recipe.provider || recipe.source_name || recipe.source_key || '-'
+  return recipe.provider || '내부 산출/카탈로그'
 }
 
 function inferRequiredKeys(recipe: SourceCollectorRecipe): string[] {
@@ -408,7 +479,7 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                   <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(category.configured_recipe_count)}</div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">관측값</div>
+                  <div className="text-muted-foreground">원천수집</div>
                   <div className="mt-1 font-semibold text-sidebar-foreground">{formatCount(observations)}</div>
                 </div>
                 <div>
@@ -457,10 +528,7 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <div className="truncate font-medium text-card-foreground">
-                                {recipe.metric_key || recipe.source_key}
-                              </div>
-                              <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-                                {recipe.source_key}
+                                {metricLabel(recipe)}
                               </div>
                             </div>
                             <Badge variant="outline" className={`shrink-0 ${recipeStatusClass(recipe)}`}>
@@ -480,7 +548,7 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                             <div className="flex items-center gap-1.5">
                               <PlugZap className="h-3.5 w-3.5 shrink-0" />
                               <span className="truncate">
-                                주기 {frequencyLabel(recipe.refresh_frequency || '')} · 관측 {formatCount(recipe.observation_count)} · 스냅샷 {formatCount(recipe.snapshot_count)}
+                                주기 {frequencyLabel(recipe.refresh_frequency || '')} · 원천수집 {formatCount(recipe.observation_count)} · 스냅샷 {formatCount(recipe.snapshot_count)}
                               </span>
                             </div>
                           </div>
@@ -771,7 +839,7 @@ export function DataCoverageSection() {
                     <th className="py-2 pr-3 font-semibold">상태</th>
                     <th className="py-2 pr-3 font-semibold">수집 주기</th>
                     <th className="py-2 pr-3 text-right font-semibold">지표</th>
-                    <th className="py-2 pr-3 text-right font-semibold">관측값</th>
+                    <th className="py-2 pr-3 text-right font-semibold">원천수집</th>
                     <th className="py-2 pr-3 text-right font-semibold">스냅샷</th>
                     <th className="py-2 pr-3 text-right font-semibold">변화량</th>
                     <th className="py-2 pr-3 font-semibold">최근 동작</th>
