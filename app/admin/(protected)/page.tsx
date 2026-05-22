@@ -6,6 +6,7 @@ import { StatusBar } from './components/status-bar'
 import { SchedulerSection } from './components/scheduler-section'
 import { WikiSection } from './components/wiki-section'
 import { UsageSection } from './components/usage-section'
+import { DataLayerSection } from './components/data-layer-section'
 import { DeltaSection } from './components/delta-section'
 import { DataCoverageSection } from './components/data-coverage-section'
 import { DevLogSection } from './components/dev-log-section'
@@ -146,6 +147,10 @@ export default function AdminDashboardPage() {
         <UsageSection
           usageStats={data.usageStats}
           recentAnalyses={data.recentAnalyses}
+        />
+
+        <DataLayerSection
+          backendStatus={data.systemStatus.server.status}
         />
 
         <DeltaSection onRefresh={fetchData} />
