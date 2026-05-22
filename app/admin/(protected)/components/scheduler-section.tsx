@@ -1,6 +1,6 @@
 'use client'
 
-import type { FrontendSchedulerJob, FrontendDataSource } from '@/lib/api/admin'
+import type { FrontendSchedulerJob } from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -8,14 +8,11 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Pause,
-  AlertTriangle,
   Calendar,
 } from 'lucide-react'
 
 interface SchedulerSectionProps {
   jobs: FrontendSchedulerJob[]
-  dataSources: FrontendDataSource[]
 }
 
 function getStatusIcon(status: FrontendSchedulerJob['lastStatus']) {
@@ -35,9 +32,7 @@ function getSuccessRateColor(rate: number) {
   return 'bg-red-500'
 }
 
-export function SchedulerSection({ jobs, dataSources }: SchedulerSectionProps) {
-  const inactiveSources = dataSources.filter((s) => !s.isActive)
-
+export function SchedulerSection({ jobs }: SchedulerSectionProps) {
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
@@ -110,30 +105,6 @@ export function SchedulerSection({ jobs, dataSources }: SchedulerSectionProps) {
           )
         })}
       </div>
-
-      {/* Inactive Sources Warning */}
-      {inactiveSources.length > 0 && (
-        <Card className="mt-4 border-amber-500/30 bg-amber-500/5">
-          <CardContent className="py-4">
-            <div className="flex items-center gap-2 text-amber-500">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">반복 실패 소스</span>
-            </div>
-            <div className="mt-2 space-y-1">
-              {inactiveSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-2 text-sm text-muted-foreground"
-                >
-                  <Pause className="h-3 w-3 text-amber-500" />
-                  <span>{source.name}</span>
-                  <span className="text-xs">— {source.error}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </section>
   )
 }

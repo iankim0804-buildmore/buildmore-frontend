@@ -136,7 +136,6 @@ export default function AdminDashboardPage() {
 
         <SchedulerSection
           jobs={data.schedulerJobs}
-          dataSources={data.dataSources}
         />
 
         <WikiSection
