@@ -57,6 +57,8 @@ interface MetricCatalogMetric {
   api_connection_label?: string | null
   source_apis?: SourceApiStatus[] | null
   availability_basis?: string | null
+  connection_help?: string | null
+  user_action_required?: string[] | null
   stored_count?: number | null
   probe_value_present?: boolean | null
 }
@@ -114,6 +116,8 @@ interface SourceCollectorRecipe {
   api_connection_label?: string | null
   source_apis?: SourceApiStatus[] | null
   availability_basis?: string | null
+  connection_help?: string | null
+  user_action_required?: string[] | null
   probe_value_present?: boolean | null
 }
 
@@ -125,6 +129,8 @@ interface SourceApiStatus {
   required_keys?: string[]
   label?: string
   reason?: string
+  connection_help?: string | null
+  user_action_required?: string[]
   source_status?: string
 }
 
@@ -430,15 +436,15 @@ function representativeMetrics(category: SourceCollectorCategory): string {
 function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
   if (recipe.api_connection_label) return recipe.api_connection_label
   const liveStatus = recipe.source_status || recipe.status
-  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'API 연결됨'
+  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'API 살아있음'
   if (liveStatus === 'api_no_value') return '응답값 없음'
-  if (liveStatus === 'api_dead') return 'API 오류'
-  if (liveStatus === 'api_key_required') return 'KEY 필요'
+  if (liveStatus === 'api_dead') return '연결실패'
+  if (liveStatus === 'api_key_required') return '연결실패'
   if (liveStatus === 'dependency_missing') return '의존 지표 필요'
   if (liveStatus === 'manual_required') return '수동 필요'
   if (liveStatus === 'not_implemented') return '미구현'
-  if (recipe.collector_state === 'active') return 'API 작동중'
-  if (recipe.collector_state === 'failed') return 'API 오류'
+  if (recipe.collector_state === 'active') return 'API 살아있음'
+  if (recipe.collector_state === 'failed') return '연결실패'
   if (recipe.collector_state === 'disabled') return 'API 비활성'
   if (recipe.collector_state === 'catalog_only' || recipe.collector_state === 'not_configured') return 'API 확인불가'
   return recipe.collector_state ? 'API 확인필요' : 'API 확인불가'
@@ -483,6 +489,8 @@ function catalogMetricToRecipe(metric: MetricCatalogMetric): SourceCollectorReci
     api_connection_label: metric.api_connection_label || null,
     source_apis: metric.source_apis || null,
     availability_basis: metric.availability_basis || null,
+    connection_help: metric.connection_help || null,
+    user_action_required: metric.user_action_required || null,
     probe_value_present: metric.probe_value_present || null,
   }
 }
@@ -709,6 +717,21 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                             {recipe.reason ? (
                               <div className="rounded-md border border-sidebar-border bg-background/30 p-2 text-[11px] leading-4 text-muted-foreground">
                                 {recipe.reason}
+                              </div>
+                            ) : null}
+                            {recipe.connection_help && recipe.connection_help !== recipe.reason ? (
+                              <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-[11px] leading-4 text-amber-700">
+                                {recipe.connection_help}
+                              </div>
+                            ) : null}
+                            {recipe.user_action_required && recipe.user_action_required.length > 0 ? (
+                              <div className="rounded-md border border-sidebar-border bg-background/30 p-2 text-[11px] leading-4 text-muted-foreground">
+                                <div className="font-semibold text-sidebar-foreground">사용자 도움 필요</div>
+                                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                                  {recipe.user_action_required.map((action) => (
+                                    <li key={action}>{action}</li>
+                                  ))}
+                                </ul>
                               </div>
                             ) : null}
                           </div>
