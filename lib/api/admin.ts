@@ -287,13 +287,6 @@ export interface FrontendSchedulerJob {
   lastResult: string
 }
 
-export interface FrontendDataSource {
-  id: string
-  name: string
-  isActive: boolean
-  error?: string
-}
-
 export interface FrontendProcessingTask {
   taskType: string
   label: string
@@ -387,34 +380,14 @@ export interface FrontendSystemStatus {
   }
 }
 
-export interface FrontendSystemInfo {
-  backend: {
-    url: string
-    spec: string
-    region: string
-    status: 'ok' | 'error'
-  }
-  database: {
-    name: string
-    status: 'ok' | 'error'
-    latency: number
-  }
-  frontend: {
-    url: string
-    status: 'ok' | 'error'
-  }
-}
-
 export interface AdminDashboardData {
   systemStatus: FrontendSystemStatus
   schedulerJobs: FrontendSchedulerJob[]
-  dataSources: FrontendDataSource[]
   processingQueue: FrontendProcessingQueue
   wikiStats: FrontendWikiStats
   wikiUpdates: FrontendWikiUpdate[]
   usageStats: FrontendUsageStats
   recentAnalyses: FrontendRecentAnalysis[]
-  systemInfo: FrontendSystemInfo
   lastUpdated: string
 }
 
@@ -554,19 +527,6 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       lastResult: job.last_message || `성공 ${job.success_count_30d ?? 0}건 / 실패 ${job.fail_count_30d ?? 0}건`,
     }))
 
-  const failedSources = data.scheduler?.failed_sources ?? []
-  const dataSources: FrontendDataSource[] = [
-    { id: '1', name: '서울 열린데이터광장', isActive: true },
-    { id: '2', name: '소상공인시장진흥공단', isActive: true },
-    { id: '4', name: '시공/부동산 블로그', isActive: true },
-    ...failedSources.map((fs, i) => ({
-      id: `failed-${i}`,
-      name: fs.name,
-      isActive: false,
-      error: fs.error,
-    })),
-  ]
-
   const wikiData = data.wiki?.wiki
   const wikiQueueByTaskType = wikiData?.processing_queue?.by_task_type
   const wikiTaskBreakdown = buildWikiTaskBreakdown(wikiQueueByTaskType)
@@ -642,34 +602,14 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       responseTime: analysis.response_time_ms,
     }))
 
-  const systemInfo: FrontendSystemInfo = {
-    backend: {
-      url: 'api.buildmore.co.kr',
-      spec: 'Gabia VPS · Ubuntu · buildmore-web + scheduler',
-      region: 'Korea',
-      status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
-    },
-    database: {
-      name: 'Neon Postgres (Singapore)',
-      status: 'ok',
-      latency: 12,
-    },
-    frontend: {
-      url: 'buildmore.co.kr (Vercel)',
-      status: 'ok',
-    },
-  }
-
   return {
     systemStatus,
     schedulerJobs,
-    dataSources,
     processingQueue,
     wikiStats,
     wikiUpdates,
     usageStats,
     recentAnalyses,
-    systemInfo,
     lastUpdated: formatKST(now),
   }
 }
