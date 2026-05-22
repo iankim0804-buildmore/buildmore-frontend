@@ -1067,12 +1067,12 @@ export function DataCoverageSection() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto pb-2">
-                  <div className="flex min-w-max gap-3">
+                <div>
+                  <div className="flex gap-3">
                     {SOURCE_STEPS.map((step, index) => {
                       const Icon = step.icon
                       return (
-                        <div key={step.detail} className="relative w-[244px] shrink-0">
+                        <div key={step.detail} className="relative flex-1 min-w-0">
                           <div className="h-full rounded-md border border-sidebar-border/70 bg-sidebar/30 p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sky-500/10 text-sky-300">
