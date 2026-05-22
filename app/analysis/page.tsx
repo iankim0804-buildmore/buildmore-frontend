@@ -73,6 +73,36 @@ interface AddressProps {
   floors_above: number | null
 }
 
+interface RentalContextMetric {
+  metric_key: string
+  label?: string
+  metric_name_ko?: string
+  value: number | string | boolean | null
+  unit?: string
+  source_type?: 'external_api' | 'internal_prefetch' | 'user_input' | 'derived_formula'
+  status?: 'ready' | 'prefetched' | 'waiting_user_input' | 'waiting_dependency' | 'api_failed'
+  missing_inputs?: string[]
+  missing_dependencies?: string[]
+}
+
+interface RentalContext {
+  status: string
+  ready_metrics?: number
+  waiting_user_input?: string[]
+  source_groups?: Record<string, string[]>
+  api_probe?: Record<string, { label?: string; reason?: string; source_status?: string }>
+  required_api_sites?: Array<{
+    source_key: string
+    site_name: string
+    official_url?: string
+    required_env?: string[]
+    used_for?: string[]
+  }>
+  prefetched?: Record<string, number | string | null>
+  metrics?: RentalContextMetric[]
+  computed_at?: string
+}
+
 interface SearchHistoryItem {
   address: string
   timestamp: number
@@ -337,7 +367,9 @@ export default function AnalysisPage() {
   const [ltv, setLtv] = useState(0)
   const [cap, setCap] = useState(0)
   const [bankabilityScore, setBankabilityScore] = useState(0)
-  const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('���격협상')
+  const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('가격협상')
+  const [rentalContext, setRentalContext] = useState<RentalContext | null>(null)
+  const [isRentalContextLoading, setIsRentalContextLoading] = useState(false)
 
   // ============================================================
   // CALCULATION LOGIC
@@ -381,6 +413,61 @@ export default function AnalysisPage() {
   useEffect(() => {
     recalc()
   }, [recalc])
+
+  useEffect(() => {
+    const trimmedAddress = address.trim()
+    if (!trimmedAddress || !addressConfirmed) return
+
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setIsRentalContextLoading(true)
+      try {
+        const response = await fetch('/api/rental-profitability/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            address: trimmedAddress,
+            purchase_price: Math.round(price * 100_000_000),
+            loan_amount: Math.round(loan * 100_000_000),
+            annual_interest_rate: rate,
+            monthly_rent: Math.round(rent * 10_000),
+            deposit: Math.round(deposit * 10_000),
+            vacancy_rate: vacancyRate,
+            operating_expense_ratio: 15,
+          }),
+        })
+        if (!response.ok) throw new Error('rental context failed')
+        const data: RentalContext = await response.json()
+        setRentalContext(data)
+
+        const metrics = data.metrics || []
+        const metricValue = (key: string): number | null => {
+          const raw = metrics.find((metric) => metric.metric_key === key)?.value
+          return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+        }
+        const noiWon = metricValue('noi_annual')
+        const dscrValue = metricValue('dscr')
+        const capValue = metricValue('cap_rate')
+        if (noiWon != null) setNoi(Math.round(noiWon / 10000))
+        if (dscrValue != null) setDscr(dscrValue)
+        if (capValue != null) setCap(capValue)
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setRentalContext((prev) => prev)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsRentalContextLoading(false)
+        }
+      }
+    }, 280)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [address, addressConfirmed, price, loan, rate, rent, deposit, vacancyRate])
 
   // Simulate API connection
   useEffect(() => {
@@ -816,6 +903,7 @@ BuildMore 판단:
       const data = await resp.json()
 
       setAddressProps(data.address_props ?? null)
+      setRentalContext(data.rental_context ?? null)
       if (_lat && _lng) {
         setConfirmedLocation({ lat: _lat, lng: _lng })
       } else {
@@ -1029,6 +1117,18 @@ BuildMore 판단:
 
   // Get today's date
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', '')
+  const rentalMetrics = rentalContext?.metrics || []
+  const rentalStatusCounts = rentalMetrics.reduce<Record<string, number>>((acc, metric) => {
+    const key = metric.status || 'unknown'
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {})
+  const externalApiStatus = Object.values(rentalContext?.api_probe || {})
+    .filter((item) => item.label?.includes('API'))
+    .map((item) => item.label)
+  const liveFormulaMetrics = rentalMetrics.filter((metric) =>
+    ['noi_annual', 'dscr', 'cap_rate', 'rental_yield_net', 'annual_debt_service'].includes(metric.metric_key),
+  )
 
   // ============================================================
   // RENDER
@@ -1839,6 +1939,81 @@ BuildMore 판단:
             </div>
 
             {/* Table */}
+            <div className="bg-white border border-border rounded-2xl p-4 mb-3">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-[15px] font-bold text-gray-950">임대수익성 실시간 산식</p>
+                  <p className="text-xs text-gray-500 mt-1 break-keep">
+                    주소 기반 선조회값과 사용자 입력값을 합쳐 NOI, DSCR, Cap Rate를 자동 갱신합니다.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  {isRentalContextLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />}
+                  <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-700">
+                    ready {rentalContext?.ready_metrics ?? 0}/{rentalMetrics.length || 21}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2.5">
+                <div className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-[11px] text-gray-500 font-semibold mb-1">API 원천</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {externalApiStatus.length > 0 ? Array.from(new Set(externalApiStatus)).join(' · ') : '대기'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
+                    서울 전월세가, R-ONE 임대동향 키가 연결되면 선조회 품질이 올라갑니다.
+                  </p>
+                </div>
+                <div className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-[11px] text-gray-500 font-semibold mb-1">주소 선조회</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    prefetched {rentalStatusCounts.prefetched || 0}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
+                    면적, 유사 임대료, 시장 임대료를 먼저 준비합니다.
+                  </p>
+                </div>
+                <div className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-[11px] text-gray-500 font-semibold mb-1">입력 대기</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {(rentalContext?.waiting_user_input || []).length > 0
+                      ? (rentalContext?.waiting_user_input || []).join(', ')
+                      : '없음'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
+                    사용자가 입력하면 의존 산식이 즉시 다시 계산됩니다.
+                  </p>
+                </div>
+                <div className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-[11px] text-gray-500 font-semibold mb-1">내부산식</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    ready {rentalStatusCounts.ready || 0}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
+                    NOI, DSCR, 수익률, 손익분기 입주율을 DAG 방식으로 계산합니다.
+                  </p>
+                </div>
+              </div>
+              {liveFormulaMetrics.length > 0 && (
+                <div className="grid grid-cols-5 gap-2 mt-3">
+                  {liveFormulaMetrics.map((metric) => (
+                    <div key={metric.metric_key} className="rounded-lg bg-gray-50 px-3 py-2">
+                      <p className="text-[11px] text-gray-500 truncate">{metric.label || metric.metric_name_ko || metric.metric_key}</p>
+                      <p className="text-sm font-semibold text-gray-950 tabular-nums">
+                        {typeof metric.value === 'number'
+                          ? metric.metric_key === 'noi_annual' || metric.metric_key === 'annual_debt_service'
+                            ? `${Math.round(metric.value / 10000).toLocaleString('ko-KR')}만`
+                            : metric.metric_key === 'dscr'
+                              ? `${metric.value.toFixed(2)}x`
+                              : `${metric.value.toFixed(2)}%`
+                          : '-'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 relative">
               {/* Tabs */}
               <div className="h-[46px] flex border-b border-border flex-shrink-0">

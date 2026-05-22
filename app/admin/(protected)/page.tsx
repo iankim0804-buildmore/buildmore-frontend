@@ -9,7 +9,6 @@ import { UsageSection } from './components/usage-section'
 import { DataLayerSection } from './components/data-layer-section'
 import { DeltaSection } from './components/delta-section'
 import { DataCoverageSection } from './components/data-coverage-section'
-import { RoadmapSection } from './components/roadmap-section'
 import { DevLogSection } from './components/dev-log-section'
 
 export default function AdminDashboardPage() {
@@ -160,8 +159,6 @@ export default function AdminDashboardPage() {
         <DeltaSection onRefresh={fetchData} />
 
         <DataCoverageSection />
-
-        <RoadmapSection />
       </main>
     </div>
   )

@@ -51,6 +51,11 @@ interface MetricCatalogMetric {
   status?: string | null
   reason?: string | null
   source_status?: string | null
+  source_type?: string | null
+  requires?: string[] | null
+  user_required?: string[] | null
+  api_connection_label?: string | null
+  source_apis?: SourceApiStatus[] | null
   availability_basis?: string | null
   stored_count?: number | null
   probe_value_present?: boolean | null
@@ -103,8 +108,24 @@ interface SourceCollectorRecipe {
   status?: string | null
   reason?: string | null
   source_status?: string | null
+  source_type?: string | null
+  requires?: string[] | null
+  user_required?: string[] | null
+  api_connection_label?: string | null
+  source_apis?: SourceApiStatus[] | null
   availability_basis?: string | null
   probe_value_present?: boolean | null
+}
+
+interface SourceApiStatus {
+  source_key?: string
+  provider?: string
+  endpoint?: string
+  official_url?: string
+  required_keys?: string[]
+  label?: string
+  reason?: string
+  source_status?: string
 }
 
 interface SourceCollectorCategory {
@@ -407,6 +428,7 @@ function representativeMetrics(category: SourceCollectorCategory): string {
 }
 
 function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
+  if (recipe.api_connection_label) return recipe.api_connection_label
   const liveStatus = recipe.source_status || recipe.status
   if (liveStatus === 'api_alive' || liveStatus === 'active') return 'API 연결됨'
   if (liveStatus === 'api_no_value') return '응답값 없음'
@@ -455,6 +477,11 @@ function catalogMetricToRecipe(metric: MetricCatalogMetric): SourceCollectorReci
     status: metric.status || null,
     reason: metric.reason || null,
     source_status: metric.source_status || null,
+    source_type: metric.source_type || null,
+    requires: metric.requires || null,
+    user_required: metric.user_required || null,
+    api_connection_label: metric.api_connection_label || null,
+    source_apis: metric.source_apis || null,
     availability_basis: metric.availability_basis || null,
     probe_value_present: metric.probe_value_present || null,
   }
@@ -493,6 +520,12 @@ function mergeLiveCatalogCategories(
 }
 
 function inferRequiredKeys(recipe: SourceCollectorRecipe): string[] {
+  const explicitKeys = new Set<string>()
+  recipe.source_apis?.forEach((source) => {
+    source.required_keys?.forEach((key) => explicitKeys.add(key))
+  })
+  if (explicitKeys.size > 0) return Array.from(explicitKeys)
+
   const haystack = [
     recipe.provider,
     recipe.source_key,
@@ -640,6 +673,29 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                               <Database className="h-3.5 w-3.5 shrink-0" />
                               <span className="truncate">제공처 {sourceProviderLabel(recipe)}</span>
                             </div>
+                            {recipe.source_apis && recipe.source_apis.length > 0 ? (
+                              <div className="rounded-md border border-sidebar-border bg-background/30 p-2">
+                                <div className="mb-1 font-semibold text-sidebar-foreground">API/산식 원천</div>
+                                <div className="space-y-1">
+                                  {recipe.source_apis.map((source) => (
+                                    <div key={`${source.source_key}-${source.provider}`} className="leading-4">
+                                      <span>{source.provider || source.source_key}</span>
+                                      {source.label ? <span className="ml-1 text-muted-foreground">· {source.label}</span> : null}
+                                      {source.official_url ? (
+                                        <a
+                                          href={source.official_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="ml-1 text-sky-600 hover:underline"
+                                        >
+                                          사이트
+                                        </a>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                             <div className="flex items-center gap-1.5">
                               <KeyRound className="h-3.5 w-3.5 shrink-0" />
                               <span className="truncate">필요 KEY {requiredKeys.length ? requiredKeys.join(', ') : '별도 키 없음/내부 산출'}</span>
