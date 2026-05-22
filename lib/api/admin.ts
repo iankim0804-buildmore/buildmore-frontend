@@ -22,14 +22,8 @@ export interface SchedulerJob {
   total_count_30d: number
 }
 
-export interface FailedSource {
-  name: string
-  error: string
-}
-
 export interface AdminScheduler {
   jobs: SchedulerJob[]
-  failed_sources: FailedSource[]
 }
 
 export interface WikiData {
