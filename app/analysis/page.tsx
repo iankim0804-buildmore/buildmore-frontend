@@ -103,6 +103,41 @@ interface RentalContext {
   computed_at?: string
 }
 
+interface CommercialMetric {
+  label: string
+  value: number | string | null
+  unit?: string
+  source?: string
+  status?: string
+}
+
+interface CommercialVitalityContext {
+  commercial_area?: {
+    trdar_cd?: string | null
+    name?: string | null
+    region_2depth?: string | null
+    region_3depth?: string | null
+    stat_year?: number | null
+    stat_quarter?: number | null
+  } | null
+  metrics?: Record<string, CommercialMetric>
+  axis_scores?: Record<string, number>
+  derived_features?: Record<string, number | string | null>
+  evidence?: string[]
+  missing_metrics?: string[]
+  insight?: {
+    headline?: string
+    area_type?: string
+    strengths?: string[]
+    weaknesses?: string[]
+    finance_impact?: string
+    next_actions?: string[]
+    confidence_note?: string
+    llm_status?: string
+    model?: string
+  } | null
+}
+
 interface SearchHistoryItem {
   address: string
   timestamp: number
@@ -259,7 +294,7 @@ export default function AnalysisPage() {
   
   // Table tabs - 인사이트 중심 탭
   const [activeTab, setActiveTab] = useState('매수 판단')
-  const tabs = ['매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션']
+  const tabs = ['매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션', '상권분석']
   
   // Deal Insights 데이터
   const dealInsights: Record<string, DealInsight> = {
@@ -370,6 +405,8 @@ export default function AnalysisPage() {
   const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('가격협상')
   const [rentalContext, setRentalContext] = useState<RentalContext | null>(null)
   const [isRentalContextLoading, setIsRentalContextLoading] = useState(false)
+  const [commercialContext, setCommercialContext] = useState<CommercialVitalityContext | null>(null)
+  const [isCommercialContextLoading, setIsCommercialContextLoading] = useState(false)
 
   // ============================================================
   // CALCULATION LOGIC
@@ -468,6 +505,40 @@ export default function AnalysisPage() {
       window.clearTimeout(timer)
     }
   }, [address, addressConfirmed, price, loan, rate, rent, deposit, vacancyRate])
+
+  useEffect(() => {
+    const trimmedAddress = address.trim()
+    if (!trimmedAddress || !addressConfirmed) return
+
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setIsCommercialContextLoading(true)
+      try {
+        const response = await fetch('/api/commercial-vitality/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({ address: trimmedAddress, use_llm: true }),
+        })
+        if (!response.ok) throw new Error('commercial vitality context failed')
+        const data: CommercialVitalityContext = await response.json()
+        setCommercialContext(data)
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setCommercialContext((prev) => prev)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCommercialContextLoading(false)
+        }
+      }
+    }, 320)
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [address, addressConfirmed])
 
   // Simulate API connection
   useEffect(() => {
@@ -1129,6 +1200,30 @@ BuildMore 판단:
   const liveFormulaMetrics = rentalMetrics.filter((metric) =>
     ['noi_annual', 'dscr', 'cap_rate', 'rental_yield_net', 'annual_debt_service'].includes(metric.metric_key),
   )
+  const commercialMetrics = commercialContext?.metrics || {}
+  const commercialScores = commercialContext?.axis_scores || {}
+  const commercialInsight = commercialContext?.insight
+  const readyCommercialMetricCount = Object.values(commercialMetrics).filter((metric) => metric.status === 'ready').length
+  const totalCommercialMetricCount = Object.keys(commercialMetrics).length || 24
+  const formatCommercialMetric = (key: string) => {
+    const metric = commercialMetrics[key]
+    if (!metric || metric.value === null || metric.value === undefined || metric.value === '') return '-'
+    if (typeof metric.value === 'number') {
+      const formatted = Math.abs(metric.value) >= 1000
+        ? Math.round(metric.value).toLocaleString('ko-KR')
+        : metric.value.toFixed(metric.value % 1 === 0 ? 0 : 1)
+      return `${formatted}${metric.unit ? ` ${metric.unit}` : ''}`
+    }
+    return `${metric.value}${metric.unit ? ` ${metric.unit}` : ''}`
+  }
+  const scoreEntries = [
+    ['매출력', commercialScores.sales_power],
+    ['유동성', commercialScores.foot_traffic],
+    ['주거수요', commercialScores.resident_demand],
+    ['업무수요', commercialScores.worker_demand],
+    ['소비력', commercialScores.consumption_power],
+    ['안정성', commercialScores.stability],
+  ].filter(([, value]) => typeof value === 'number') as [string, number][]
 
   // ============================================================
   // RENDER
@@ -2057,6 +2152,111 @@ BuildMore 판단:
                 {/* 리스크와 다음 액션 */}
                 {activeTab === '리스크와 다음 액션' && (
                   <InsightPanel insight={currentInsights?.riskAction || dealInsights.riskAction} />
+                )}
+
+                {/* 상권분석 */}
+                {activeTab === '상권분석' && (
+                  <div className="space-y-4">
+                    <div className="rounded-[8px] border border-gray-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-bold text-gray-500 uppercase">BuildMore Commercial Insight</p>
+                          <h3 className="mt-1 text-xl font-bold text-gray-950 break-keep">
+                            {commercialInsight?.headline || '주소 기반 상권 데이터를 불러오는 중입니다.'}
+                          </h3>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep">
+                            {commercialInsight?.finance_impact || '상권 매출, 유동인구, 배후수요, 소비, 안정성 지표를 종합해 금융 실행 관점의 해석을 생성합니다.'}
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                          {isCommercialContextLoading ? '분석 중' : `ready ${readyCommercialMetricCount}/${totalCommercialMetricCount}`}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                        <span className="rounded-full bg-gray-50 px-2.5 py-1">
+                          {commercialContext?.commercial_area?.name || commercialContext?.commercial_area?.region_3depth || '상권 확인 중'}
+                        </span>
+                        <span className="rounded-full bg-gray-50 px-2.5 py-1">
+                          {commercialInsight?.area_type || commercialContext?.derived_features?.commercial_area_type || '유형 산정 중'}
+                        </span>
+                        {commercialInsight?.llm_status && (
+                          <span className="rounded-full bg-gray-50 px-2.5 py-1">
+                            {commercialInsight.llm_status === 'generated' ? 'LLM 해석' : '규칙 기반 보조해석'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {scoreEntries.length > 0 && (
+                      <div className="grid grid-cols-6 gap-2">
+                        {scoreEntries.map(([label, value]) => (
+                          <div key={label} className="rounded-[8px] border border-gray-100 p-3">
+                            <p className="text-[11px] font-semibold text-gray-500">{label}</p>
+                            <p className="mt-1 text-lg font-bold tabular-nums text-gray-950">{Math.round(value)}</p>
+                            <div className="mt-2 h-1.5 rounded-full bg-gray-100">
+                              <div className="h-full rounded-full bg-gray-950" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="rounded-[8px] border border-gray-200 p-4">
+                        <p className="text-sm font-bold text-gray-950">장점</p>
+                        <div className="mt-3 space-y-2">
+                          {(commercialInsight?.strengths || ['상권 데이터를 확보하면 강점이 자동 해석됩니다.']).map((item, index) => (
+                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-[8px] border border-gray-200 p-4">
+                        <p className="text-sm font-bold text-gray-950">약점/확인사항</p>
+                        <div className="mt-3 space-y-2">
+                          {(commercialInsight?.weaknesses || ['누락 지표와 API 상태를 확인해야 합니다.']).map((item, index) => (
+                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        ['상권 월매출', 'area_monthly_sales'],
+                        ['일 유동인구', 'floating_population_daily'],
+                        ['직장인구', 'worker_population'],
+                        ['상주인구', 'resident_population'],
+                        ['주말 매출 비중', 'weekend_sales_ratio'],
+                        ['상권변화지표', 'commercial_change_index'],
+                        ['집객시설 수', 'anchor_facility_count'],
+                        ['개폐업 스프레드', 'map_open_close_spread'],
+                      ].map(([label, key]) => (
+                        <div key={key} className="rounded-[8px] bg-gray-50 px-3 py-2">
+                          <p className="text-[11px] font-semibold text-gray-500">{label}</p>
+                          <p className="mt-1 text-sm font-bold text-gray-950 tabular-nums">{formatCommercialMetric(key)}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="rounded-[8px] border border-gray-200 p-4">
+                      <p className="text-sm font-bold text-gray-950">근거와 다음 액션</p>
+                      <div className="mt-3 grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          {(commercialContext?.evidence || []).slice(0, 5).map((item, index) => (
+                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
+                          ))}
+                        </div>
+                        <div className="space-y-2">
+                          {(commercialInsight?.next_actions || []).slice(0, 4).map((item, index) => (
+                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">✓ {item}</p>
+                          ))}
+                          {commercialInsight?.confidence_note && (
+                            <p className="pt-1 text-xs leading-relaxed text-gray-500 break-keep">{commercialInsight.confidence_note}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
