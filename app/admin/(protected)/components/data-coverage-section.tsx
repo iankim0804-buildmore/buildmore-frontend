@@ -541,14 +541,14 @@ function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
   return recipe.provider || '내부 산출/카탈로그'
 }
 
-function catalogMetricToRecipe(metric: MetricCatalogMetric): SourceCollectorRecipe {
+function catalogMetricToRecipe(metric: MetricCatalogMetric, categoryKey: string): SourceCollectorRecipe {
   return {
     source_key: metric.metric_key,
     source_name: metric.metric_name_ko || metric.metric_key,
     provider: metric.data_source || null,
     endpoint: metric.data_source || null,
     metric_key: metric.metric_key,
-    metric_category: 'collateral_value',
+    metric_category: categoryKey,
     refresh_frequency: metric.collection_frequency || null,
     collector_state: metric.is_available ? 'active' : 'catalog_only',
     snapshot_count: metric.stored_count || 0,
@@ -574,16 +574,18 @@ function mergeLiveCatalogCategories(
   categories: SourceCollectorCategory[],
   catalog: MetricCatalogResponse | null,
 ): SourceCollectorCategory[] {
-  const collateralCatalog = catalog?.categories?.find((category) => category.category_code === 'A')
-  if (!collateralCatalog) return categories
+  if (!catalog?.categories?.length) return categories
+
+  const catalogByCode = new Map(catalog.categories.map((category) => [category.category_code, category]))
 
   return categories.map((category) => {
-    if (category.category_key !== 'collateral_value') return category
+    const liveCatalog = catalogByCode.get(category.category_code)
+    if (!liveCatalog) return category
 
-    const recipes = collateralCatalog.metrics
+    const recipes = liveCatalog.metrics
       .slice()
       .sort((a, b) => (a.priority || 999) - (b.priority || 999))
-      .map(catalogMetricToRecipe)
+      .map((metric) => catalogMetricToRecipe(metric, category.category_key))
     const activeCount = recipes.filter((recipe) => recipe.is_available).length
     const status = activeCount === 0
       ? 'catalog_only'
@@ -594,7 +596,7 @@ function mergeLiveCatalogCategories(
     return {
       ...category,
       status,
-      configured_recipe_count: collateralCatalog.total,
+      configured_recipe_count: liveCatalog.total,
       active_collector_count: activeCount,
       recipes,
       frequencies: Array.from(new Set(recipes.map((recipe) => recipe.refresh_frequency || '-'))),
