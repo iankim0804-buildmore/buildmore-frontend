@@ -433,33 +433,108 @@ function representativeMetrics(category: SourceCollectorCategory): string {
     .join(', ') || '-'
 }
 
-function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
-  if (recipe.api_connection_label) return recipe.api_connection_label
+type ApiStatusKind =
+  | 'api_connected'
+  | 'api_no_response'
+  | 'api_manual_required'
+  | 'not_implemented'
+  | 'internal_ready'
+  | 'internal_incomplete'
+  | 'unknown'
+
+interface ApiStatusRule {
+  kind: ApiStatusKind
+  label: string
+  className: string
+  description: string
+}
+
+const API_STATUS_RULES: ApiStatusRule[] = [
+  {
+    kind: 'api_connected',
+    label: 'API 연결됨',
+    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600',
+    description: '연결 코드와 KEY가 모두 있고 현재 API 신호가 정상 응답합니다.',
+  },
+  {
+    kind: 'api_no_response',
+    label: 'API 응답없음',
+    className: 'border-sky-500/30 bg-sky-500/10 text-sky-600',
+    description: '연결 코드와 KEY는 있으나 현재 API가 응답하지 않거나 값이 없습니다.',
+  },
+  {
+    kind: 'api_manual_required',
+    label: 'API 수동연결필요',
+    className: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
+    description: '연결 코드는 있으나 KEY 또는 필수 환경값이 아직 입력되지 않았습니다.',
+  },
+  {
+    kind: 'not_implemented',
+    label: '미구현',
+    className: 'border-border bg-muted text-muted-foreground',
+    description: '아직 API 연결 코드가 구현되어 있지 않습니다.',
+  },
+  {
+    kind: 'internal_ready',
+    label: '내부산출값',
+    className: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
+    description: '사용자 입력값 또는 연결된 세부지표 값으로 산출 가능하며 입력 경로가 구현되어 있습니다.',
+  },
+  {
+    kind: 'internal_incomplete',
+    label: '내부산출값',
+    className: 'border-border bg-muted text-muted-foreground',
+    description: '산출식은 있으나 필요한 입력 경로 일부가 불안정하거나 아직 미구현입니다.',
+  },
+]
+
+function statusRule(kind: ApiStatusKind): ApiStatusRule {
+  return API_STATUS_RULES.find((rule) => rule.kind === kind) || {
+    kind: 'unknown',
+    label: 'API 확인필요',
+    className: 'border-border bg-muted text-muted-foreground',
+    description: '백엔드 상태 신호를 더 확인해야 합니다.',
+  }
+}
+
+function hasLiveApi(recipe: SourceCollectorRecipe): boolean {
+  if (recipe.source_status === 'api_alive') return true
+  if (recipe.api_connection_label?.includes('살아') || recipe.api_connection_label?.includes('연결성공')) return true
+  return Boolean(recipe.source_apis?.some((source) => source.source_status === 'api_alive' || source.label?.includes('살아')))
+}
+
+function isInternalMetric(recipe: SourceCollectorRecipe): boolean {
+  return (
+    recipe.source_type === 'derived_formula'
+    || recipe.source_status === 'calculation_engine_available'
+    || recipe.source_apis?.some((source) => source.source_key === 'derived_formula' || source.endpoint === 'internal:rental_profitability_service')
+    || recipe.api_connection_label === '내부 산출/수동 원천'
+  )
+}
+
+function recipeStatusKind(recipe: SourceCollectorRecipe): ApiStatusKind {
   const liveStatus = recipe.source_status || recipe.status
-  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'API 살아있음'
-  if (liveStatus === 'api_no_value') return '응답값 없음'
-  if (liveStatus === 'api_dead') return '연결실패'
-  if (liveStatus === 'api_key_required') return '연결실패'
-  if (liveStatus === 'dependency_missing') return '의존 지표 필요'
-  if (liveStatus === 'manual_required') return '수동 필요'
-  if (liveStatus === 'not_implemented') return '미구현'
-  if (recipe.collector_state === 'active') return 'API 살아있음'
-  if (recipe.collector_state === 'failed') return '연결실패'
-  if (recipe.collector_state === 'disabled') return 'API 비활성'
-  if (recipe.collector_state === 'catalog_only' || recipe.collector_state === 'not_configured') return 'API 확인불가'
-  return recipe.collector_state ? 'API 확인필요' : 'API 확인불가'
+  if (liveStatus === 'not_implemented' || recipe.collector_state === 'not_configured') return 'not_implemented'
+  if (isInternalMetric(recipe)) {
+    return liveStatus === 'calculation_engine_available'
+      || liveStatus === 'snapshot_available'
+      || liveStatus === 'table_available'
+      || liveStatus === 'active'
+      ? 'internal_ready'
+      : 'internal_incomplete'
+  }
+  if (hasLiveApi(recipe) || liveStatus === 'api_alive' || recipe.collector_state === 'active') return 'api_connected'
+  if (liveStatus === 'api_no_value' || liveStatus === 'api_dead' || recipe.collector_state === 'failed') return 'api_no_response'
+  if (liveStatus === 'api_key_required' || liveStatus === 'manual_required' || liveStatus === 'table_required') return 'api_manual_required'
+  return 'unknown'
+}
+
+function recipeStatusLabel(recipe: SourceCollectorRecipe): string {
+  return statusRule(recipeStatusKind(recipe)).label
 }
 
 function recipeStatusClass(recipe: SourceCollectorRecipe): string {
-  const liveStatus = recipe.source_status || recipe.status
-  if (liveStatus === 'api_alive' || liveStatus === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
-  if (liveStatus === 'api_no_value' || liveStatus === 'dependency_missing') return 'border-sky-500/30 bg-sky-500/10 text-sky-600'
-  if (liveStatus === 'api_dead') return 'border-red-500/30 bg-red-500/10 text-red-600'
-  if (liveStatus === 'api_key_required' || liveStatus === 'manual_required' || liveStatus === 'not_implemented') return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
-  if (recipe.collector_state === 'active') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
-  if (recipe.collector_state === 'catalog_only') return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
-  if (recipe.collector_state === 'failed') return 'border-red-500/30 bg-red-500/10 text-red-600'
-  return 'border-border bg-muted text-muted-foreground'
+  return statusRule(recipeStatusKind(recipe)).className
 }
 
 function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
@@ -793,6 +868,32 @@ function DiscoveryPanel({ discoveries }: { discoveries: SourceFieldDiscoveryResp
   )
 }
 
+function ApiStatusLegend() {
+  return (
+    <div className="mt-3 rounded-md border border-sidebar-border bg-background/20 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold text-sidebar-foreground">API 상태창 인덱스 범례</div>
+        <div className="text-[11px] text-muted-foreground">세부지표 연결상황 공통 표시규칙</div>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {API_STATUS_RULES.map((rule) => (
+          <div key={rule.kind} className="rounded-md border border-sidebar-border bg-card p-2.5">
+            <div className="mb-1 flex items-center gap-2">
+              <Badge variant="outline" className={`shrink-0 ${rule.className}`}>
+                {rule.label}
+              </Badge>
+              <span className="text-[11px] text-muted-foreground">
+                {rule.kind === 'internal_ready' ? '입력 경로 정상' : rule.kind === 'internal_incomplete' ? '입력 경로 점검' : ''}
+              </span>
+            </div>
+            <p className="text-[11px] leading-4 text-muted-foreground">{rule.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function DataCoverageSection() {
   const [payload, setPayload] = useState<CoveragePayload | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -997,6 +1098,8 @@ export function DataCoverageSection() {
                   <div className="mb-1 font-semibold text-sidebar-foreground">중복 처리 정책</div>
                   {collectors.runner.batch_policy}
                 </div>
+
+                <ApiStatusLegend />
               </div>
 
               <CategoryGrid categories={sortedCategories} />
