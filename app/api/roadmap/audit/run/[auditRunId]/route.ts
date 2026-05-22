@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const _rawUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
 const BACKEND_URL = (_rawUrl && !_rawUrl.includes('ssmrdesign'))
   ? _rawUrl
-  : 'https://buildmore-backend.replit.app'
+  : 'https://api.buildmore.co.kr'
 
 export async function GET(
   _request: NextRequest,

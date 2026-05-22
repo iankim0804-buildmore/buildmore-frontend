@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'https://buildmore-backend.replit.app'
+const BACKEND_URL = process.env.BACKEND_URL || 'https://api.buildmore.co.kr'
 
 export async function GET(request: NextRequest) {
   try {

@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const _rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
   const adminApiUrl = (_rawAdminUrl && !_rawAdminUrl.includes('ssmrdesign'))
     ? _rawAdminUrl
-    : 'https://buildmore-backend.replit.app'
+    : 'https://api.buildmore.co.kr'
   const internalKey = process.env.ADMIN_INTERNAL_KEY
   const adminToken = process.env.ADMIN_TOKEN
 

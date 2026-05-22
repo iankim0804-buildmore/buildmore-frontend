@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const BACKEND = (
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_ADMIN_API_URL ||
-  'https://buildmore-backend.replit.app'
+  'https://api.buildmore.co.kr'
 ).replace(/\/$/, '')
 
 export async function POST(

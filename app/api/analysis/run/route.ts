@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runDealAnalysis } from '@/lib/analysis/dealAnalysisEngine'
 
 // 백엔드 API 설정
-const BACKEND_URL = process.env.BACKEND_URL || 'https://buildmore-backend.replit.app'
+const BACKEND_URL = process.env.BACKEND_URL || 'https://api.buildmore.co.kr'
 
 export async function POST(request: NextRequest) {
   try {

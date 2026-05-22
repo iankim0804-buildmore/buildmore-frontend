@@ -5,7 +5,7 @@ function adminApiUrl() {
   const rawAdminUrl = process.env.NEXT_PUBLIC_ADMIN_API_URL || ''
   return rawAdminUrl && !rawAdminUrl.includes('ssmrdesign')
     ? rawAdminUrl
-    : 'https://buildmore-backend.replit.app'
+    : 'https://api.buildmore.co.kr'
 }
 
 async function requireAdminProxyConfig() {

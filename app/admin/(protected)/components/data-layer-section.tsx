@@ -1,102 +1,31 @@
 'use client'
 
 import type {
-  FrontendDataSource,
-  FrontendPlannedSource,
   FrontendSystemInfo,
 } from '@/lib/api/admin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   CheckCircle2,
   XCircle,
-  Clock,
   Server,
   Database,
   Globe,
 } from 'lucide-react'
 
 interface DataLayerSectionProps {
-  dataSources: FrontendDataSource[]
-  plannedSources: FrontendPlannedSource[]
   systemInfo: FrontendSystemInfo
 }
 
 export function DataLayerSection({
-  dataSources,
-  plannedSources,
   systemInfo,
 }: DataLayerSectionProps) {
-  const activeSources = dataSources.filter((s) => s.isActive)
-  const inactiveSources = dataSources.filter((s) => !s.isActive)
-
   return (
     <section>
       <h2 className="mb-4 text-lg font-semibold text-sidebar-foreground">
         데이터 레이어
       </h2>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-sidebar-border bg-sidebar-accent py-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-sidebar-foreground">
-              연결된 소스
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {activeSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  <span className="text-sidebar-foreground">{source.name}</span>
-                </div>
-              ))}
-              {inactiveSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <XCircle className="h-4 w-4 shrink-0 text-red-400" />
-                  <span className="text-muted-foreground">
-                    {source.name}{' '}
-                    <span className="text-xs">(비활성화)</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-sidebar-border bg-sidebar-accent py-4">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-sidebar-foreground">
-              연결 예정
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {plannedSources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <Clock className="h-4 w-4 shrink-0 text-amber-500" />
-                  <span className="text-muted-foreground">
-                    {source.name}{' '}
-                    <span className="text-xs text-amber-500">
-                      ({source.version})
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-sidebar-border bg-sidebar-accent py-4">
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center gap-2">

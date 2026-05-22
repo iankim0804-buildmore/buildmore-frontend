@@ -151,8 +151,6 @@ export default function AdminDashboardPage() {
         />
 
         <DataLayerSection
-          dataSources={data.dataSources}
-          plannedSources={data.plannedSources}
           systemInfo={data.systemInfo}
         />
 

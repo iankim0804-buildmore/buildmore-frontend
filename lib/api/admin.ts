@@ -387,12 +387,6 @@ export interface FrontendSystemStatus {
   }
 }
 
-export interface FrontendPlannedSource {
-  id: string
-  name: string
-  version: string
-}
-
 export interface FrontendSystemInfo {
   backend: {
     url: string
@@ -420,7 +414,6 @@ export interface AdminDashboardData {
   wikiUpdates: FrontendWikiUpdate[]
   usageStats: FrontendUsageStats
   recentAnalyses: FrontendRecentAnalysis[]
-  plannedSources: FrontendPlannedSource[]
   systemInfo: FrontendSystemInfo
   lastUpdated: string
 }
@@ -649,17 +642,11 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       responseTime: analysis.response_time_ms,
     }))
 
-  const plannedSources: FrontendPlannedSource[] = [
-    { id: '1', name: '국토부 실거래가 지표', version: 'V1.2' },
-    { id: '2', name: '한국은행 ECOS 금리', version: 'V1.2' },
-    { id: '3', name: 'KOSIS 통계청', version: 'V1.3' },
-  ]
-
   const systemInfo: FrontendSystemInfo = {
     backend: {
-      url: 'buildmore-backend.replit.app',
-      spec: 'Reserved VM · 0.5 vCPU / 2 GiB · Asia region',
-      region: 'Asia',
+      url: 'api.buildmore.co.kr',
+      spec: 'Gabia VPS · Ubuntu · buildmore-web + scheduler',
+      region: 'Korea',
       status: data.overview?.server_status === 'ok' ? 'ok' : 'error',
     },
     database: {
@@ -682,7 +669,6 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
     wikiUpdates,
     usageStats,
     recentAnalyses,
-    plannedSources,
     systemInfo,
     lastUpdated: formatKST(now),
   }
