@@ -89,6 +89,7 @@ interface RentalContext {
   status: string
   ready_metrics?: number
   waiting_user_input?: string[]
+  waiting_user_input_labels?: string[]
   source_groups?: Record<string, string[]>
   api_probe?: Record<string, { label?: string; reason?: string; source_status?: string }>
   required_api_sites?: Array<{
@@ -215,6 +216,9 @@ export default function AnalysisPage() {
   const [isCtaOpen, setIsCtaOpen] = useState(false)
   const [chatProvidedDealFields, setChatProvidedDealFields] = useState<DealInputField[]>([])
   const [chatPendingDealValues, setChatPendingDealValues] = useState<Partial<Record<DealInputField, number>>>({})
+  const markDealFieldProvided = useCallback((field: DealInputField) => {
+    setChatProvidedDealFields(prev => prev.includes(field) ? prev : [...prev, field])
+  }, [])
   
   // ============================================================
   // B-3. SIDEBAR STATE (New)
@@ -459,20 +463,22 @@ export default function AnalysisPage() {
     const timer = window.setTimeout(async () => {
       setIsRentalContextLoading(true)
       try {
+        const rentalPayload: Record<string, string | number> = {
+          address: trimmedAddress,
+          vacancy_rate: vacancyRate,
+          operating_expense_ratio: 15,
+        }
+        if (chatProvidedDealFields.includes('price')) rentalPayload.purchase_price = Math.round(price * 100_000_000)
+        if (chatProvidedDealFields.includes('loan')) rentalPayload.loan_amount = Math.round(loan * 100_000_000)
+        if (chatProvidedDealFields.includes('rate')) rentalPayload.annual_interest_rate = rate
+        if (chatProvidedDealFields.includes('rent')) rentalPayload.monthly_rent = Math.round(rent * 10_000)
+        if (chatProvidedDealFields.includes('deposit')) rentalPayload.deposit = Math.round(deposit * 10_000)
+
         const response = await fetch('/api/rental-profitability/context', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
-          body: JSON.stringify({
-            address: trimmedAddress,
-            purchase_price: Math.round(price * 100_000_000),
-            loan_amount: Math.round(loan * 100_000_000),
-            annual_interest_rate: rate,
-            monthly_rent: Math.round(rent * 10_000),
-            deposit: Math.round(deposit * 10_000),
-            vacancy_rate: vacancyRate,
-            operating_expense_ratio: 15,
-          }),
+          body: JSON.stringify(rentalPayload),
         })
         if (!response.ok) throw new Error('rental context failed')
         const data: RentalContext = await response.json()
@@ -504,7 +510,7 @@ export default function AnalysisPage() {
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [address, addressConfirmed, price, loan, rate, rent, deposit, vacancyRate])
+  }, [address, addressConfirmed, price, loan, rate, rent, deposit, vacancyRate, chatProvidedDealFields])
 
   useEffect(() => {
     const trimmedAddress = address.trim()
@@ -1197,9 +1203,26 @@ BuildMore 판단:
   const externalApiStatus = Object.values(rentalContext?.api_probe || {})
     .filter((item) => item.label?.includes('API'))
     .map((item) => item.label)
-  const liveFormulaMetrics = rentalMetrics.filter((metric) =>
-    ['noi_annual', 'dscr', 'cap_rate', 'rental_yield_net', 'annual_debt_service'].includes(metric.metric_key),
-  )
+  const rentalMetricByKey = new globalThis.Map(rentalMetrics.map((metric) => [metric.metric_key, metric]))
+  const highlightedRentalMetrics = [
+    { key: 'noi_annual', label: '연간 NOI' },
+    { key: 'annual_debt_service', label: '연간 부채상환액' },
+    { key: 'dscr', label: '부채상환비율' },
+    { key: 'cap_rate', label: '캡레이트' },
+    { key: 'rental_yield_net', label: '임대수익률' },
+  ].map((item) => ({ ...item, metric: rentalMetricByKey.get(item.key) }))
+  const missingRentalInputLabels = rentalContext?.waiting_user_input_labels?.length
+    ? rentalContext.waiting_user_input_labels
+    : (rentalContext?.waiting_user_input || []).map((field) => ({
+        purchase_price: '매입가',
+        loan_amount: '대출금액',
+        annual_interest_rate: '금리',
+        monthly_rent: '월세',
+        deposit: '보증금',
+      }[field] || field))
+  const rentalInputGuide = missingRentalInputLabels.length > 0
+    ? `${missingRentalInputLabels.slice(0, 3).join(', ')}${missingRentalInputLabels.length > 3 ? ' 등' : ''}을 입력하면 NOI, DSCR, 수익률이 자동 계산됩니다.`
+    : '입력값 변경 시 NOI, DSCR, 수익률이 자동 갱신됩니다.'
   const commercialMetrics = commercialContext?.metrics || {}
   const commercialScores = commercialContext?.axis_scores || {}
   const commercialInsight = commercialContext?.insight
@@ -1688,15 +1711,15 @@ BuildMore 판단:
                 <div className="p-3 space-y-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">매입가격 (억원)</label>
-                    <NumField value={price} onChange={setPrice} step={0.1} decimals={1} displayDecimals={1} />
+                    <NumField value={price} onChange={(value) => { markDealFieldProvided('price'); setPrice(value) }} step={0.1} decimals={1} displayDecimals={1} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">대출금액 (억원)</label>
-                    <NumField value={loan} onChange={setLoan} step={0.1} isLoan={true} decimals={1} displayDecimals={1} />
+                    <NumField value={loan} onChange={(value) => { markDealFieldProvided('loan'); setLoan(value) }} step={0.1} isLoan={true} decimals={1} displayDecimals={1} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">금리 (%)</label>
-                    <NumField value={rate} onChange={setRate} step={0.01} decimals={2} />
+                    <NumField value={rate} onChange={(value) => { markDealFieldProvided('rate'); setRate(value) }} step={0.01} decimals={2} />
                   </div>
                   <div>
                     <div className="flex items-center justify-center gap-2">
@@ -1706,7 +1729,7 @@ BuildMore 판단:
                         max="100"
                         step="0.1"
                         value={ltv}
-                        onChange={(e) => setLoan((price * parseFloat(e.target.value)) / 100)}
+                        onChange={(e) => { markDealFieldProvided('loan'); setLoan((price * parseFloat(e.target.value)) / 100) }}
                         className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #1a1a1a 0%, #1a1a1a ${ltv}%, #f5f5f5 ${ltv}%, #f5f5f5 100%)`,
@@ -1727,11 +1750,11 @@ BuildMore 판단:
                 <div className="p-3 space-y-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">월세 (만원)</label>
-                    <NumField value={rent} onChange={setRent} step={10} />
+                    <NumField value={rent} onChange={(value) => { markDealFieldProvided('rent'); setRent(value) }} step={10} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">보증금 (만원)</label>
-                    <NumField value={deposit} onChange={setDeposit} step={100} />
+                    <NumField value={deposit} onChange={(value) => { markDealFieldProvided('deposit'); setDeposit(value) }} step={100} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">공실률</label>
@@ -1889,8 +1912,8 @@ BuildMore 판단:
           )}>
             <h1 className="text-[26px] font-extrabold text-foreground mb-4">분석 결과</h1>
 
-            {/* Top 3 cards */}
-            <div className="grid grid-cols-[1.7fr_0.8fr_0.95fr] gap-3 mb-3">
+            {/* Top result cards */}
+            <div className="grid min-w-[980px] grid-cols-[minmax(220px,1.05fr)_minmax(160px,0.75fr)_minmax(250px,0.9fr)_minmax(280px,1.05fr)] gap-3 mb-3">
               {/* DEAL SCORE */}
               <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col">
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -1962,6 +1985,25 @@ BuildMore 판단:
                 </div>
               </div>
 
+              {/* Insight cards */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { k: '연간 커버리지', v: `${dscr.toFixed(2)}x`, s: 'NOI / 연간 부채상환액', pop: '현재 NOI가 연간 부채상환액을 충분히 커버하는지 판단합니다.' },
+                  { k: '상권 강점', v: '합정 생활상권', s: '역세권 + 주거 유입 안정', pop: '합정역 접근성과 주거 기반 유입, 상업/F&B 수요가 겹치는 상권입니다.' },
+                  { k: '밸류에드', v: '조건부 가능', s: '임대 개선 여력 확인', pop: '리모델링, 업종 재구성, 임대료 재협상을 통해 수익성 개선 여지가 있습니다.' },
+                  { k: '핵심 리스크', v: '공실 · 도로화폭', s: `공실률 ${vacancyRate}%, 도로화폭 4m`, pop: '공실률과 접도 조건은 대출 심사와 매입가 협상에서 핵심 확인 항목입니다.', red: true },
+                ].map((item, i) => (
+                  <div key={i} className="bg-white border border-border rounded-[14px] p-3 hover:shadow-md transition-shadow group relative min-w-0">
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase mb-1 truncate">{item.k}</p>
+                    <p className={`text-[17px] font-semibold leading-tight mb-0.5 break-keep ${item.red ? 'text-red-600' : 'text-gray-950'}`}>{item.v}</p>
+                    <p className="text-[11px] text-muted-foreground leading-snug break-keep">{item.s}</p>
+                    <div className="absolute left-0 top-full mt-2 w-60 bg-white border border-border rounded-lg p-3 shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 text-xs">
+                      {item.pop}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               {/* Map */}
               <div className="bg-white border border-border rounded-[14px] p-3 flex flex-col h-full">
                 <div className="flex items-center justify-between mb-3">
@@ -2014,8 +2056,8 @@ BuildMore 판단:
               </div>
             </div>
 
-            {/* Insight cards */}
-            <div className="grid grid-cols-4 gap-2.5 mb-3">
+            {/* Legacy insight cards moved into top row */}
+            <div className="hidden">
               {[
                 { k: '연간 커버리지', v: `${dscr.toFixed(2)}x`, s: 'NOI / 연간 금융비용', pop: '현재 NOI가 연간 금융비용을 충분히 커버하지 못합니다.' },
                 { k: '상권 강점', v: '합정 생활상권', s: '역세권 + 주거 유입 안정', pop: '합정역 접근성, 주거 기반 유입, 팝업·F&B 수요가 겹치는 상권입니다.' },
@@ -2037,9 +2079,12 @@ BuildMore 판단:
             <div className="bg-white border border-border rounded-2xl p-4 mb-3">
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <p className="text-[15px] font-bold text-gray-950">임대수익성 실시간 산식</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[15px] font-bold text-gray-950">임대수익성 실시간 분석</p>
+                    <p className="text-[11px] text-gray-500 break-keep">{rentalInputGuide}</p>
+                  </div>
                   <p className="text-xs text-gray-500 mt-1 break-keep">
-                    주소 기반 선조회값과 사용자 입력값을 합쳐 NOI, DSCR, Cap Rate를 자동 갱신합니다.
+                    주소 기반 선조회값보다 사용자가 입력한 매입가, 대출금액, 월세, 금리를 우선 반영합니다.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-[11px]">
@@ -2049,7 +2094,7 @@ BuildMore 판단:
                   </span>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="hidden">
                 <div className="border border-gray-100 rounded-lg p-3">
                   <p className="text-[11px] text-gray-500 font-semibold mb-1">API 원천</p>
                   <p className="text-sm font-semibold text-gray-900">
@@ -2089,24 +2134,22 @@ BuildMore 판단:
                   </p>
                 </div>
               </div>
-              {liveFormulaMetrics.length > 0 && (
-                <div className="grid grid-cols-5 gap-2 mt-3">
-                  {liveFormulaMetrics.map((metric) => (
-                    <div key={metric.metric_key} className="rounded-lg bg-gray-50 px-3 py-2">
-                      <p className="text-[11px] text-gray-500 truncate">{metric.label || metric.metric_name_ko || metric.metric_key}</p>
-                      <p className="text-sm font-semibold text-gray-950 tabular-nums">
-                        {typeof metric.value === 'number'
-                          ? metric.metric_key === 'noi_annual' || metric.metric_key === 'annual_debt_service'
+              <div className="grid grid-cols-5 gap-2.5 mt-3">
+                  {highlightedRentalMetrics.map(({ key, label, metric }) => (
+                    <div key={key} className="rounded-[12px] bg-gray-50 border border-gray-100 px-3.5 py-3">
+                      <p className="text-[11px] font-semibold text-gray-500 truncate">{label}</p>
+                      <p className="mt-1 text-xl font-bold text-gray-950 tabular-nums">
+                        {typeof metric?.value === 'number'
+                          ? key === 'noi_annual' || key === 'annual_debt_service'
                             ? `${Math.round(metric.value / 10000).toLocaleString('ko-KR')}만`
-                            : metric.metric_key === 'dscr'
+                            : key === 'dscr'
                               ? `${metric.value.toFixed(2)}x`
                               : `${metric.value.toFixed(2)}%`
                           : '-'}
                       </p>
                     </div>
                   ))}
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 relative">
