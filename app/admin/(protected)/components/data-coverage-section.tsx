@@ -1065,33 +1065,35 @@ export function DataCoverageSection() {
                   </div>
                 </div>
 
-                <div className="grid gap-2 lg:grid-cols-6">
-                  {SOURCE_STEPS.map((step, index) => {
-                    const Icon = step.icon
-                    return (
-                      <div key={step.detail} className="relative">
-                        <div className="h-full rounded-md border border-sidebar-border/70 bg-sidebar/30 p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sky-500/10 text-sky-300">
-                              <Icon className="h-4 w-4" />
+                <div className="overflow-x-auto pb-2">
+                  <div className="flex min-w-max gap-3">
+                    {SOURCE_STEPS.map((step, index) => {
+                      const Icon = step.icon
+                      return (
+                        <div key={step.detail} className="relative w-[244px] shrink-0">
+                          <div className="h-full rounded-md border border-sidebar-border/70 bg-sidebar/30 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sky-500/10 text-sky-300">
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              {index < 3 ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                              ) : (
+                                <Clock3 className="h-4 w-4 text-amber-300" />
+                              )}
                             </div>
-                            {index < 3 ? (
-                              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                            ) : (
-                              <Clock3 className="h-4 w-4 text-amber-300" />
-                            )}
+                            <div className="mt-3 text-[11px] text-muted-foreground">STEP {index + 1}</div>
+                            <div className="mt-1 font-semibold text-sidebar-foreground">{step.label}</div>
+                            <div className="mt-1 font-mono text-[10px] text-muted-foreground">{step.detail}</div>
+                            <p className="mt-3 text-[11px] leading-4 text-muted-foreground">{step.description}</p>
                           </div>
-                          <div className="mt-3 text-[11px] text-muted-foreground">STEP {index + 1}</div>
-                          <div className="mt-1 font-semibold text-sidebar-foreground">{step.label}</div>
-                          <div className="mt-1 font-mono text-[10px] text-muted-foreground">{step.detail}</div>
-                          <p className="mt-3 text-[11px] leading-4 text-muted-foreground">{step.description}</p>
+                          {index < SOURCE_STEPS.length - 1 && (
+                            <ArrowRight className="absolute -right-5 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                          )}
                         </div>
-                        {index < SOURCE_STEPS.length - 1 && (
-                          <ArrowRight className="absolute -right-4 top-1/2 z-10 hidden h-5 w-5 -translate-y-1/2 text-muted-foreground lg:block" />
-                        )}
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div className="mt-3 rounded-md border border-sidebar-border bg-background/20 p-3 text-[11px] text-muted-foreground">
