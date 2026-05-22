@@ -125,6 +125,28 @@ interface CommercialVitalityContext {
   axis_scores?: Record<string, number>
   derived_features?: Record<string, number | string | null>
   evidence?: string[]
+  admin_dong_industry_sales?: {
+    status?: string
+    message?: string | null
+    resolved_admin_dong?: {
+      adstrd_cd?: string | null
+      adstrd_cd_nm?: string | null
+      sigungu?: string | null
+      resolution?: string | null
+    }
+    top_industries?: Array<{
+      quarter?: string | null
+      adstrd_cd_nm?: string | null
+      industry_code?: string | null
+      industry_name?: string | null
+      sales_amount_krw?: number | null
+      sales_amount_manwon?: number | null
+      transaction_count?: number | null
+      weekend_sales_ratio?: number | null
+      female_sales_ratio?: number | null
+      dominant_age_group?: string | null
+    }>
+  }
   missing_metrics?: string[]
   insight?: {
     headline?: string
@@ -1226,6 +1248,8 @@ BuildMore 판단:
   const commercialMetrics = commercialContext?.metrics || {}
   const commercialScores = commercialContext?.axis_scores || {}
   const commercialInsight = commercialContext?.insight
+  const adminDongSales = commercialContext?.admin_dong_industry_sales
+  const topDongIndustries = adminDongSales?.top_industries || []
   const readyCommercialMetricCount = Object.values(commercialMetrics).filter((metric) => metric.status === 'ready').length
   const totalCommercialMetricCount = Object.keys(commercialMetrics).length || 24
   const formatCommercialMetric = (key: string) => {
@@ -2279,6 +2303,46 @@ BuildMore 판단:
                           <p className="mt-1 text-sm font-bold text-gray-950 tabular-nums">{formatCommercialMetric(key)}</p>
                         </div>
                       ))}
+                    </div>
+
+                    <div className="rounded-[8px] border border-gray-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-gray-950">행정동 업종별 추정매출 Top 5</p>
+                          <p className="mt-1 text-xs leading-relaxed text-gray-500 break-keep">
+                            {adminDongSales?.resolved_admin_dong?.adstrd_cd_nm
+                              ? `${adminDongSales.resolved_admin_dong.adstrd_cd_nm} 기준으로 서울시 상권분석서비스 데이터를 대기합니다.`
+                              : '주소의 행정동을 확인한 뒤 업종별 매출 상위 데이터를 대기합니다.'}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
+                          {topDongIndustries.length > 0 ? `ready ${topDongIndustries.length}/5` : (adminDongSales?.status || 'pending')}
+                        </span>
+                      </div>
+                      {topDongIndustries.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-5 gap-2">
+                          {topDongIndustries.slice(0, 5).map((item, index) => (
+                            <div key={`${item.industry_code || item.industry_name}-${index}`} className="rounded-[8px] bg-gray-50 px-3 py-3">
+                              <p className="text-[11px] font-semibold text-gray-500">{index + 1}위</p>
+                              <p className="mt-1 truncate text-sm font-bold text-gray-950" title={item.industry_name || ''}>
+                                {item.industry_name || '-'}
+                              </p>
+                              <p className="mt-1 text-[13px] font-semibold tabular-nums text-gray-800">
+                                {typeof item.sales_amount_manwon === 'number'
+                                  ? `${Math.round(item.sales_amount_manwon).toLocaleString('ko-KR')}만원`
+                                  : '-'}
+                              </p>
+                              <p className="mt-1 text-[11px] text-gray-500">
+                                {item.dominant_age_group ? `${item.dominant_age_group} 중심` : item.quarter || ''}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-[8px] bg-gray-50 px-3 py-3 text-sm text-gray-600 break-keep">
+                          {adminDongSales?.message || '아직 캐시된 행정동 매출 데이터가 없습니다. 백엔드 수집 후 이 영역에 상위 업종 매출이 표시됩니다.'}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-[8px] border border-gray-200 p-4">
