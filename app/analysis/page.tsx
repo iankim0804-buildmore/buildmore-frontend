@@ -319,8 +319,8 @@ export default function AnalysisPage() {
   const [showMapModal, setShowMapModal] = useState(false)
   
   // Table tabs - 인사이트 중심 탭
-  const [activeTab, setActiveTab] = useState('매수 판단')
-  const tabs = ['매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션', '상권분석']
+  const [activeTab, setActiveTab] = useState('임대수익성')
+  const tabs = ['임대수익성', '매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션', '상권분석']
   
   // Deal Insights 데이터
   const dealInsights: Record<string, DealInsight> = {
@@ -2091,91 +2091,14 @@ BuildMore 판단:
               ))}
             </div>
 
-            {/* Table */}
-            <div className="bg-white border border-border rounded-2xl p-4 mb-3">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[15px] font-bold text-gray-950">임대수익성 실시간 분석</p>
-                    <p className="text-[11px] text-gray-500 break-keep">{rentalInputGuide}</p>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 break-keep">
-                    주소 기반 선조회값보다 사용자가 입력한 매입가, 대출금액, 월세, 금리를 우선 반영합니다.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-[11px]">
-                  {isRentalContextLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />}
-                  <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-700">
-                    ready {rentalContext?.ready_metrics ?? 0}/{rentalMetrics.length || 21}
-                  </span>
-                </div>
-              </div>
-              <div className="hidden">
-                <div className="border border-gray-100 rounded-lg p-3">
-                  <p className="text-[11px] text-gray-500 font-semibold mb-1">API 원천</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {externalApiStatus.length > 0 ? Array.from(new Set(externalApiStatus)).join(' · ') : '대기'}
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
-                    서울 전월세가, R-ONE 임대동향 키가 연결되면 선조회 품질이 올라갑니다.
-                  </p>
-                </div>
-                <div className="border border-gray-100 rounded-lg p-3">
-                  <p className="text-[11px] text-gray-500 font-semibold mb-1">주소 선조회</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    prefetched {rentalStatusCounts.prefetched || 0}
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
-                    면적, 유사 임대료, 시장 임대료를 먼저 준비합니다.
-                  </p>
-                </div>
-                <div className="border border-gray-100 rounded-lg p-3">
-                  <p className="text-[11px] text-gray-500 font-semibold mb-1">입력 대기</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {(rentalContext?.waiting_user_input || []).length > 0
-                      ? (rentalContext?.waiting_user_input || []).join(', ')
-                      : '없음'}
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
-                    사용자가 입력하면 의존 산식이 즉시 다시 계산됩니다.
-                  </p>
-                </div>
-                <div className="border border-gray-100 rounded-lg p-3">
-                  <p className="text-[11px] text-gray-500 font-semibold mb-1">내부산식</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    ready {rentalStatusCounts.ready || 0}
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-1 break-keep">
-                    NOI, DSCR, 수익률, 손익분기 입주율을 DAG 방식으로 계산합니다.
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-5 gap-2.5 mt-3">
-                  {highlightedRentalMetrics.map(({ key, label, metric }) => (
-                    <div key={key} className="rounded-[12px] bg-gray-50 border border-gray-100 px-3.5 py-3">
-                      <p className="text-[11px] font-semibold text-gray-500 truncate">{label}</p>
-                      <p className="mt-1 text-xl font-bold text-gray-950 tabular-nums">
-                        {typeof metric?.value === 'number'
-                          ? key === 'noi_annual' || key === 'annual_debt_service'
-                            ? `${Math.round(metric.value / 10000).toLocaleString('ko-KR')}만`
-                            : key === 'dscr'
-                              ? `${metric.value.toFixed(2)}x`
-                              : `${metric.value.toFixed(2)}%`
-                          : '-'}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
             <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 relative">
               {/* Tabs */}
-              <div className="h-[46px] flex border-b border-border flex-shrink-0">
+              <div className="h-[46px] flex overflow-x-auto border-b border-border flex-shrink-0">
                 {tabs.map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-4 text-sm transition-colors ${
+                    className={`shrink-0 px-4 text-sm transition-colors ${
                       activeTab === tab 
                         ? 'text-foreground border-b-[3px] border-foreground font-medium' 
                         : 'text-muted-foreground hover:text-foreground'
@@ -2188,6 +2111,86 @@ BuildMore 판단:
               
               {/* Tab content */}
               <div className="flex-1 min-h-0 overflow-y-auto bg-white p-5">
+                {/* 임대수익성 */}
+                {activeTab === '임대수익성' && (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border bg-white p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                            BUILDMORE RENTAL PROFITABILITY
+                          </p>
+                          <h3 className="mt-2 text-xl font-semibold text-gray-950 break-keep">
+                            임대수익성 실시간 분석
+                          </h3>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep">
+                            {rentalInputGuide} 주소 기반 선조회값보다 사용자가 입력한 매입가, 대출금액, 월세, 금리를 우선 반영합니다.
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 text-[11px]">
+                          {isRentalContextLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />}
+                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                            ready {rentalContext?.ready_metrics ?? 0}/{rentalMetrics.length || 21}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                      {highlightedRentalMetrics.map(({ key, label, metric }) => (
+                        <div key={key} className="rounded-2xl border bg-white p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 truncate">{label}</p>
+                          <p className="mt-2 text-xl font-semibold text-gray-950 tabular-nums">
+                            {typeof metric?.value === 'number'
+                              ? key === 'noi_annual' || key === 'annual_debt_service'
+                                ? `${Math.round(metric.value / 10000).toLocaleString('ko-KR')}만`
+                                : key === 'dscr'
+                                  ? `${metric.value.toFixed(2)}x`
+                                  : `${metric.value.toFixed(2)}%`
+                              : '-'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                      <div className="rounded-2xl border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-950">
+                          계산 기준
+                        </h4>
+                        <ul className="mt-3 space-y-2">
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • 매입가, 대출금액, 월세, 보증금, 금리 입력값을 우선 적용합니다.
+                          </li>
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • NOI, DSCR, 캡레이트, 임대수익률은 조건 변경 시 다시 계산됩니다.
+                          </li>
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • 주소 선조회 데이터는 입력값이 비어 있을 때 보조값으로 사용합니다.
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="rounded-2xl border bg-white p-4">
+                        <h4 className="text-sm font-semibold text-gray-950">
+                          데이터 상태
+                        </h4>
+                        <ul className="mt-3 space-y-2">
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • API 원천: {externalApiStatus.length > 0 ? Array.from(new Set(externalApiStatus)).join(' · ') : '대기'}
+                          </li>
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • 주소 선조회: prefetched {rentalStatusCounts.prefetched || 0}
+                          </li>
+                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
+                            • 내부산식: ready {rentalStatusCounts.ready || 0}
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 매수 판단 */}
                 {activeTab === '매수 판단' && (
                   <InsightPanel insight={currentInsights?.buyDecision || dealInsights.buyDecision} />
