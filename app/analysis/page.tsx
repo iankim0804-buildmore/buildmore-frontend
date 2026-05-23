@@ -1246,31 +1246,23 @@ BuildMore 판단:
     ? `${missingRentalInputLabels.slice(0, 3).join(', ')}${missingRentalInputLabels.length > 3 ? ' 등' : ''}을 입력하면 NOI, DSCR, 수익률이 자동 계산됩니다.`
     : '입력값 변경 시 NOI, DSCR, 수익률이 자동 갱신됩니다.'
   const commercialMetrics = commercialContext?.metrics || {}
-  const commercialScores = commercialContext?.axis_scores || {}
-  const commercialInsight = commercialContext?.insight
   const adminDongSales = commercialContext?.admin_dong_industry_sales
   const topDongIndustries = adminDongSales?.top_industries || []
   const readyCommercialMetricCount = Object.values(commercialMetrics).filter((metric) => metric.status === 'ready').length
   const totalCommercialMetricCount = Object.keys(commercialMetrics).length || 24
-  const formatCommercialMetric = (key: string) => {
-    const metric = commercialMetrics[key]
-    if (!metric || metric.value === null || metric.value === undefined || metric.value === '') return '-'
-    if (typeof metric.value === 'number') {
-      const formatted = Math.abs(metric.value) >= 1000
-        ? Math.round(metric.value).toLocaleString('ko-KR')
-        : metric.value.toFixed(metric.value % 1 === 0 ? 0 : 1)
-      return `${formatted}${metric.unit ? ` ${metric.unit}` : ''}`
-    }
-    return `${metric.value}${metric.unit ? ` ${metric.unit}` : ''}`
+  const hasHangulFinalConsonant = (value: string) => {
+    const lastChar = value.trim().at(-1)
+    if (!lastChar) return false
+    const code = lastChar.charCodeAt(0)
+    if (code < 0xac00 || code > 0xd7a3) return false
+    return (code - 0xac00) % 28 !== 0
   }
-  const scoreEntries = [
-    ['매출력', commercialScores.sales_power],
-    ['유동성', commercialScores.foot_traffic],
-    ['주거수요', commercialScores.resident_demand],
-    ['업무수요', commercialScores.worker_demand],
-    ['소비력', commercialScores.consumption_power],
-    ['안정성', commercialScores.stability],
-  ].filter(([, value]) => typeof value === 'number') as [string, number][]
+  const topicJosa = (value: string) => (hasHangulFinalConsonant(value) ? '은' : '는')
+  const commercialSubject = address.trim() || '주소지'
+  const commercialZoneName = commercialContext?.commercial_area?.name || 'Z상권'
+  const commercialAreaType = 'F/G형'
+  const commercialCheckFactors = ['A', 'B', 'C']
+  const commercialHeadline = `${commercialSubject}${topicJosa(commercialSubject)} ${commercialZoneName}에 있는 ${commercialAreaType} 상권으로, ${commercialCheckFactors.join(', ')}를 함께 확인해야 합니다.`
 
   // ============================================================
   // RENDER
@@ -2229,80 +2221,13 @@ BuildMore 판단:
                         <div>
                           <p className="text-[11px] font-bold text-gray-500 uppercase">BuildMore Commercial Insight</p>
                           <h3 className="mt-1 text-xl font-bold text-gray-950 break-keep">
-                            {commercialInsight?.headline || '주소 기반 상권 데이터를 불러오는 중입니다.'}
+                            {commercialHeadline}
                           </h3>
-                          <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep">
-                            {commercialInsight?.finance_impact || '상권 매출, 유동인구, 배후수요, 소비, 안정성 지표를 종합해 금융 실행 관점의 해석을 생성합니다.'}
-                          </p>
                         </div>
                         <div className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
                           {isCommercialContextLoading ? '분석 중' : `ready ${readyCommercialMetricCount}/${totalCommercialMetricCount}`}
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                        <span className="rounded-full bg-gray-50 px-2.5 py-1">
-                          {commercialContext?.commercial_area?.name || commercialContext?.commercial_area?.region_3depth || '상권 확인 중'}
-                        </span>
-                        <span className="rounded-full bg-gray-50 px-2.5 py-1">
-                          {commercialInsight?.area_type || commercialContext?.derived_features?.commercial_area_type || '유형 산정 중'}
-                        </span>
-                        {commercialInsight?.llm_status && (
-                          <span className="rounded-full bg-gray-50 px-2.5 py-1">
-                            {commercialInsight.llm_status === 'generated' ? 'LLM 해석' : '규칙 기반 보조해석'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {scoreEntries.length > 0 && (
-                      <div className="grid grid-cols-6 gap-2">
-                        {scoreEntries.map(([label, value]) => (
-                          <div key={label} className="rounded-[8px] border border-gray-100 p-3">
-                            <p className="text-[11px] font-semibold text-gray-500">{label}</p>
-                            <p className="mt-1 text-lg font-bold tabular-nums text-gray-950">{Math.round(value)}</p>
-                            <div className="mt-2 h-1.5 rounded-full bg-gray-100">
-                              <div className="h-full rounded-full bg-gray-950" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-[8px] border border-gray-200 p-4">
-                        <p className="text-sm font-bold text-gray-950">장점</p>
-                        <div className="mt-3 space-y-2">
-                          {(commercialInsight?.strengths || ['상권 데이터를 확보하면 강점이 자동 해석됩니다.']).map((item, index) => (
-                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="rounded-[8px] border border-gray-200 p-4">
-                        <p className="text-sm font-bold text-gray-950">약점/확인사항</p>
-                        <div className="mt-3 space-y-2">
-                          {(commercialInsight?.weaknesses || ['누락 지표와 API 상태를 확인해야 합니다.']).map((item, index) => (
-                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        ['상권 월매출', 'area_monthly_sales'],
-                        ['일 유동인구', 'floating_population_daily'],
-                        ['직장인구', 'worker_population'],
-                        ['상주인구', 'resident_population'],
-                        ['주말 매출 비중', 'weekend_sales_ratio'],
-                        ['상권변화지표', 'commercial_change_index'],
-                        ['집객시설 수', 'anchor_facility_count'],
-                        ['개폐업 스프레드', 'map_open_close_spread'],
-                      ].map(([label, key]) => (
-                        <div key={key} className="rounded-[8px] bg-gray-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold text-gray-500">{label}</p>
-                          <p className="mt-1 text-sm font-bold text-gray-950 tabular-nums">{formatCommercialMetric(key)}</p>
-                        </div>
-                      ))}
                     </div>
 
                     <div className="rounded-[8px] border border-gray-200 p-4">
@@ -2311,8 +2236,8 @@ BuildMore 판단:
                           <p className="text-sm font-bold text-gray-950">행정동 업종별 추정매출 Top 5</p>
                           <p className="mt-1 text-xs leading-relaxed text-gray-500 break-keep">
                             {adminDongSales?.resolved_admin_dong?.adstrd_cd_nm
-                              ? `${adminDongSales.resolved_admin_dong.adstrd_cd_nm} 기준으로 서울시 상권분석서비스 데이터를 대기합니다.`
-                              : '주소의 행정동을 확인한 뒤 업종별 매출 상위 데이터를 대기합니다.'}
+                              ? `${adminDongSales.resolved_admin_dong.adstrd_cd_nm} 기준 상위 매출 업종입니다.`
+                              : '주소의 행정동을 확인한 뒤 상위 매출 업종을 표시합니다.'}
                           </p>
                         </div>
                         <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
@@ -2320,20 +2245,17 @@ BuildMore 판단:
                         </span>
                       </div>
                       {topDongIndustries.length > 0 ? (
-                        <div className="mt-3 grid grid-cols-5 gap-2">
+                        <div className="mt-3 divide-y divide-gray-100 overflow-hidden rounded-[8px] border border-gray-100">
                           {topDongIndustries.slice(0, 5).map((item, index) => (
-                            <div key={`${item.industry_code || item.industry_name}-${index}`} className="rounded-[8px] bg-gray-50 px-3 py-3">
-                              <p className="text-[11px] font-semibold text-gray-500">{index + 1}위</p>
-                              <p className="mt-1 truncate text-sm font-bold text-gray-950" title={item.industry_name || ''}>
+                            <div key={`${item.industry_code || item.industry_name}-${index}`} className="grid grid-cols-[44px_1fr_auto] items-center gap-3 bg-white px-3 py-3">
+                              <p className="text-sm font-bold text-gray-950 tabular-nums">{index + 1}</p>
+                              <p className="truncate text-sm font-bold text-gray-950" title={item.industry_name || ''}>
                                 {item.industry_name || '-'}
                               </p>
-                              <p className="mt-1 text-[13px] font-semibold tabular-nums text-gray-800">
+                              <p className="text-sm font-semibold tabular-nums text-gray-800">
                                 {typeof item.sales_amount_manwon === 'number'
                                   ? `${Math.round(item.sales_amount_manwon).toLocaleString('ko-KR')}만원`
                                   : '-'}
-                              </p>
-                              <p className="mt-1 text-[11px] text-gray-500">
-                                {item.dominant_age_group ? `${item.dominant_age_group} 중심` : item.quarter || ''}
                               </p>
                             </div>
                           ))}
@@ -2343,25 +2265,6 @@ BuildMore 판단:
                           {adminDongSales?.message || '아직 캐시된 행정동 매출 데이터가 없습니다. 백엔드 수집 후 이 영역에 상위 업종 매출이 표시됩니다.'}
                         </div>
                       )}
-                    </div>
-
-                    <div className="rounded-[8px] border border-gray-200 p-4">
-                      <p className="text-sm font-bold text-gray-950">근거와 다음 액션</p>
-                      <div className="mt-3 grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          {(commercialContext?.evidence || []).slice(0, 5).map((item, index) => (
-                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">• {item}</p>
-                          ))}
-                        </div>
-                        <div className="space-y-2">
-                          {(commercialInsight?.next_actions || []).slice(0, 4).map((item, index) => (
-                            <p key={index} className="text-sm leading-relaxed text-gray-700 break-keep">✓ {item}</p>
-                          ))}
-                          {commercialInsight?.confidence_note && (
-                            <p className="pt-1 text-xs leading-relaxed text-gray-500 break-keep">{commercialInsight.confidence_note}</p>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 )}
