@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, type SetStateAction } from "react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -1017,7 +1017,7 @@ BuildMore 판단:
     displayDecimals,
   }: {
     value: number
-    onChange: (v: number) => void
+    onChange: (v: SetStateAction<number>) => void
     step: number
     min?: number
     disabled?: boolean
@@ -1040,38 +1040,44 @@ BuildMore 판단:
     const valueRef = useRef(value)
     useEffect(() => { valueRef.current = value }, [value])
 
-    const stopRepeat = () => {
+    const stopRepeat = useCallback(() => {
       if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
       if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null }
-    }
+    }, [])
 
     useEffect(() => {
       window.addEventListener('pointerup', stopRepeat)
       window.addEventListener('pointercancel', stopRepeat)
+      window.addEventListener('touchend', stopRepeat)
       window.addEventListener('blur', stopRepeat)
       return () => {
         window.removeEventListener('pointerup', stopRepeat)
         window.removeEventListener('pointercancel', stopRepeat)
+        window.removeEventListener('touchend', stopRepeat)
         window.removeEventListener('blur', stopRepeat)
         stopRepeat()
       }
-    }, [])
+    }, [stopRepeat])
 
-    const startRepeat = (delta: number) => {
+    const changeBy = useCallback((delta: number) => {
+      onChange((prev) => {
+        const next = parseFloat(Math.max(min, prev + delta).toFixed(decimals || 0))
+        valueRef.current = next
+        return next
+      })
+    }, [decimals, min, onChange])
+
+    const startRepeat = useCallback((delta: number) => {
       stopRepeat()
       // 즉시 1회 적용
-      const next = parseFloat(Math.max(min, valueRef.current + delta).toFixed(decimals || 0))
-      onChange(next)
-      valueRef.current = next
+      changeBy(delta)
       // 500ms 대기 후 80ms 간격으로 반복
       pressTimer.current = setTimeout(() => {
         repeatInterval.current = setInterval(() => {
-          const stepped = parseFloat(Math.max(min, valueRef.current + delta).toFixed(decimals || 0))
-          valueRef.current = stepped
-          onChange(stepped)
+          changeBy(delta)
         }, 80)
       }, 500)
-    }
+    }, [changeBy, stopRepeat])
 
     // 입력 커밋 (blur / Enter)
     const commitEdit = () => {
