@@ -73,6 +73,16 @@ interface AddressProps {
   floors_above: number | null
 }
 
+interface BuildingRegistryTitle {
+  permit_year: number | null
+  use_approval_year: number | null
+  floor_area_ratio: number | null
+  building_coverage_ratio: number | null
+  total_floor_area_m2: number | null
+  source?: string
+  status?: string
+}
+
 interface RentalContextMetric {
   metric_key: string
   label?: string
@@ -252,6 +262,7 @@ export default function AnalysisPage() {
   const [address, setAddress] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [addressProps, setAddressProps] = useState<AddressProps | null>(null)
+  const [buildingRegistryTitle, setBuildingRegistryTitle] = useState<BuildingRegistryTitle | null>(null)
   const [isBootstrapping, setIsBootstrapping] = useState(false)
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
   const [isSuggestingAddress, setIsSuggestingAddress] = useState(false)
@@ -297,9 +308,6 @@ export default function AnalysisPage() {
   const [deposit, setDeposit] = useState(5000)
   const [vacancyRate, setVacancyRate] = useState(20) // 공실률: 긍정 10 / 적정 20 / 보수 30
   const [vacancySensitivity, setVacancySensitivity] = useState(20) // 공실민감도: 게이지바 별도 값
-  
-  // Panel C: 건축물대장 (read-only from API, using defaults)
-  const buildingData = { permitYear: 2000, approvalYear: 2001, registerArea: 420, maxGfa: 420 }
   
   // Panel D: 건축조건
   const [scenario, setScenario] = useState<'현황' | '증축' | '신축' | '리모델링'>('현황')
@@ -969,6 +977,7 @@ BuildMore 판단:
     setIsBootstrapping(true)
     setShowHistory(false)
     setAddressConfirmed(false)
+    setBuildingRegistryTitle(null)
     setSelectedAddressMeta(meta ?? null)
 
     try {
@@ -1002,6 +1011,7 @@ BuildMore 판단:
       const data = await resp.json()
 
       setAddressProps(data.address_props ?? null)
+      setBuildingRegistryTitle(data.building_registry_title ?? null)
       setRentalContext(data.rental_context ?? null)
       if (_lat && _lng) {
         setConfirmedLocation({ lat: _lat, lng: _lng })
@@ -1214,8 +1224,24 @@ BuildMore 판단:
     </div>
   )
 
-  // Get today's date
-  const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace('.', '')
+  const formatPercent = (value: number | null | undefined) => {
+    if (value == null || Number.isNaN(Number(value))) return '-'
+    return `${Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}%`
+  }
+  const formatArea = (value: number | null | undefined) => {
+    if (value == null || Number.isNaN(Number(value))) return '-'
+    return `${Math.round(Number(value)).toLocaleString('ko-KR')}㎡`
+  }
+  const hasBuildingRegistryTitle = Boolean(
+    buildingRegistryTitle
+    && [
+      buildingRegistryTitle.permit_year,
+      buildingRegistryTitle.use_approval_year,
+      buildingRegistryTitle.floor_area_ratio,
+      buildingRegistryTitle.building_coverage_ratio,
+      buildingRegistryTitle.total_floor_area_m2,
+    ].some((value) => value != null)
+  )
   const rentalMetrics = rentalContext?.metrics || []
   const rentalStatusCounts = rentalMetrics.reduce<Record<string, number>>((acc, metric) => {
     const key = metric.status || 'unknown'
@@ -1561,30 +1587,41 @@ BuildMore 판단:
               )}
             </p>
           </div>
-          {/* Address property pills (dynamic from bootstrap) */}
+          {/* Address and building-registry pills (dynamic from bootstrap) */}
           <div className="px-3 pb-2.5 flex flex-wrap gap-1.5">
             {isBootstrapping ? (
-              <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full text-muted-foreground animate-pulse">토지 정보 조회 중...</span>
-            ) : addressProps ? (
+              <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full text-muted-foreground animate-pulse">주소/건축물대장 조회 중...</span>
+            ) : (addressProps || buildingRegistryTitle) ? (
               <>
                 {selectedAddressMeta?.bjd_code && (
                   <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap font-mono">BJD {selectedAddressMeta.bjd_code}</span>
                 )}
-                {addressProps.zoning && (
+                {addressProps?.zoning && (
                   <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">{addressProps.zoning}</span>
                 )}
-                {addressProps.bcrat != null && (
-                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 {addressProps.bcrat}%</span>
+                {addressProps?.area_m2 != null && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 {formatArea(addressProps.area_m2)}</span>
                 )}
-                {addressProps.vlrat != null && (
-                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 {addressProps.vlrat}%</span>
+                {hasBuildingRegistryTitle ? (
+                  <>
+                    <span className="px-2 py-0.5 bg-slate-950 text-white text-[11px] rounded-full whitespace-nowrap">허가 {buildingRegistryTitle?.permit_year ?? '-'}</span>
+                    <span className="px-2 py-0.5 bg-slate-950 text-white text-[11px] rounded-full whitespace-nowrap">사용승인 {buildingRegistryTitle?.use_approval_year ?? '-'}</span>
+                    <span className="px-2 py-0.5 bg-slate-950 text-white text-[11px] rounded-full whitespace-nowrap">용적률 {formatPercent(buildingRegistryTitle?.floor_area_ratio)}</span>
+                    <span className="px-2 py-0.5 bg-slate-950 text-white text-[11px] rounded-full whitespace-nowrap">건폐율 {formatPercent(buildingRegistryTitle?.building_coverage_ratio)}</span>
+                    <span className="px-2 py-0.5 bg-slate-950 text-white text-[11px] rounded-full whitespace-nowrap">연면적 {formatArea(buildingRegistryTitle?.total_floor_area_m2)}</span>
+                  </>
+                ) : addressConfirmed ? (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full text-muted-foreground whitespace-nowrap">건축물대장 미확인</span>
+                ) : null}
+                {addressProps?.bcrat != null && !hasBuildingRegistryTitle && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">건폐율 {formatPercent(addressProps.bcrat)}</span>
                 )}
-                {addressProps.area_m2 != null && (
-                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">대지 {Math.round(addressProps.area_m2 ?? 0)}㎡</span>
+                {addressProps?.vlrat != null && !hasBuildingRegistryTitle && (
+                  <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 {formatPercent(addressProps.vlrat)}</span>
                 )}
               </>
             ) : (
-              <span className="px-2 py-0.5 bg-muted/50 text-[11px] rounded-full text-muted-foreground italic">주소 확정 시 토지 정보 표시</span>
+              <span className="px-2 py-0.5 bg-muted/50 text-[11px] rounded-full text-muted-foreground italic">주소 확정 후 표제부 표시</span>
             )}
           </div>
         </div>
@@ -1812,32 +1849,6 @@ BuildMore 판단:
                 </div>
               </div>
 
-              {/* Panel C: 건축물대장 */}
-              <div className="bg-white border border-border rounded-xl overflow-hidden">
-                <div className="h-[42px] px-4 flex items-center justify-between border-b border-border">
-                  <span className="text-[13px] font-bold">건축물대장 표제부</span>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">{today} · 최신값</span>
-                </div>
-                <div className="p-3 grid grid-cols-2 gap-2">
-                  <div className="border border-border rounded-[10px] p-2">
-                    <p className="text-[10px] text-muted-foreground">허가연도</p>
-                    <p className="text-sm font-bold">{buildingData.permitYear}</p>
-                  </div>
-                  <div className="border border-border rounded-[10px] p-2">
-                    <p className="text-[10px] text-muted-foreground">사용승인연도</p>
-                    <p className="text-sm font-bold">{buildingData.approvalYear}</p>
-                  </div>
-                  <div className="border border-border rounded-[10px] p-2">
-                    <p className="text-[10px] text-muted-foreground">대장상연면적</p>
-                    <p className="text-sm font-bold">{buildingData.registerArea}㎡</p>
-                  </div>
-                  <div className="border border-border rounded-[10px] p-2">
-                    <p className="text-[10px] text-muted-foreground">신축최대연면적</p>
-                    <p className="text-sm font-bold">{buildingData.maxGfa}㎡</p>
-                  </div>
-                </div>
-              </div>
-
               {/* Panel D: 건축조건 */}
               <div className="bg-white border border-border rounded-xl overflow-hidden">
                 <div className="h-[42px] px-4 flex items-center border-b border-border">
@@ -1862,9 +1873,6 @@ BuildMore 판단:
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">연면적 (㎡)</label>
                     <NumField value={gfa} onChange={setGfa} step={10} disabled={scenario === '현황'} />
-                    {gfa > buildingData.maxGfa && scenario !== '현황' && (
-                      <p className="text-[10px] text-red-600 mt-1">법정 용적률 초과</p>
-                    )}
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-1 block">시공비 (만원/㎡)</label>
