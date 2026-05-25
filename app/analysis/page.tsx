@@ -1045,9 +1045,22 @@ BuildMore 판단:
       if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null }
     }
 
+    useEffect(() => {
+      window.addEventListener('pointerup', stopRepeat)
+      window.addEventListener('pointercancel', stopRepeat)
+      window.addEventListener('blur', stopRepeat)
+      return () => {
+        window.removeEventListener('pointerup', stopRepeat)
+        window.removeEventListener('pointercancel', stopRepeat)
+        window.removeEventListener('blur', stopRepeat)
+        stopRepeat()
+      }
+    }, [])
+
     const startRepeat = (delta: number) => {
+      stopRepeat()
       // 즉시 1회 적용
-      const next = parseFloat(Math.max(min, value + delta).toFixed(decimals || 0))
+      const next = parseFloat(Math.max(min, valueRef.current + delta).toFixed(decimals || 0))
       onChange(next)
       valueRef.current = next
       // 500ms 대기 후 80ms 간격으로 반복
@@ -1085,20 +1098,30 @@ BuildMore 판단:
           className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0 cursor-text select-all"
         />
         <button
-          onPointerDown={(e) => { e.preventDefault(); startRepeat(-step) }}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.currentTarget.setPointerCapture(e.pointerId)
+            startRepeat(-step)
+          }}
           onPointerUp={stopRepeat}
           onPointerLeave={stopRepeat}
           onPointerCancel={stopRepeat}
+          onLostPointerCapture={stopRepeat}
           disabled={disabled}
           className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
         >
           −
         </button>
         <button
-          onPointerDown={(e) => { e.preventDefault(); startRepeat(+step) }}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.currentTarget.setPointerCapture(e.pointerId)
+            startRepeat(+step)
+          }}
           onPointerUp={stopRepeat}
           onPointerLeave={stopRepeat}
           onPointerCancel={stopRepeat}
+          onLostPointerCapture={stopRepeat}
           disabled={disabled}
           className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
         >
