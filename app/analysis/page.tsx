@@ -219,6 +219,142 @@ const transactions = [
 ]
 
 
+function NumField({
+  value,
+  onChange,
+  step,
+  min = 0,
+  disabled = false,
+  isLoan = false,
+  decimals = 0,
+  displayDecimals,
+}: {
+  value: number
+  onChange: (v: SetStateAction<number>) => void
+  step: number
+  min?: number
+  disabled?: boolean
+  isLoan?: boolean
+  decimals?: number
+  displayDecimals?: number
+}) {
+  const displayDecimal = displayDecimals !== undefined ? displayDecimals : decimals
+  const formatValue = (v: number) =>
+    displayDecimal > 0 ? v.toFixed(displayDecimal) : Math.round(v).toString()
+
+  const [localValue, setLocalValue] = useState<string | null>(null)
+  const isEditing = localValue !== null
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const detachReleaseListenersRef = useRef<(() => void) | null>(null)
+
+  const stopRepeat = useCallback(() => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    if (repeatInterval.current) {
+      clearInterval(repeatInterval.current)
+      repeatInterval.current = null
+    }
+    if (detachReleaseListenersRef.current) {
+      detachReleaseListenersRef.current()
+      detachReleaseListenersRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      stopRepeat()
+    }
+  }, [stopRepeat])
+
+  const changeBy = useCallback((delta: number) => {
+    onChange((prev) => parseFloat(Math.max(min, prev + delta).toFixed(decimals || 0)))
+  }, [decimals, min, onChange])
+
+  const startRepeat = useCallback((delta: number, pointerId: number, target: HTMLButtonElement) => {
+    stopRepeat()
+    target.setPointerCapture(pointerId)
+    changeBy(delta)
+
+    const stopAndDetach = () => {
+      stopRepeat()
+    }
+    detachReleaseListenersRef.current = () => {
+      window.removeEventListener('pointerup', stopAndDetach)
+      window.removeEventListener('pointercancel', stopAndDetach)
+      window.removeEventListener('touchend', stopAndDetach)
+      window.removeEventListener('blur', stopAndDetach)
+    }
+
+    window.addEventListener('pointerup', stopAndDetach)
+    window.addEventListener('pointercancel', stopAndDetach)
+    window.addEventListener('touchend', stopAndDetach)
+    window.addEventListener('blur', stopAndDetach)
+
+    pressTimer.current = setTimeout(() => {
+      repeatInterval.current = setInterval(() => {
+        changeBy(delta)
+      }, 80)
+    }, 300)
+  }, [changeBy, stopRepeat])
+
+  const commitEdit = () => {
+    if (localValue === null) return
+    const parsed = parseFloat(localValue.replace(/,/g, ''))
+    onChange(Math.max(min, isNaN(parsed) ? value : parseFloat(parsed.toFixed(decimals || 0))))
+    setLocalValue(null)
+  }
+
+  return (
+    <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
+      <input
+        type="text"
+        inputMode="decimal"
+        value={isEditing ? localValue! : formatValue(value)}
+        disabled={disabled}
+        onFocus={() => setLocalValue(formatValue(value))}
+        onChange={(e) => setLocalValue(e.target.value)}
+        onBlur={commitEdit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { commitEdit(); (e.target as HTMLInputElement).blur() }
+          if (e.key === 'Escape') { setLocalValue(null); (e.target as HTMLInputElement).blur() }
+        }}
+        className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0 cursor-text select-all"
+      />
+      <button
+        onPointerDown={(e) => {
+          e.preventDefault()
+          startRepeat(-step, e.pointerId, e.currentTarget)
+        }}
+        onPointerUp={stopRepeat}
+        onPointerCancel={stopRepeat}
+        onLostPointerCapture={stopRepeat}
+        disabled={disabled}
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        aria-label="값 감소"
+      >
+        −
+      </button>
+      <button
+        onPointerDown={(e) => {
+          e.preventDefault()
+          startRepeat(step, e.pointerId, e.currentTarget)
+        }}
+        onPointerUp={stopRepeat}
+        onPointerCancel={stopRepeat}
+        onLostPointerCapture={stopRepeat}
+        disabled={disabled}
+        className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
+        aria-label="값 증가"
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
 
 // ============================================================
 // MAIN COMPONENT
@@ -1003,138 +1139,6 @@ BuildMore 판단:
 
   const handleComingSoon = (feature: string) => {
     toast.info(`${feature} 기능은 준비 중입니다.`)
-  }
-
-  // Number input increment/decrement
-  const NumField = ({
-    value,
-    onChange,
-    step,
-    min = 0,
-    disabled = false,
-    isLoan = false,
-    decimals = 0,
-    displayDecimals,
-  }: {
-    value: number
-    onChange: (v: SetStateAction<number>) => void
-    step: number
-    min?: number
-    disabled?: boolean
-    isLoan?: boolean
-    decimals?: number
-    displayDecimals?: number
-  }) => {
-    const displayDecimal = displayDecimals !== undefined ? displayDecimals : decimals
-    const formatValue = (v: number) =>
-      displayDecimal > 0 ? v.toFixed(displayDecimal) : Math.round(v).toString()
-
-    // 편집 중 로컬 문자열 상태
-    const [localValue, setLocalValue] = useState<string | null>(null)
-    const isEditing = localValue !== null
-
-    // long-press refs
-    const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const repeatInterval = useRef<ReturnType<typeof setInterval> | null>(null)
-    // 최신 value를 interval 클로저에서 읽을 수 있도록 ref 유지
-    const valueRef = useRef(value)
-    useEffect(() => { valueRef.current = value }, [value])
-
-    const stopRepeat = useCallback(() => {
-      if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null }
-      if (repeatInterval.current) { clearInterval(repeatInterval.current); repeatInterval.current = null }
-    }, [])
-
-    useEffect(() => {
-      window.addEventListener('pointerup', stopRepeat)
-      window.addEventListener('pointercancel', stopRepeat)
-      window.addEventListener('touchend', stopRepeat)
-      window.addEventListener('blur', stopRepeat)
-      return () => {
-        window.removeEventListener('pointerup', stopRepeat)
-        window.removeEventListener('pointercancel', stopRepeat)
-        window.removeEventListener('touchend', stopRepeat)
-        window.removeEventListener('blur', stopRepeat)
-        stopRepeat()
-      }
-    }, [stopRepeat])
-
-    const changeBy = useCallback((delta: number) => {
-      onChange((prev) => {
-        const next = parseFloat(Math.max(min, prev + delta).toFixed(decimals || 0))
-        valueRef.current = next
-        return next
-      })
-    }, [decimals, min, onChange])
-
-    const startRepeat = useCallback((delta: number) => {
-      stopRepeat()
-      // 즉시 1회 적용
-      changeBy(delta)
-      // 500ms 대기 후 80ms 간격으로 반복
-      pressTimer.current = setTimeout(() => {
-        repeatInterval.current = setInterval(() => {
-          changeBy(delta)
-        }, 80)
-      }, 500)
-    }, [changeBy, stopRepeat])
-
-    // 입력 커밋 (blur / Enter)
-    const commitEdit = () => {
-      if (localValue === null) return
-      const parsed = parseFloat(localValue.replace(/,/g, ''))
-      onChange(Math.max(min, isNaN(parsed) ? value : parseFloat(parsed.toFixed(decimals || 0))))
-      setLocalValue(null)
-    }
-
-    return (
-      <div className="grid grid-cols-[1fr_34px_34px] h-[38px] border border-border rounded-[10px] overflow-hidden">
-        <input
-          type="text"
-          inputMode="decimal"
-          value={isEditing ? localValue! : formatValue(value)}
-          disabled={disabled}
-          onFocus={() => setLocalValue(formatValue(value))}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={commitEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { commitEdit(); (e.target as HTMLInputElement).blur() }
-            if (e.key === 'Escape') { setLocalValue(null); (e.target as HTMLInputElement).blur() }
-          }}
-          className="border-0 px-2.5 text-sm bg-background disabled:bg-muted focus:outline-none focus:ring-0 cursor-text select-all"
-        />
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault()
-            e.currentTarget.setPointerCapture(e.pointerId)
-            startRepeat(-step)
-          }}
-          onPointerUp={stopRepeat}
-          onPointerLeave={stopRepeat}
-          onPointerCancel={stopRepeat}
-          onLostPointerCapture={stopRepeat}
-          disabled={disabled}
-          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
-        >
-          −
-        </button>
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault()
-            e.currentTarget.setPointerCapture(e.pointerId)
-            startRepeat(+step)
-          }}
-          onPointerUp={stopRepeat}
-          onPointerLeave={stopRepeat}
-          onPointerCancel={stopRepeat}
-          onLostPointerCapture={stopRepeat}
-          disabled={disabled}
-          className="border-l border-border bg-background hover:bg-muted disabled:opacity-50 text-base select-none touch-none"
-        >
-          +
-        </button>
-      </div>
-    )
   }
 
   // Metric Card Component for consistent styling
