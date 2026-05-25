@@ -12,7 +12,11 @@ import { toast } from "sonner"
 import { AnalysisCTA } from "./components/AnalysisCTA"
 import { NewsTicker } from "./components/NewsTicker"
 import { KpiGroup } from "./components/KpiGroup"
-import { InsightPanel, type DealInsight } from "./components/InsightPanel"
+import {
+  StrategyTabPanel,
+  type AnalysisStrategy,
+  type StrategyPersonaKey,
+} from "./components/StrategyTabPanel"
 import { useDealAnalysis } from "@/hooks/useDealAnalysis"
 import { useKakaoMap } from "@/hooks/useKakaoMap"
 import type { DealInput } from "@/lib/analysis/dealAnalysisEngine"
@@ -326,109 +330,9 @@ export default function AnalysisPage() {
   // Map modal
   const [showMapModal, setShowMapModal] = useState(false)
   
-  // Table tabs - 인사이트 중심 탭
-  const [activeTab, setActiveTab] = useState('임대수익성')
-  const tabs = ['임대수익성', '매수 판단', '가격협상 포인트', '현금흐름 안정성', '업사이드 가능성', '리스크와 다음 액션', '상권분석']
-  
-  // Deal Insights 데이터
-  const dealInsights: Record<string, DealInsight> = {
-    buyDecision: {
-      id: "buyDecision",
-      title: "매수 판단",
-      verdict: "가격협상 후 재검토",
-      summary: "현재 이 매물은 즉시 매수보다는 가격협상 후 재검토가 적절한 딜입니다. 금융 부담은 높지만 상권 특성은 긍정적으로 해석됩니다.",
-      reasons: [
-        "입력된 매입가 대비 수익성이 보수적 기준에 미달합니다.",
-        "대출 부담이 임대수익 대비 높아 보유 안정성이 낮습니다.",
-        "상권 특성은 긍정적이지만 가격에 선반영되었을 가능성이 있습니다.",
-      ],
-      actions: [
-        "즉시 매수보다는 가격협상 후 재검토하세요.",
-        "매입가 조정 가능성을 먼저 확인하세요.",
-        "대출금액과 금리 조건을 보수적으로 재검토하세요.",
-      ],
-      evidenceLabel: "근거 지표: 매입가 · 대출금액 · 금리 · NOI · DSCR · LTV · 상권특성",
-      ctaText: "정확한 매수 가능 가격과 협상 기준가는 딜 브리핑에서 확인할 수 있습니다.",
-      severity: "warning",
-    },
-    negotiation: {
-      id: "negotiation",
-      title: "가격협상 포인트",
-      verdict: "협상 여지 있음",
-      summary: "현재 조건에서는 매입가에 협상 여지가 있습니다. 공실률, 대출 부담, 수익성, 도로 조건은 가격 조정 근거로 활용될 수 있습니다.",
-      reasons: [
-        "대출비용을 반영하면 실질 현금흐름이 약해집니다.",
-        "공실률이 높아질 경우 NOI가 빠르게 감소할 수 있습니다.",
-        "도로 조건과 건축 조건은 매입가 할인 근거가 될 수 있습니다.",
-      ],
-      actions: [
-        "협상 전 기준 매수가 범위를 설정하세요.",
-        "공실률과 대출 부담을 가격 조정 근거로 활용하세요.",
-        "감액 요청이 아니라 수치 기반 협상 논리로 접근하세요.",
-      ],
-      evidenceLabel: "근거 지표: 공실률 · 금융비용 · 현금흐름 · 도로조건 · 실거래 비교",
-      ctaText: "딜 브리핑에서는 적정 매수가 범위와 협상 논리를 리포트 형태로 제공합니다.",
-      severity: "warning",
-    },
-    cashflow: {
-      id: "cashflow",
-      title: "현금흐름 안정성",
-      verdict: "보수적 관리 필요",
-      summary: "현재 대출 조건에서는 현금흐름 안정성이 낮은 편입니다. 금리 상승이나 공실 발생 시 보유 부담이 커질 수 있습니다.",
-      reasons: [
-        "대출 상환 부담이 임대수익 대비 높습니다.",
-        "공실률이 상승하면 현금흐름이 빠르게 악화될 수 있습니다.",
-        "금리 조건에 민감한 구조입니다.",
-      ],
-      actions: [
-        "대출금액을 낮춘 시나리오를 검토하세요.",
-        "공실률 보수 시나리오를 적용하세요.",
-        "금리 상승 시에도 버틸 수 있는지 확인하세요.",
-      ],
-      evidenceLabel: "근거 지표: NOI · DSCR · LTV · 금리 · 공실률 · 월 상환액",
-      ctaText: "금리·공실·대출비율별 현금흐름 시나리오는 유료 딜 브리핑에서 확인할 수 있습니다.",
-      severity: "danger",
-    },
-    upside: {
-      id: "upside",
-      title: "업사이드 가능성",
-      verdict: "개선 여지 있음",
-      summary: "현재 수익성만 보면 보수적 접근이 필요하지만, 상권과 임대 수요 측면에서는 개선 여지가 있습니다.",
-      reasons: [
-        "주소지가 가진 상권 특성은 임대수요 측면에서 긍정적입니다.",
-        "리모델링 또는 업종 재구성을 통해 임대료 개선 가능성이 있습니다.",
-        "건축 조건에 따라 밸류애드 여지가 존재할 수 있습니다.",
-      ],
-      actions: [
-        "현재 임차인 구조와 임대료 수준을 확인하세요.",
-        "리모델링 또는 업종 변경 가능성을 검토하세요.",
-        "업사이드가 이미 매입가에 반영되어 있는지 확인하세요.",
-      ],
-      evidenceLabel: "근거 지표: 상권특성 · 임대수요 · 건축조건 · 리모델링 가능성",
-      ctaText: "딜 클로징 패키지에서는 이 매물의 밸류애드 전략과 실행 체크리스트를 제공합니다.",
-      severity: "neutral",
-    },
-    riskAction: {
-      id: "riskAction",
-      title: "리스크와 다음 액션",
-      verdict: "실사 확인 필요",
-      summary: "이 매물의 핵심 리스크는 공실, 금융 부담, 도로 및 건축 조건입니다. 해당 리스크는 가격 조정과 실사 확인 항목으로 전환해야 합니다.",
-      reasons: [
-        "공실률이 높아지면 수익성이 크게 낮아질 수 있습니다.",
-        "금융비용 부담이 커서 보수적인 대출 구조가 필요합니다.",
-        "도로와 건축 조건은 향후 매각가와 임대수요에 영향을 줄 수 있습니다.",
-      ],
-      actions: [
-        "매입가 조정 가능성을 확인하세요.",
-        "임대차 계약서와 실제 공실 가능성을 확인하세요.",
-        "도로폭, 건축 가능 여부, 리모델링 제약을 확인하세요.",
-        "실거래 비교를 통해 가격 상한선을 설정하세요.",
-      ],
-      evidenceLabel: "근거 지표: 공실률 · 대출부담 · 도로조건 · 건축조건 · 실거래 비교",
-      ctaText: "계약 전 확인해야 할 실사 항목과 협상 전략은 딜 클로징 패키지에서 정리됩니다.",
-      severity: "warning",
-    },
-  }
+  // Detail tabs - 4개 의사결정 탭 + 사용자군 렌즈
+  const [activeTab, setActiveTab] = useState('딜 결론')
+  const [selectedPersona, setSelectedPersona] = useState<StrategyPersonaKey>('broker_buyer')
   
   // Calculated values
   const [noi, setNoi] = useState(0)
@@ -438,9 +342,9 @@ export default function AnalysisPage() {
   const [bankabilityScore, setBankabilityScore] = useState(0)
   const [dealSignal, setDealSignal] = useState<'매수' | '가격협상' | '매수보류'>('가격협상')
   const [rentalContext, setRentalContext] = useState<RentalContext | null>(null)
-  const [isRentalContextLoading, setIsRentalContextLoading] = useState(false)
+  const [, setIsRentalContextLoading] = useState(false)
   const [commercialContext, setCommercialContext] = useState<CommercialVitalityContext | null>(null)
-  const [isCommercialContextLoading, setIsCommercialContextLoading] = useState(false)
+  const [, setIsCommercialContextLoading] = useState(false)
 
   // ============================================================
   // CALCULATION LOGIC
@@ -921,9 +825,6 @@ BuildMore 판단:
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
   
-  // 동적 인사이트 데이터 (분석 결과 있으면 사용, 없으면 기본값)
-  const currentInsights = dealAnalysis.result?.insights
-
   useEffect(() => {
     const query = address.trim()
 
@@ -1242,23 +1143,6 @@ BuildMore 판단:
       buildingRegistryTitle.total_floor_area_m2,
     ].some((value) => value != null)
   )
-  const rentalMetrics = rentalContext?.metrics || []
-  const rentalStatusCounts = rentalMetrics.reduce<Record<string, number>>((acc, metric) => {
-    const key = metric.status || 'unknown'
-    acc[key] = (acc[key] || 0) + 1
-    return acc
-  }, {})
-  const externalApiStatus = Object.values(rentalContext?.api_probe || {})
-    .filter((item) => item.label?.includes('API'))
-    .map((item) => item.label)
-  const rentalMetricByKey = new globalThis.Map(rentalMetrics.map((metric) => [metric.metric_key, metric]))
-  const highlightedRentalMetrics = [
-    { key: 'noi_annual', label: '연간 NOI' },
-    { key: 'annual_debt_service', label: '연간 부채상환액' },
-    { key: 'dscr', label: '부채상환비율' },
-    { key: 'cap_rate', label: '캡레이트' },
-    { key: 'rental_yield_net', label: '임대수익률' },
-  ].map((item) => ({ ...item, metric: rentalMetricByKey.get(item.key) }))
   const missingRentalInputLabels = rentalContext?.waiting_user_input_labels?.length
     ? rentalContext.waiting_user_input_labels
     : (rentalContext?.waiting_user_input || []).map((field) => ({
@@ -1271,11 +1155,7 @@ BuildMore 판단:
   const rentalInputGuide = missingRentalInputLabels.length > 0
     ? `${missingRentalInputLabels.slice(0, 3).join(', ')}${missingRentalInputLabels.length > 3 ? ' 등' : ''}을 입력하면 NOI, DSCR, 수익률이 자동 계산됩니다.`
     : '입력값 변경 시 NOI, DSCR, 수익률이 자동 갱신됩니다.'
-  const commercialMetrics = commercialContext?.metrics || {}
-  const adminDongSales = commercialContext?.admin_dong_industry_sales
-  const topDongIndustries = adminDongSales?.top_industries || []
-  const readyCommercialMetricCount = Object.values(commercialMetrics).filter((metric) => metric.status === 'ready').length
-  const totalCommercialMetricCount = Object.keys(commercialMetrics).length || 24
+  const topDongIndustries = commercialContext?.admin_dong_industry_sales?.top_industries || []
   const hasHangulFinalConsonant = (value: string) => {
     const lastChar = value.trim().at(-1)
     if (!lastChar) return false
@@ -1289,6 +1169,7 @@ BuildMore 판단:
   const commercialAreaType = 'F/G형'
   const commercialCheckFactors = ['A', 'B', 'C']
   const commercialHeadline = `${commercialSubject}${topicJosa(commercialSubject)} ${commercialZoneName}에 있는 ${commercialAreaType} 상권으로, ${commercialCheckFactors.join(', ')}를 함께 확인해야 합니다.`
+  const analysisStrategy = (dealAnalysis.result?.analysisStrategy ?? null) as AnalysisStrategy | null
 
   // ============================================================
   // RENDER
@@ -2100,186 +1981,30 @@ BuildMore 판단:
             </div>
 
             <div className="bg-white border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 relative">
-              {/* Tabs */}
-              <div className="h-[46px] flex overflow-x-auto border-b border-border flex-shrink-0">
-                {tabs.map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`shrink-0 px-4 text-sm transition-colors ${
-                      activeTab === tab 
-                        ? 'text-foreground border-b-[3px] border-foreground font-medium' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              
-              {/* Tab content */}
-              <div className="flex-1 min-h-0 overflow-y-auto bg-white p-5">
-                {/* 임대수익성 */}
-                {activeTab === '임대수익성' && (
-                  <div className="space-y-4">
-                    <div className="rounded-2xl border bg-white p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                            BUILDMORE RENTAL PROFITABILITY
-                          </p>
-                          <h3 className="mt-2 text-xl font-semibold text-gray-950 break-keep">
-                            임대수익성 실시간 분석
-                          </h3>
-                          <p className="mt-2 text-sm leading-relaxed text-gray-600 break-keep">
-                            {rentalInputGuide} 주소 기반 선조회값보다 사용자가 입력한 매입가, 대출금액, 월세, 금리를 우선 반영합니다.
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2 text-[11px]">
-                          {isRentalContextLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-500" />}
-                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                            ready {rentalContext?.ready_metrics ?? 0}/{rentalMetrics.length || 21}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-                      {highlightedRentalMetrics.map(({ key, label, metric }) => (
-                        <div key={key} className="rounded-2xl border bg-white p-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 truncate">{label}</p>
-                          <p className="mt-2 text-xl font-semibold text-gray-950 tabular-nums">
-                            {typeof metric?.value === 'number'
-                              ? key === 'noi_annual' || key === 'annual_debt_service'
-                                ? `${Math.round(metric.value / 10000).toLocaleString('ko-KR')}만`
-                                : key === 'dscr'
-                                  ? `${metric.value.toFixed(2)}x`
-                                  : `${metric.value.toFixed(2)}%`
-                              : '-'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                      <div className="rounded-2xl border bg-white p-4">
-                        <h4 className="text-sm font-semibold text-gray-950">
-                          계산 기준
-                        </h4>
-                        <ul className="mt-3 space-y-2">
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • 매입가, 대출금액, 월세, 보증금, 금리 입력값을 우선 적용합니다.
-                          </li>
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • NOI, DSCR, 캡레이트, 임대수익률은 조건 변경 시 다시 계산됩니다.
-                          </li>
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • 주소 선조회 데이터는 입력값이 비어 있을 때 보조값으로 사용합니다.
-                          </li>
-                        </ul>
-                      </div>
-
-                      <div className="rounded-2xl border bg-white p-4">
-                        <h4 className="text-sm font-semibold text-gray-950">
-                          데이터 상태
-                        </h4>
-                        <ul className="mt-3 space-y-2">
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • API 원천: {externalApiStatus.length > 0 ? Array.from(new Set(externalApiStatus)).join(' · ') : '대기'}
-                          </li>
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • 주소 선조회: prefetched {rentalStatusCounts.prefetched || 0}
-                          </li>
-                          <li className="text-sm leading-relaxed text-gray-600 break-keep">
-                            • 내부산식: ready {rentalStatusCounts.ready || 0}
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 매수 판단 */}
-                {activeTab === '매수 판단' && (
-                  <InsightPanel insight={currentInsights?.buyDecision || dealInsights.buyDecision} />
-                )}
-
-                {/* 가격협상 포인트 */}
-                {activeTab === '가격협상 포인트' && (
-                  <InsightPanel insight={currentInsights?.negotiation || dealInsights.negotiation} />
-                )}
-
-                {/* 현금흐름 안정성 */}
-                {activeTab === '현금흐름 안정성' && (
-                  <InsightPanel insight={currentInsights?.cashflow || dealInsights.cashflow} />
-                )}
-
-                {/* 업사이드 가능성 */}
-                {activeTab === '업사이드 가능성' && (
-                  <InsightPanel insight={currentInsights?.upside || dealInsights.upside} />
-                )}
-
-                {/* 리스크와 다음 액션 */}
-                {activeTab === '리스크와 다음 액션' && (
-                  <InsightPanel insight={currentInsights?.riskAction || dealInsights.riskAction} />
-                )}
-
-                {/* 상권분석 */}
-                {activeTab === '상권분석' && (
-                  <div className="space-y-4">
-                    <div className="rounded-[8px] border border-gray-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] font-bold text-gray-500 uppercase">BuildMore Commercial Insight</p>
-                          <h3 className="mt-1 text-xl font-bold text-gray-950 break-keep">
-                            {commercialHeadline}
-                          </h3>
-                        </div>
-                        <div className="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                          {isCommercialContextLoading ? '분석 중' : `ready ${readyCommercialMetricCount}/${totalCommercialMetricCount}`}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[8px] border border-gray-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold text-gray-950">행정동 업종별 추정매출 Top 5</p>
-                          <p className="mt-1 text-xs leading-relaxed text-gray-500 break-keep">
-                            {adminDongSales?.resolved_admin_dong?.adstrd_cd_nm
-                              ? `${adminDongSales.resolved_admin_dong.adstrd_cd_nm} 기준 상위 매출 업종입니다.`
-                              : '주소의 행정동을 확인한 뒤 상위 매출 업종을 표시합니다.'}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
-                          {topDongIndustries.length > 0 ? `ready ${topDongIndustries.length}/5` : (adminDongSales?.status || 'pending')}
-                        </span>
-                      </div>
-                      {topDongIndustries.length > 0 ? (
-                        <div className="mt-3 divide-y divide-gray-100 overflow-hidden rounded-[8px] border border-gray-100">
-                          {topDongIndustries.slice(0, 5).map((item, index) => (
-                            <div key={`${item.industry_code || item.industry_name}-${index}`} className="grid grid-cols-[44px_1fr_auto] items-center gap-3 bg-white px-3 py-3">
-                              <p className="text-sm font-bold text-gray-950 tabular-nums">{index + 1}</p>
-                              <p className="truncate text-sm font-bold text-gray-950" title={item.industry_name || ''}>
-                                {item.industry_name || '-'}
-                              </p>
-                              <p className="text-sm font-semibold tabular-nums text-gray-800">
-                                {typeof item.sales_amount_manwon === 'number'
-                                  ? `${Math.round(item.sales_amount_manwon).toLocaleString('ko-KR')}만원`
-                                  : '-'}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-3 rounded-[8px] bg-gray-50 px-3 py-3 text-sm text-gray-600 break-keep">
-                          {adminDongSales?.message || '아직 캐시된 행정동 매출 데이터가 없습니다. 백엔드 수집 후 이 영역에 상위 업종 매출이 표시됩니다.'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <StrategyTabPanel
+                strategy={analysisStrategy}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                selectedPersona={selectedPersona}
+                onPersonaChange={setSelectedPersona}
+                fallback={{
+                  address,
+                  price,
+                  loan,
+                  rate,
+                  rent,
+                  vacancyRate,
+                  noi,
+                  dscr,
+                  ltv,
+                  cap,
+                  bankabilityScore,
+                  dealSignal,
+                  rentalInputGuide,
+                  commercialHeadline,
+                  topIndustryCount: topDongIndustries.length,
+                }}
+              />
             </div>
             
           </ScrollArea>

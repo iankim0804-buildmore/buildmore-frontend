@@ -3,6 +3,30 @@
 import { useState, useCallback } from 'react'
 import type { AnalysisResult, DealInput } from '@/lib/analysis/dealAnalysisEngine'
 
+type BootstrapAnalysisData = {
+  feasibility_card?: {
+    vacancy_adjusted_noi?: number | null
+    dscr?: number | null
+  }
+  score_cards?: {
+    bankability_score?: number | null
+  }
+  financing_card?: {
+    bankability_comment?: string | null
+  }
+  conclusion_card?: {
+    overall_grade?: string | null
+    one_line_judgement?: string | null
+  }
+  insight_sections?: {
+    positive_points?: string[]
+    caution_points?: string[]
+    conditions_for_success?: string[]
+    items_to_verify?: string[]
+  }
+  analysis_strategy?: unknown
+}
+
 interface AnalysisState {
   isLoading: boolean
   result: AnalysisResult | null
@@ -14,7 +38,7 @@ interface AnalysisState {
 interface UseDealAnalysisReturn extends AnalysisState {
   runAnalysis: (input: DealInput) => Promise<void>
   clearAnalysis: () => void
-  injectResult: (analysisData: any) => void
+  injectResult: (analysisData: BootstrapAnalysisData) => void
 }
 
 export function useDealAnalysis(): UseDealAnalysisReturn {
@@ -52,6 +76,8 @@ export function useDealAnalysis(): UseDealAnalysisReturn {
         dealSignal: data.dealSignal ?? '',
         summary: data.summary ?? '',
         insights: data.insights ?? {},
+        analysisStrategy: data.analysisStrategy ?? null,
+        rawDealPanel: data.rawDealPanel,
         // raw fields (chat context 빌드용)
         bankabilityScore: data.bankabilityScore,
         kpis: data.kpis,
@@ -78,7 +104,7 @@ export function useDealAnalysis(): UseDealAnalysisReturn {
    * AnalysisResult 형식으로 변환해 직접 주입한다.
    * /api/analysis/run을 추가 호출하지 않고 즉시 결과를 표시한다.
    */
-  const injectResult = useCallback((analysisData: any) => {
+  const injectResult = useCallback((analysisData: BootstrapAnalysisData) => {
     const result = {
       input: {},
       kpi: {
@@ -107,6 +133,7 @@ export function useDealAnalysis(): UseDealAnalysisReturn {
       },
       // full bootstrap analysis payload for advanced UI
       _bootstrap: analysisData,
+      analysisStrategy: analysisData?.analysis_strategy ?? null,
     } as unknown as AnalysisResult
 
     setState({

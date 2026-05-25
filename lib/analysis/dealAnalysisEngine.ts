@@ -59,6 +59,11 @@ export interface AnalysisResult {
   insights: InsightResult
   timestamp: string
   analysisId: string
+  analysisStrategy?: unknown
+  rawDealPanel?: unknown
+  bankabilityScore?: number
+  kpis?: unknown
+  summary?: string
 }
 
 const DEFAULT_OPEX = 82
