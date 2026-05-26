@@ -5,9 +5,9 @@ import { EnvDebugBadge } from '@/components/EnvDebugBadge'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BuildMore | 부동산 매매·개발 AI Deal Solution',
+  title: 'BuildMore | 주소 하나로 끝내는 부동산 매매·개발 AI 솔루션',
   description:
-    '상업용 부동산과 꼬마빌딩 매매·개발 후보를 주소 기반으로 분석해 추천 용도, 공사 시나리오, ROE, 최대 매입가, 리스크, 리포트까지 연결하는 AI 솔루션입니다.',
+    '주소 하나로 상업용 부동산·꼬마빌딩의 매입 판단, 개발 시나리오, 최대 매입가, ROE, 리스크, 실행 리포트까지 연결하는 AI 매매·개발 솔루션입니다.',
   generator: 'BuildMore',
   icons: {
     icon: [

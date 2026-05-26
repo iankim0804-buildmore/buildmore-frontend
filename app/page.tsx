@@ -4,10 +4,10 @@ import Link from "next/link"
 import {
   ArrowRight,
   BadgeCheck,
-  BarChart3,
   Calculator,
   Check,
   ChevronRight,
+  Database,
   FileText,
   LineChart,
   MapPin,
@@ -24,100 +24,134 @@ import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "
 
 type Icon = ComponentType<{ className?: string }>
 
-const metrics = [
-  { value: "Top 3", label: "추천 개발·운영 시나리오", note: "용도와 공사 방향 자동 비교" },
-  { value: "ROE", label: "자기자본 수익률 랭킹", note: "후보 매물 간 우선순위 판단" },
-  { value: "Max", label: "역산 매입 가능가", note: "수익·금융 기준 가격 협상선" },
-  { value: "Risk", label: "인허가·공사·금융 리스크", note: "실행 전 확인해야 할 변수" },
-]
-
-const capabilities: Array<{ no: string; title: string; desc: string; icon: Icon; chips: string[] }> = [
+const demoSummaries: Array<{ title: string; value: string; desc: string; icon: Icon }> = [
   {
-    no: "01",
-    title: "주소 하나로 매물의 실행 그림을 만듭니다",
-    desc: "주소와 매입가를 기준으로 토지·건물, 실거래, 상권, 임대, 금융, 법규 데이터를 한 번에 연결합니다.",
-    icon: MapPin,
-    chips: ["주소 검색", "건축물대장", "실거래"],
+    title: "Scenario",
+    value: "리모델링·증축·신축",
+    desc: "같은 주소를 세 가지 미래로 비교",
+    icon: Calculator,
   },
   {
-    no: "02",
-    title: "매매·리모델링·증축·신축 시나리오를 비교합니다",
-    desc: "주거·비주거 방향, 추천 용도, 공사 방식, 공사비, 기간, NOI 개선폭을 묶어 후보별 실행성을 계산합니다.",
+    title: "Max Bid",
+    value: "42.5억",
+    desc: "수익·금융 기준 매입 상한가",
+    icon: LineChart,
+  },
+  {
+    title: "Risk Map",
+    value: "중간",
+    desc: "인허가·공사·금융 리스크 분해",
+    icon: Radar,
+  },
+]
+
+const coreValues: Array<{ title: string; subtitle: string; desc: string; icon: Icon; chips: string[] }> = [
+  {
+    title: "Decision Coverage",
+    subtitle: "매입부터 리포트까지, 의사결정 전 영역",
+    desc: "토지·건물·실거래·임대·상권·금융·법규를 하나의 분석 화면에 결합합니다. 부분 정보가 아니라 매매·개발 의사결정 전 과정을 다룹니다.",
+    icon: MapPin,
+    chips: ["매입 판단", "금융 구조", "실행 리포트"],
+  },
+  {
+    title: "Scenario Intelligence",
+    subtitle: "어떤 전략이 가장 수익성 있는지 비교",
+    desc: "리모델링·증축·신축을 같은 기준으로 추천 용도, 공사비, 공사 기간, NOI 개선폭, 자기자본 ROE까지 시나리오별로 비교합니다.",
     icon: Calculator,
     chips: ["리모델링", "증축", "신축"],
   },
   {
-    no: "03",
-    title: "여러 매물을 저장하고 수익성 순서로 비교합니다",
-    desc: "ROE, 필요 자기자본, 최대 매입가, 임대수익, 개발 리스크를 같은 기준으로 비교해 우선순위를 잡습니다.",
-    icon: BarChart3,
-    chips: ["후보 저장", "ROE 랭킹", "가격협상"],
+    title: "Data Compounding",
+    subtitle: "시간이 갈수록 똑똑해지는 데이터 구조",
+    desc: "공공데이터·실거래·상권·정책 자료를 LLM Wiki와 Delta Engine으로 누적·해석해 매번 같은 질문에 더 정교한 답을 만듭니다.",
+    icon: Database,
+    chips: ["LLM Wiki", "Delta Engine", "유사 사례"],
   },
   {
-    no: "04",
-    title: "투자자와 시행 의사결정에 쓸 리포트로 바꿉니다",
-    desc: "중개사가 투자자에게 보내고, 개발사가 내부 검토에 쓰고, 전문가에게 넘길 수 있는 리포트 구조로 정리합니다.",
+    title: "Execution-Ready Output",
+    subtitle: "그대로 실행에 쓰는 산출물",
+    desc: "투자자 공유 카드, 후보 비교 보드, 심층 PDF 리포트, 전문가 검토 연결까지. 분석으로 끝나지 않고 실제 매매·시행 단계로 연결됩니다.",
     icon: FileText,
-    chips: ["공유 링크", "PDF", "전문가 검토"],
+    chips: ["공유 카드", "PDF", "전문가 검토"],
   },
 ]
 
-const riskCards: Array<{ title: string; desc: string; icon: Icon }> = [
+const workflow = [
+  ["01", "매물 입력", "주소·매입가·주거/비주거 방향만 입력하면 토지·건물 기본 정보가 자동으로 채워집니다."],
+  ["02", "데이터 결합", "실거래·임대·상권·유동인구·금리·법규·뉴스·정책 자료가 DB와 LLM Wiki를 통해 해당 주소 기준으로 정리됩니다."],
+  ["03", "시나리오 계산", "리모델링·증축·신축, 추천 용도, 공사비, NOI, ROE, 최대 매입가, 금융·인허가 리스크를 시나리오별로 산출합니다."],
+  ["04", "비교와 리포트", "여러 후보를 저장해 우선순위를 비교하고, 투자자용·내부 투심용·전문가 검토용 리포트로 전환합니다."],
+]
+
+const scenarioRows = [
+  ["추천 용도", "F&B + 근생", "근생 + 오피스", "근생 + 주거"],
+  ["공사비", "8억", "18억", "42억"],
+  ["공사 기간", "4개월", "10개월", "22개월"],
+  ["안정 NOI", "2.8억", "4.1억", "6.5억"],
+  ["자기자본 ROE", "18.4%", "14.2%", "11.8%"],
+  ["인허가 난이도", "낮음", "중간", "높음"],
+]
+
+const targetUsers: Array<{ title: string; desc: string; icon: Icon }> = [
   {
     title: "중개사",
-    desc: "투자자에게 보낼 수 있는 매물 분석 카드와 리포트로 상담 속도와 신뢰도를 높입니다.",
+    desc: "투자자에게 보낼 수 있는 매물 분석 카드와 비교 리포트로 상담 속도와 신뢰를 끌어올립니다. 왜 이 매물인가를 숫자로 설명합니다.",
     icon: Search,
   },
   {
-    title: "꼬마빌딩 투자자",
-    desc: "여러 후보 중 어떤 매물이 돈이 되는지, 얼마까지 사도 되는지, 어떤 리스크가 큰지 비교합니다.",
+    title: "꼬마빌딩 투자자·자산가",
+    desc: "여러 후보 중 어떤 매물이 돈이 되는지, 얼마까지 사도 되는지, 어떤 리스크가 큰지를 동일 기준으로 비교합니다.",
     icon: WalletCards,
   },
   {
-    title: "소형 개발·시행사",
-    desc: "용도 변경, 리모델링, 증축, 신축 가능성을 수익성과 인허가 리스크까지 묶어 검토합니다.",
+    title: "소형 개발사·시행사",
+    desc: "용도 변경, 리모델링, 증축, 신축 가능성을 수익성·공사비·인허가 리스크까지 묶어 내부 투심 수준으로 검토합니다.",
     icon: Scale,
   },
 ]
 
-const process = [
-  ["01", "매물 입력", "주소, 매입가, 주거·비주거 방향만 넣으면 기본 토지·건물 정보를 자동으로 채웁니다."],
-  ["02", "데이터 가공", "실거래, 임대, 상권, 유동인구, 금리, 법규, 뉴스·정책 자료를 DB와 Wiki 구조로 정리합니다."],
-  ["03", "시나리오 계산", "리모델링·증축·신축, 추천 용도, 공사비, NOI, ROE, 최대 매입가, 금융 리스크를 계산합니다."],
-  ["04", "비교와 리포트", "후보를 저장하고 순위를 비교한 뒤 투자자용·개발 검토용·전문가 검토용 리포트로 전환합니다."],
-]
-
 const dataSources = [
-  ["국토부 실거래", "매입가 비교"],
-  ["상권 데이터", "임대수익 맥락"],
-  ["금융 조건", "금리와 상환"],
-  ["법규 체크", "인허가 리스크"],
-  ["뉴스·정책", "시장 신호"],
-  ["LLM Wiki", "판단 근거"],
+  ["국토부 실거래", "매입가 비교 기준"],
+  ["상권·유동인구", "임대수익 맥락"],
+  ["금리·금융", "대출 조건과 상환 부담"],
+  ["법규·용도지역", "인허가 리스크"],
+  ["뉴스·정책", "시장 신호와 타이밍"],
+  ["LLM Wiki", "누적 판단 근거"],
   ["PostgreSQL", "데이터 코어"],
   ["pgvector", "유사 사례 검색"],
 ]
 
-const reportItems = [
-  ["매입 판단", "최대 매입 가능가", "평당가·실거래 비교", "가격협상 포인트"],
-  ["개발 시나리오", "추천 용도 Top 3", "공사비·기간 추정", "NOI 개선폭"],
-  ["실행 리스크", "인허가 체크리스트", "금융·금리 민감도", "전문가 검토 포인트"],
-]
-
 const pricingPlans = [
-  ["Quick Simulation", "반복 매물 스크리닝", "무료/저가", ["주소 기반 빠른 판단", "추천 용도·공사 방향", "핵심 리스크 요약"]],
-  ["Comparison Board", "후보 저장과 비교", "월 구독", ["여러 매물 ROE 랭킹", "최대 매입가 비교", "투자자 피드백 관리", "공유 카드"]],
-  ["Report & Expert", "유료 리포트와 전문가 연결", "건별/프리미엄", ["심층 투자자 리포트", "3~5개 후보 비교 보고서", "개발 타당성 표", "인허가·공사비 검토 연결"]],
+  [
+    "Quick Simulation",
+    "주소 기반 빠른 매물 스크리닝",
+    "무료/저가",
+    ["추천 용도·공사 방향", "매입 상한가·ROE 요약", "핵심 리스크 요약"],
+  ],
+  [
+    "Comparison Board",
+    "여러 후보를 모아 우선순위 결정",
+    "월 구독",
+    ["후보 매물 ROE 랭킹", "최대 매입가 비교", "투자자 공유 카드", "후보 메모·피드백 관리"],
+  ],
+  [
+    "Report & Expert",
+    "실행 단계에서 그대로 쓰는 리포트",
+    "건별/프리미엄",
+    ["심층 투자자 리포트", "3~5개 후보 비교 보고서", "개발 타당성·인허가 검토", "전문가 자문 연결"],
+  ],
 ]
 
 function AnimatedSection({
   children,
   className = "",
   delay = 0,
+  id,
 }: {
   children: ReactNode
   className?: string
   delay?: number
+  id?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
@@ -142,6 +176,7 @@ function AnimatedSection({
 
   return (
     <div
+      id={id}
       ref={ref}
       className={`${className} transition-all duration-700 ease-out ${
         visible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
@@ -187,62 +222,56 @@ function SectionHeading({
   )
 }
 
-function HeroVisual() {
+function DemoCard() {
   return (
-    <div className="relative min-h-[500px] overflow-hidden border border-stone-200 bg-white p-4 shadow-[0_30px_80px_rgba(28,25,23,0.08)] sm:p-5">
-      <div className="absolute left-5 right-5 top-5 flex items-center justify-between border-b border-stone-200 pb-4">
+    <div className="border border-stone-200 bg-white p-4 shadow-[0_30px_80px_rgba(28,25,23,0.08)] sm:p-5">
+      <div className="flex items-center justify-between border-b border-stone-200 pb-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-stone-500">
           <span className="size-2 rounded-full bg-emerald-500" />
-          매매·개발 시뮬레이션
+          매매·개발 시뮬레이션 미리보기
         </div>
         <span className="text-xs text-stone-400">성수동 후보 매물</span>
       </div>
 
-      <div className="mt-16 grid gap-4">
-        <div className="border border-stone-200 bg-[#f7f7f2] p-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-stone-500">Deal Fit Score</p>
-            <BadgeCheck className="size-5 text-emerald-700" />
-          </div>
-          <div className="mt-5 flex items-end gap-3">
-            <span className="text-7xl font-semibold leading-none text-stone-950">84</span>
-            <span className="pb-2 text-stone-500">/ 100</span>
-          </div>
-          <div className="mt-5 h-2 overflow-hidden bg-stone-200">
-            <div className="h-full w-[84%] bg-emerald-600" />
-          </div>
+      <div className="mt-5 border border-stone-200 bg-[#f7f7f2] p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-stone-500">Deal Fit Score</p>
+          <BadgeCheck className="size-5 text-emerald-700" />
         </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            ["추천 방향", "리모델링", WalletCards],
-            ["예상 ROE", "18.4%", LineChart],
-            ["최대 매입가", "42.5억", BarChart3],
-            ["리스크", "중간", Radar],
-          ].map(([label, value, Icon]) => {
-            const TileIcon = Icon as Icon
-            return (
-              <div key={String(label)} className="border border-stone-200 bg-white p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-stone-500">{label}</p>
-                  <TileIcon className="size-4 text-stone-500" />
-                </div>
-                <p className="mt-3 text-xl font-semibold text-stone-950">{value}</p>
-              </div>
-            )
-          })}
+        <div className="mt-5 flex items-end gap-3">
+          <span className="text-7xl font-semibold leading-none text-stone-950">84</span>
+          <span className="pb-2 text-stone-500">/ 100</span>
         </div>
-
-        <div className="border border-emerald-200 bg-emerald-50 p-4">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-1 size-4 shrink-0 text-emerald-700" />
-            <p className="text-sm leading-6 text-emerald-950">
-              1층 F&B·상층 근린생활 리모델링이 후보 중 ROE가 가장 높습니다. 주차·용도 적합성은 전문가 확인이 필요합니다.
-            </p>
-          </div>
+        <div className="mt-5 h-2 overflow-hidden bg-stone-200">
+          <div className="h-full w-[84%] bg-emerald-600" />
         </div>
       </div>
 
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {demoSummaries.map((item) => {
+          const Icon = item.icon
+          return (
+            <div key={item.title} className="border border-stone-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase text-stone-500">{item.title}</p>
+                <Icon className="size-4 text-stone-500" />
+              </div>
+              <p className="mt-3 text-lg font-semibold text-stone-950">{item.value}</p>
+              <p className="mt-2 text-xs leading-5 text-stone-500">{item.desc}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-4 border border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-start gap-3">
+          <Sparkles className="mt-1 size-4 shrink-0 text-emerald-700" />
+          <p className="text-sm leading-6 text-emerald-950">
+            1층 F&B·상층 근생 리모델링이 후보 중 ROE가 가장 높습니다. 매입 상한가 대비 현 호가는 협상
+            여지 있으며, 주차 대수·용도지역 적합성은 인허가 사전검토가 필요합니다.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -260,7 +289,7 @@ function DataMarquee({ reverse = false }: { reverse?: boolean }) {
         {items.map(([name, type], index) => (
           <div
             key={`${name}-${index}`}
-            className="flex h-16 w-48 shrink-0 items-center justify-between border border-stone-200 bg-[#f7f7f2] px-4"
+            className="flex h-16 w-56 shrink-0 items-center justify-between border border-stone-200 bg-[#f7f7f2] px-4"
           >
             <div>
               <p className="text-sm font-semibold text-stone-950">{name}</p>
@@ -308,17 +337,17 @@ export default function LandingPage() {
           </Link>
 
           <nav className="hidden items-center gap-8 text-sm font-medium text-stone-600 md:flex">
-            <a href="#capabilities" className="hover:text-stone-950">
+            <a href="#core-value" className="hover:text-stone-950">
               핵심 가치
             </a>
-            <a href="#process" className="hover:text-stone-950">
-              데이터 흐름
+            <a href="#workflow" className="hover:text-stone-950">
+              Workflow
             </a>
-            <a href="#report" className="hover:text-stone-950">
-              리포트/BM
+            <a href="#scenario" className="hover:text-stone-950">
+              Scenario
             </a>
             <a href="#pricing" className="hover:text-stone-950">
-              BM 구조
+              Pricing
             </a>
           </nav>
 
@@ -348,14 +377,14 @@ export default function LandingPage() {
         {open ? (
           <div className="border-t border-stone-200 bg-[#f7f7f2] px-4 py-4 md:hidden">
             <div className="grid gap-4 text-sm font-medium text-stone-700">
-              <a href="#capabilities" onClick={() => setOpen(false)}>
+              <a href="#core-value" onClick={() => setOpen(false)}>
                 핵심 가치
               </a>
-              <a href="#process" onClick={() => setOpen(false)}>
-                데이터 흐름
+              <a href="#workflow" onClick={() => setOpen(false)}>
+                Workflow
               </a>
-              <a href="#report" onClick={() => setOpen(false)}>
-                리포트/BM
+              <a href="#scenario" onClick={() => setOpen(false)}>
+                Scenario
               </a>
               <Link
                 href="/analysis"
@@ -369,21 +398,32 @@ export default function LandingPage() {
       </header>
 
       <section className="relative border-b border-stone-200">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_460px] lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[0.95fr_1.05fr] lg:py-24">
           <AnimatedSection className="flex flex-col justify-center">
             <p className="mb-6 inline-flex w-fit items-center gap-2 border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-normal text-emerald-700">
               <Sparkles className="size-3.5" />
               AI Real Estate Deal Solution
             </p>
-            <h1 className="max-w-4xl text-5xl font-semibold leading-[0.98] tracking-normal text-stone-950 sm:text-6xl lg:text-7xl">
-              여러 매물 중,
-              <br />
-              돈 되는 매물을 <br className="sm:hidden" />
-              고릅니다.
+            <h1 className="max-w-4xl text-[2.75rem] font-semibold leading-[0.98] tracking-normal text-stone-950 sm:text-6xl lg:text-7xl">
+              <span className="sm:hidden">
+                주소 한 줄로,
+                <br />
+                매입부터 개발
+                <br />
+                시나리오까지
+                <br />
+                끝냅니다.
+              </span>
+              <span className="hidden sm:inline">
+                주소 한 줄로,
+                <br />
+                매입부터 개발 시나리오까지 끝냅니다.
+              </span>
             </h1>
             <p className="mt-7 max-w-2xl text-lg leading-8 text-stone-600">
-              BuildMore는 상업용 부동산과 꼬마빌딩 매매·개발 후보를 주소 기반으로 분석해 추천 용도,
-              공사 시나리오, ROE, 최대 매입가, 리스크, 투자자용 리포트까지 연결하는 AI 솔루션입니다.
+              BuildMore는 상업용 부동산·꼬마빌딩의 매매 후보를 토지·건물·실거래·상권·금융·법규 데이터로
+              결합하고, 리모델링·증축·신축 시나리오를 비교해 최대 매입가·ROE·리스크·리포트까지 한 흐름으로
+              만드는 AI 매매·개발 솔루션입니다.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
@@ -394,61 +434,50 @@ export default function LandingPage() {
                 <ArrowRight className="size-4" />
               </Link>
               <a
-                href="#report"
+                href="#demo"
                 className="inline-flex h-12 items-center justify-center gap-2 border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-100"
               >
-                비교 리포트 보기
+                샘플 딜 리포트 보기
                 <ChevronRight className="size-4" />
               </a>
             </div>
           </AnimatedSection>
 
-          <AnimatedSection delay={160}>
-            <HeroVisual />
+          <AnimatedSection id="demo" delay={160}>
+            <DemoCard />
           </AnimatedSection>
         </div>
       </section>
 
-      <section className="border-b border-stone-200 bg-white">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-y divide-stone-200 sm:px-0 lg:grid-cols-4 lg:divide-y-0">
-          {metrics.map((item, index) => (
-            <AnimatedSection key={item.label} delay={index * 80} className="min-h-32 px-5 py-6">
-              <p className="text-3xl font-semibold leading-none tracking-normal text-stone-950 sm:text-4xl">
-                {item.value}
-              </p>
-              <p className="mt-2 text-sm font-semibold text-stone-700">{item.label}</p>
-              <p className="mt-5 text-xs font-medium text-stone-400">{item.note}</p>
-            </AnimatedSection>
-          ))}
-        </div>
-      </section>
-
-      <section id="capabilities" className="border-b border-stone-200 bg-white py-18 sm:py-24">
+      <section id="core-value" className="border-b border-stone-200 bg-white py-18 sm:py-24">
         <SectionHeading
-          eyebrow="핵심 가치"
+          eyebrow="Core Value"
           title={
             <>
-              매물 정보는 많습니다.
+              매물 정보는 충분합니다.
               <br />
-              중요한 건 실행 가능한 전략입니다.
+              부족한 건 의사결정 흐름입니다.
             </>
           }
-          desc="BuildMore는 매입 후보를 수익성, 개발 가능성, 금융 구조, 리스크, 리포트 활용성까지 한 흐름으로 판단하도록 설계되었습니다."
+          desc="BuildMore는 매입 판단·개발 시나리오·금융 구조·리스크·실행 리포트까지 한 워크플로우로 연결합니다."
         />
         <div className="mx-auto grid max-w-7xl border-l border-t border-stone-200 px-4 sm:px-6 md:grid-cols-2">
-          {capabilities.map((item, index) => {
+          {coreValues.map((item, index) => {
             const Icon = item.icon
             return (
               <AnimatedSection
-                key={item.no}
+                key={item.title}
                 delay={index * 90}
-                className="min-h-72 border-b border-r border-stone-200 bg-white p-5 sm:p-6"
+                className="min-h-80 border-b border-r border-stone-200 bg-white p-5 sm:p-6"
               >
                 <div className="flex items-center justify-start">
                   <Icon className="size-10 text-emerald-700 sm:size-11" />
                 </div>
-                <h3 className="mt-16 text-3xl font-semibold tracking-normal text-stone-950">{item.title}</h3>
-                <p className="mt-4 max-w-md leading-7 text-stone-600">{item.desc}</p>
+                <p className="mt-12 text-sm font-semibold uppercase text-emerald-700">{item.title}</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-normal text-stone-950 sm:text-3xl">
+                  {item.subtitle}
+                </h3>
+                <p className="mt-4 max-w-xl leading-7 text-stone-600">{item.desc}</p>
                 <div className="mt-6 flex flex-wrap gap-2">
                   {item.chips.map((chip) => (
                     <span key={chip} className="border border-stone-200 bg-[#f7f7f2] px-3 py-1 text-xs text-stone-600">
@@ -462,48 +491,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-b border-stone-200 py-18 sm:py-24">
-        <SectionHeading
-          center
-          eyebrow="타겟 사용자"
-          title={
-            <>
-              중개사, 투자자, 개발사가
-              <br />
-              같은 숫자로 의사결정합니다.
-            </>
-          }
-          desc="빌드모어의 1차 타겟은 반복적으로 매물을 검토하고, 투자자에게 설명하고, 개발·공사·금융 실행까지 연결해야 하는 실무자입니다."
-        />
-        <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
-          {riskCards.map((card, index) => {
-            const Icon = card.icon
-            return (
-              <AnimatedSection key={card.title} delay={index * 110} className="border border-stone-200 bg-white p-6">
-                <Icon className="size-8 text-emerald-700" />
-                <h3 className="mt-14 text-2xl font-semibold text-stone-950">{card.title}</h3>
-                <p className="mt-4 leading-7 text-stone-600">{card.desc}</p>
-              </AnimatedSection>
-            )
-          })}
-        </div>
-      </section>
-
-      <section id="process" className="border-b border-stone-200 bg-white py-18 sm:py-24">
+      <section id="workflow" className="border-b border-stone-200 bg-[#f7f7f2] py-18 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[390px_1fr]">
           <AnimatedSection>
-            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">데이터 가공 흐름</p>
+            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">Workflow</p>
             <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
-              주소 입력부터 후보 비교 리포트까지.
+              주소 입력부터 실행 리포트까지, 한 흐름.
             </h2>
             <p className="mt-5 leading-7 text-stone-600">
-              현재 DB 구조는 공공데이터, 콘텐츠, Wiki, Delta Engine, 분석 결과, 사용자 후보 데이터를 연결해 반복 가능한 의사결정 흐름을 만듭니다.
+              입력은 가볍게 시작하지만 결과는 매입, 개발, 비교, 리포트까지 이어집니다.
             </p>
           </AnimatedSection>
 
           <div className="grid gap-3">
-            {process.map(([no, title, desc], index) => (
-              <AnimatedSection key={no} delay={index * 90} className="group border border-stone-200 bg-[#f7f7f2] p-5">
+            {workflow.map(([no, title, desc], index) => (
+              <AnimatedSection key={no} delay={index * 90} className="group border border-stone-200 bg-white p-5">
                 <div className="grid gap-4 sm:grid-cols-[80px_1fr_36px] sm:items-center">
                   <span className="text-3xl font-semibold text-stone-300 group-hover:text-emerald-700">{no}</span>
                   <div>
@@ -518,71 +520,98 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="border-b border-stone-200 py-18 sm:py-24">
+      <section id="scenario" className="border-b border-stone-200 bg-white py-18 sm:py-24">
         <SectionHeading
-          eyebrow="데이터 코어"
+          center
+          eyebrow="Scenario"
           title={
             <>
-              데이터는 수집하고,
+              하나의 매물,
+              <br />
+              세 가지 미래.
+            </>
+          }
+          desc="BuildMore는 같은 주소에 대해 리모델링·증축·신축 시나리오를 동시에 만들고, 어떤 방향이 가장 돈이 되는지 비교합니다."
+        />
+        <AnimatedSection className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="overflow-x-auto border border-stone-200 bg-white">
+            <table className="w-full min-w-[720px] border-collapse text-left">
+              <thead className="bg-[#f7f7f2]">
+                <tr>
+                  <th className="border-b border-r border-stone-200 p-4 text-sm font-semibold text-stone-500">비교 항목</th>
+                  <th className="border-b border-r border-stone-200 p-4 text-lg font-semibold text-emerald-700">리모델링</th>
+                  <th className="border-b border-r border-stone-200 p-4 text-lg font-semibold text-stone-950">증축</th>
+                  <th className="border-b border-stone-200 p-4 text-lg font-semibold text-stone-950">신축</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scenarioRows.map(([label, remodeling, extension, newBuild]) => (
+                  <tr key={label}>
+                    <th className="border-r border-t border-stone-200 p-4 text-sm font-semibold text-stone-500">{label}</th>
+                    <td className="border-r border-t border-stone-200 p-4 font-semibold text-stone-950">{remodeling}</td>
+                    <td className="border-r border-t border-stone-200 p-4 text-stone-700">{extension}</td>
+                    <td className="border-t border-stone-200 p-4 text-stone-700">{newBuild}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-5 text-center text-sm leading-7 text-stone-500">
+            시나리오 비교는 용도지역, 건폐율·용적률, 주차 기준, 주변 임대 시세, 공사비 단가, 금융 조건을 함께 반영한 결과입니다.
+          </p>
+        </AnimatedSection>
+      </section>
+
+      <section className="border-b border-stone-200 py-18 sm:py-24">
+        <SectionHeading
+          center
+          eyebrow="For"
+          title={
+            <>
+              중개사·투자자·시행사가
+              <br />
+              같은 숫자로 대화합니다.
+            </>
+          }
+          desc="반복적으로 매물을 검토하고, 투자자에게 설명하고, 인허가·공사·금융 실행까지 책임지는 실무자를 위해 설계되었습니다."
+        />
+        <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
+          {targetUsers.map((card, index) => {
+            const Icon = card.icon
+            return (
+              <AnimatedSection key={card.title} delay={index * 110} className="border border-stone-200 bg-white p-6">
+                <Icon className="size-8 text-emerald-700" />
+                <h3 className="mt-14 text-2xl font-semibold text-stone-950">{card.title}</h3>
+                <p className="mt-4 leading-7 text-stone-600">{card.desc}</p>
+              </AnimatedSection>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="border-b border-stone-200 bg-white py-18 sm:py-24">
+        <SectionHeading
+          eyebrow="Data Core"
+          title={
+            <>
+              수집된 데이터가,
               <br />
               판단 근거로 가공됩니다.
             </>
           }
-          desc="FastAPI와 PostgreSQL, pgvector 기반으로 실거래·임대·상권·금리·법규·뉴스·정책 자료를 모으고, Queue와 LLM Wiki, Delta Engine을 거쳐 분석 카드와 리포트에 반영합니다."
+          desc="FastAPI·PostgreSQL·pgvector 기반 인프라에서 실거래·임대·상권·금리·법규·뉴스·정책 자료를 모으고, Processing Queue와 LLM Wiki, Delta Engine을 거쳐 분석 카드와 리포트에 반영됩니다."
         />
         <DataMarquee />
         <DataMarquee reverse />
       </section>
 
-      <section id="report" className="border-b border-stone-200 bg-white py-18 sm:py-24">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <AnimatedSection>
-            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">주력 서비스</p>
-            <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
-              빠른 시뮬레이션에서 유료 리포트와 전문가 검토까지.
-            </h2>
-            <p className="mt-5 leading-7 text-stone-600">
-              무료·저가의 반복 분석으로 후보를 모으고, 비교 보드와 심층 리포트, 개발 타당성 검토, 전문가 연결로 BM을 확장합니다.
-            </p>
-          </AnimatedSection>
-
-          <AnimatedSection delay={160} className="border border-stone-200 bg-[#f7f7f2] p-4 sm:p-5">
-            <div className="border border-stone-200 bg-white p-5">
-              <div className="flex flex-col justify-between gap-4 border-b border-stone-200 pb-5 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-stone-500">BuildMore Deal Report</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-stone-950">리모델링 후 임대수익형 보유 추천</h3>
-                </div>
-                <span className="w-fit bg-emerald-700 px-3 py-1 text-sm font-semibold text-white">후보 1순위</span>
-              </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {reportItems.map(([title, ...items]) => (
-                  <div key={title} className="border border-stone-200 bg-[#f7f7f2] p-4">
-                    <h4 className="font-semibold text-stone-950">{title}</h4>
-                    <ul className="mt-4 space-y-3">
-                      {items.map((item) => (
-                        <li key={item} className="flex items-start gap-2 text-sm leading-5 text-stone-600">
-                          <Check className="mt-0.5 size-4 shrink-0 text-emerald-700" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </AnimatedSection>
-        </div>
-      </section>
-
       <section id="pricing" className="border-b border-stone-200 py-18 sm:py-24">
         <SectionHeading
-          eyebrow="BM 구조"
-          title="자주 쓰는 분석은 가볍게, 중요한 결정은 깊게."
-          desc="빌드모어는 반복 시뮬레이션과 후보 저장을 진입점으로 만들고, 비교 리포트·개발 타당성 보고서·전문가 검토에서 수익화합니다."
+          eyebrow="Pricing"
+          title="가벼운 반복 분석은 무료, 중요한 결정은 깊게."
+          desc="빠른 시뮬레이션과 후보 저장을 진입점으로, 비교 리포트·심층 리포트·전문가 검토에서 수익화합니다."
         />
-        <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3">
+        <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
           {pricingPlans.map(([name, sub, price, features], index) => (
             <AnimatedSection
               key={String(name)}
@@ -621,10 +650,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 opacity-30">
           <div className="grid h-full grid-cols-6 gap-px sm:grid-cols-10">
             {Array.from({ length: 60 }).map((_, index) => (
-              <span
-                key={index}
-                className="border border-white/10"
-              />
+              <span key={index} className="border border-white/10" />
             ))}
           </div>
         </div>
@@ -635,10 +661,10 @@ export default function LandingPage() {
               Build, compare, execute
             </p>
             <h2 className="text-4xl font-semibold leading-tight tracking-normal sm:text-6xl">
-              매물 검토를 반복할수록 더 좋은 딜이 보입니다.
+              매물을 더 보는 것보다, 한 번 제대로 분석하는 게 빠릅니다.
             </h2>
-            <p className="mx-auto mt-6 max-w-xl leading-8 text-stone-300">
-              주소를 넣고 빠르게 시뮬레이션하세요. 후보를 저장하고 비교한 뒤, 투자자에게 보낼 수 있는 리포트로 전환하세요.
+            <p className="mx-auto mt-6 max-w-2xl leading-8 text-stone-300">
+              주소를 입력해 첫 시뮬레이션을 돌려보세요. 후보를 저장하고 비교한 뒤, 투자자·내부 투심에 그대로 쓸 수 있는 리포트로 전환할 수 있습니다.
             </p>
             <div className="mt-9 flex justify-center">
               <Link
@@ -658,7 +684,7 @@ export default function LandingPage() {
           <div>
             <p className="text-sm font-semibold">BuildMore</p>
             <p className="mt-3 max-w-none leading-7 text-stone-400 md:whitespace-nowrap">
-              상업용 부동산·꼬마빌딩 매매·개발 AI Deal Solution
+              주소 하나로 매매·개발 의사결정을 끝내는 AI 솔루션
             </p>
           </div>
           <div className="grid grid-cols-3 gap-6 text-sm text-stone-400">
@@ -673,11 +699,11 @@ export default function LandingPage() {
             </div>
             <div>
               <p className="font-semibold text-white">제품</p>
-              <a href="#capabilities" className="mt-3 block hover:text-white">
+              <a href="#core-value" className="mt-3 block hover:text-white">
                 기능
               </a>
-              <a href="#report" className="mt-2 block hover:text-white">
-                리포트
+              <a href="#scenario" className="mt-2 block hover:text-white">
+                시나리오
               </a>
             </div>
             <div>
