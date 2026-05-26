@@ -444,9 +444,8 @@ export default function LandingPage() {
                 delay={index * 90}
                 className="min-h-72 border-b border-r border-stone-200 bg-white p-5 sm:p-6"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-semibold text-stone-400 sm:text-3xl">{item.no}</span>
-                  <Icon className="size-9 text-emerald-700 sm:size-10" />
+                <div className="flex items-center justify-start">
+                  <Icon className="size-10 text-emerald-700 sm:size-11" />
                 </div>
                 <h3 className="mt-16 text-3xl font-semibold tracking-normal text-stone-950">{item.title}</h3>
                 <p className="mt-4 max-w-md leading-7 text-stone-600">{item.desc}</p>
@@ -476,7 +475,7 @@ export default function LandingPage() {
           }
           desc="빌드모어의 1차 타겟은 반복적으로 매물을 검토하고, 투자자에게 설명하고, 개발·공사·금융 실행까지 연결해야 하는 실무자입니다."
         />
-        <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3">
+        <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
           {riskCards.map((card, index) => {
             const Icon = card.icon
             return (
@@ -588,7 +587,7 @@ export default function LandingPage() {
             <AnimatedSection
               key={String(name)}
               delay={index * 100}
-              className={`border p-6 ${
+              className={`flex h-full flex-col border p-6 ${
                 index === 1 ? "border-emerald-700 bg-white shadow-[0_24px_70px_rgba(4,120,87,0.14)]" : "border-stone-200 bg-white"
               }`}
             >
@@ -599,7 +598,7 @@ export default function LandingPage() {
               <h3 className="mt-8 text-2xl font-semibold text-stone-950">{name}</h3>
               <p className="mt-1 text-stone-500">{sub}</p>
               <p className="mt-8 text-3xl font-semibold text-stone-950">{price}</p>
-              <ul className="mt-8 space-y-3">
+              <ul className="mb-8 mt-8 flex-1 space-y-3">
                 {(features as string[]).map((feature) => (
                   <li key={feature} className="flex gap-3 text-sm text-stone-600">
                     <Check className="size-4 shrink-0 text-emerald-700" />
@@ -609,7 +608,7 @@ export default function LandingPage() {
               </ul>
               <Link
                 href="/analysis"
-                className="mt-8 inline-flex h-11 w-full items-center justify-center bg-stone-950 text-sm font-semibold text-white hover:bg-stone-800"
+                className="mt-auto inline-flex h-11 w-full items-center justify-center bg-stone-950 text-sm font-semibold text-white hover:bg-stone-800"
               >
                 시작하기
               </Link>
@@ -658,8 +657,8 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-7xl gap-10 border-t border-white/10 px-4 py-12 sm:px-6 md:grid-cols-[1fr_1fr]">
           <div>
             <p className="text-sm font-semibold">BuildMore</p>
-            <p className="mt-3 max-w-md leading-7 text-stone-400">
-              상업용 부동산·꼬마빌딩 매매와 개발 실행을 위한 AI 기반 Deal Solution
+            <p className="mt-3 max-w-none leading-7 text-stone-400 md:whitespace-nowrap">
+              상업용 부동산·꼬마빌딩 매매·개발 AI Deal Solution
             </p>
           </div>
           <div className="grid grid-cols-3 gap-6 text-sm text-stone-400">
