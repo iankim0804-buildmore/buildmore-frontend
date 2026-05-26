@@ -5,8 +5,9 @@ import { EnvDebugBadge } from '@/components/EnvDebugBadge'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BuildMore | 부동산 딜 금융 실행 가능성 분석',
-  description: '실거래가, 임대수익, 금리, 법규, 공사비 리스크를 분석해 부동산 딜의 금융 실행 가능성을 판단하는 AI 분석 서비스',
+  title: 'BuildMore | 상업용 부동산 AI Pre-Underwriting',
+  description:
+    '주소, 실거래, 임대수익, 법규, 금융 조건을 바탕으로 LTV, NOI, DSCR, Bankability Score를 계산하는 상업용 부동산 투자 검토 서비스입니다.',
   generator: 'BuildMore',
   icons: {
     icon: [
@@ -52,8 +53,7 @@ export default function RootLayout({
         {children}
         <Toaster position="top-center" richColors />
         {process.env.NODE_ENV === 'production' && <Analytics />}
-        {/* TODO: 개발 완료 후 제거 */}
-        <EnvDebugBadge />
+        {process.env.NEXT_PUBLIC_SHOW_ENV_BADGE === 'true' && <EnvDebugBadge />}
       </body>
     </html>
   )
