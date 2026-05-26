@@ -9,14 +9,12 @@ import {
   Check,
   ChevronRight,
   FileText,
-  Landmark,
   LineChart,
   MapPin,
   Menu,
   Radar,
   Scale,
   Search,
-  ShieldCheck,
   Sparkles,
   WalletCards,
   X,
@@ -27,66 +25,66 @@ import { ComponentType, ReactNode, useEffect, useMemo, useRef, useState } from "
 type Icon = ComponentType<{ className?: string }>
 
 const metrics = [
-  { value: "72", label: "Bankability Score", note: "조건부 검토 가능" },
-  { value: "52~58%", label: "예상 LTV", note: "은행 담보 관점" },
-  { value: "1.21x", label: "DSCR", note: "스트레스 케이스" },
-  { value: "2.1억", label: "연 NOI", note: "공실률 반영" },
+  { value: "Top 3", label: "추천 개발·운영 시나리오", note: "용도와 공사 방향 자동 비교" },
+  { value: "ROE", label: "자기자본 수익률 랭킹", note: "후보 매물 간 우선순위 판단" },
+  { value: "Max", label: "역산 매입 가능가", note: "수익·금융 기준 가격 협상선" },
+  { value: "Risk", label: "인허가·공사·금융 리스크", note: "실행 전 확인해야 할 변수" },
 ]
 
 const capabilities: Array<{ no: string; title: string; desc: string; icon: Icon; chips: string[] }> = [
   {
     no: "01",
-    title: "주소만 넣으면 딜 구조가 보입니다",
-    desc: "주소, 매입가, 임대 조건을 기준으로 실거래, 상권, 임대수익, 금융 조건을 한 화면에서 연결합니다.",
+    title: "주소 하나로 매물의 실행 그림을 만듭니다",
+    desc: "주소와 매입가를 기준으로 토지·건물, 실거래, 상권, 임대, 금융, 법규 데이터를 한 번에 연결합니다.",
     icon: MapPin,
-    chips: ["주소 검색", "실거래 비교", "상권 맥락"],
+    chips: ["주소 검색", "건축물대장", "실거래"],
   },
   {
     no: "02",
-    title: "은행이 보는 숫자로 먼저 검토합니다",
-    desc: "LTV, NOI, DSCR, 자기자본, 월 이자 부담을 계산해 대출 실행 가능성을 사전에 판단합니다.",
-    icon: Landmark,
-    chips: ["LTV", "NOI", "DSCR"],
+    title: "매매·리모델링·증축·신축 시나리오를 비교합니다",
+    desc: "주거·비주거 방향, 추천 용도, 공사 방식, 공사비, 기간, NOI 개선폭을 묶어 후보별 실행성을 계산합니다.",
+    icon: Calculator,
+    chips: ["리모델링", "증축", "신축"],
   },
   {
     no: "03",
-    title: "법규와 숨은 리스크를 카드로 정리합니다",
-    desc: "도로, 일조, 주차, 용도지역, 위반건축물 여부처럼 가격표에 보이지 않는 리스크를 체크합니다.",
-    icon: Scale,
-    chips: ["접도", "주차", "용도지역"],
+    title: "여러 매물을 저장하고 수익성 순서로 비교합니다",
+    desc: "ROE, 필요 자기자본, 최대 매입가, 임대수익, 개발 리스크를 같은 기준으로 비교해 우선순위를 잡습니다.",
+    icon: BarChart3,
+    chips: ["후보 저장", "ROE 랭킹", "가격협상"],
   },
   {
     no: "04",
-    title: "은행 상담 전 제출 가능한 리포트로 만듭니다",
-    desc: "투자위원회 메모, 금융기관 협의 포인트, 보완 조건을 카드형 리포트와 PDF 구조로 정리합니다.",
+    title: "투자자와 시행 의사결정에 쓸 리포트로 바꿉니다",
+    desc: "중개사가 투자자에게 보내고, 개발사가 내부 검토에 쓰고, 전문가에게 넘길 수 있는 리포트 구조로 정리합니다.",
     icon: FileText,
-    chips: ["리포트", "보완 포인트", "PDF"],
+    chips: ["공유 링크", "PDF", "전문가 검토"],
   },
 ]
 
 const riskCards: Array<{ title: string; desc: string; icon: Icon }> = [
   {
-    title: "실거래가와 적정 매입가는 다릅니다",
-    desc: "주변 거래 사례만으로는 은행 담보평가 기준과 적정 LTV를 판단하기 어렵습니다.",
+    title: "중개사",
+    desc: "투자자에게 보낼 수 있는 매물 분석 카드와 리포트로 상담 속도와 신뢰도를 높입니다.",
     icon: Search,
   },
   {
-    title: "수익률과 대출 가능성은 다릅니다",
-    desc: "NOI와 DSCR이 맞지 않으면 좋은 입지도 금융 실행으로 이어지지 않습니다.",
-    icon: Calculator,
+    title: "꼬마빌딩 투자자",
+    desc: "여러 후보 중 어떤 매물이 돈이 되는지, 얼마까지 사도 되는지, 어떤 리스크가 큰지 비교합니다.",
+    icon: WalletCards,
   },
   {
-    title: "법규 리스크는 나중에 발견하면 늦습니다",
-    desc: "도로 폭, 일조사선, 주차, 용도지역 조건 하나가 개발 가능성을 크게 바꿉니다.",
-    icon: ShieldCheck,
+    title: "소형 개발·시행사",
+    desc: "용도 변경, 리모델링, 증축, 신축 가능성을 수익성과 인허가 리스크까지 묶어 검토합니다.",
+    icon: Scale,
   },
 ]
 
 const process = [
-  ["01", "딜 조건 입력", "주소, 매입가, 예상 보증금과 월세, 자기자본을 입력합니다."],
-  ["02", "데이터 조회", "실거래, 임대, 상권, 금리, 법규 데이터를 자동으로 모읍니다."],
-  ["03", "금융 실행성 분석", "LTV, NOI, DSCR, 법규 리스크, 유사 사례를 은행 관점으로 계산합니다."],
-  ["04", "리포트 생성", "Bankability Score와 보완 포인트를 투자 검토용 리포트로 제공합니다."],
+  ["01", "매물 입력", "주소, 매입가, 주거·비주거 방향만 넣으면 기본 토지·건물 정보를 자동으로 채웁니다."],
+  ["02", "데이터 가공", "실거래, 임대, 상권, 유동인구, 금리, 법규, 뉴스·정책 자료를 DB와 Wiki 구조로 정리합니다."],
+  ["03", "시나리오 계산", "리모델링·증축·신축, 추천 용도, 공사비, NOI, ROE, 최대 매입가, 금융 리스크를 계산합니다."],
+  ["04", "비교와 리포트", "후보를 저장하고 순위를 비교한 뒤 투자자용·개발 검토용·전문가 검토용 리포트로 전환합니다."],
 ]
 
 const dataSources = [
@@ -101,15 +99,15 @@ const dataSources = [
 ]
 
 const reportItems = [
-  ["금융 분석", "예상 LTV 52~58%", "자기자본 18.5억", "월 이자 1,850만"],
-  ["사업성", "예상 보증금 3.5억", "예상 월세 2,800만", "NOI 연 2.1억"],
-  ["리스크", "도로 접도 조건 확인", "주차대수 부족 가능성", "임대 근거 보완 필요"],
+  ["매입 판단", "최대 매입 가능가", "평당가·실거래 비교", "가격협상 포인트"],
+  ["개발 시나리오", "추천 용도 Top 3", "공사비·기간 추정", "NOI 개선폭"],
+  ["실행 리스크", "인허가 체크리스트", "금융·금리 민감도", "전문가 검토 포인트"],
 ]
 
 const pricingPlans = [
-  ["Free Check", "간단한 딜 판단", "무료", ["Bankability Score", "LTV·DSCR 핵심 지표", "주요 리스크 요약"]],
-  ["Deep Report", "심층 분석 리포트", "39,000원부터", ["상권·임대·실거래 분석", "금융 시나리오 분석", "법규 리스크 체크", "PDF 리포트"]],
-  ["Bank Package", "은행 제출용 패키지", "별도 문의", ["사업계획서 구조", "전문가 검토 및 보정", "금융기관 협의 자료", "투자위원회 메모"]],
+  ["Quick Simulation", "반복 매물 스크리닝", "무료/저가", ["주소 기반 빠른 판단", "추천 용도·공사 방향", "핵심 리스크 요약"]],
+  ["Comparison Board", "후보 저장과 비교", "월 구독", ["여러 매물 ROE 랭킹", "최대 매입가 비교", "투자자 피드백 관리", "공유 카드"]],
+  ["Report & Expert", "유료 리포트와 전문가 연결", "건별/프리미엄", ["심층 투자자 리포트", "3~5개 후보 비교 보고서", "개발 타당성 표", "인허가·공사비 검토 연결"]],
 ]
 
 function AnimatedSection({
@@ -195,32 +193,32 @@ function HeroVisual() {
       <div className="absolute left-5 right-5 top-5 flex items-center justify-between border-b border-stone-200 pb-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-stone-500">
           <span className="size-2 rounded-full bg-emerald-500" />
-          실시간 사전 심사
+          매매·개발 시뮬레이션
         </div>
-        <span className="text-xs text-stone-400">성수동 꼬마빌딩</span>
+        <span className="text-xs text-stone-400">성수동 후보 매물</span>
       </div>
 
       <div className="mt-16 grid gap-4">
         <div className="border border-stone-200 bg-[#f7f7f2] p-5">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-stone-500">Bankability Score</p>
+            <p className="text-sm font-semibold text-stone-500">Deal Fit Score</p>
             <BadgeCheck className="size-5 text-emerald-700" />
           </div>
           <div className="mt-5 flex items-end gap-3">
-            <span className="text-7xl font-semibold leading-none text-stone-950">72</span>
+            <span className="text-7xl font-semibold leading-none text-stone-950">84</span>
             <span className="pb-2 text-stone-500">/ 100</span>
           </div>
           <div className="mt-5 h-2 overflow-hidden bg-stone-200">
-            <div className="h-full w-[72%] bg-emerald-600" />
+            <div className="h-full w-[84%] bg-emerald-600" />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           {[
-            ["예상 LTV", "52~58%", WalletCards],
-            ["DSCR", "1.21x", LineChart],
-            ["연 NOI", "2.1억", BarChart3],
-            ["리스크", "보완 필요", Radar],
+            ["추천 방향", "리모델링", WalletCards],
+            ["예상 ROE", "18.4%", LineChart],
+            ["최대 매입가", "42.5억", BarChart3],
+            ["리스크", "중간", Radar],
           ].map(([label, value, Icon]) => {
             const TileIcon = Icon as Icon
             return (
@@ -239,7 +237,7 @@ function HeroVisual() {
           <div className="flex items-start gap-3">
             <Sparkles className="mt-1 size-4 shrink-0 text-emerald-700" />
             <p className="text-sm leading-6 text-emerald-950">
-              선임대 근거 확보 및 자기자본 40% 이상 확보 시 금융기관 사전 협의 가능
+              1층 F&B·상층 근린생활 리모델링이 후보 중 ROE가 가장 높습니다. 주차·용도 적합성은 전문가 확인이 필요합니다.
             </p>
           </div>
         </div>
@@ -311,16 +309,16 @@ export default function LandingPage() {
 
           <nav className="hidden items-center gap-8 text-sm font-medium text-stone-600 md:flex">
             <a href="#capabilities" className="hover:text-stone-950">
-              핵심 기능
+              핵심 가치
             </a>
             <a href="#process" className="hover:text-stone-950">
-              분석 과정
+              데이터 흐름
             </a>
             <a href="#report" className="hover:text-stone-950">
-              리포트
+              리포트/BM
             </a>
             <a href="#pricing" className="hover:text-stone-950">
-              가격
+              BM 구조
             </a>
           </nav>
 
@@ -332,7 +330,7 @@ export default function LandingPage() {
               href="/analysis"
               className="inline-flex h-10 items-center justify-center gap-2 bg-stone-950 px-4 text-sm font-semibold text-white hover:bg-stone-800"
             >
-              무료 분석 시작
+              매물 분석 시작
               <ArrowRight className="size-4" />
             </Link>
           </div>
@@ -351,19 +349,19 @@ export default function LandingPage() {
           <div className="border-t border-stone-200 bg-[#f7f7f2] px-4 py-4 md:hidden">
             <div className="grid gap-4 text-sm font-medium text-stone-700">
               <a href="#capabilities" onClick={() => setOpen(false)}>
-                핵심 기능
+                핵심 가치
               </a>
               <a href="#process" onClick={() => setOpen(false)}>
-                분석 과정
+                데이터 흐름
               </a>
               <a href="#report" onClick={() => setOpen(false)}>
-                리포트
+                리포트/BM
               </a>
               <Link
                 href="/analysis"
                 className="mt-1 inline-flex h-11 items-center justify-center bg-stone-950 px-4 text-white"
               >
-                무료 분석 시작
+                매물 분석 시작
               </Link>
             </div>
           </div>
@@ -375,28 +373,31 @@ export default function LandingPage() {
           <AnimatedSection className="flex flex-col justify-center">
             <p className="mb-6 inline-flex w-fit items-center gap-2 border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-normal text-emerald-700">
               <Sparkles className="size-3.5" />
-              AI Pre-Underwriting Platform
+              AI Real Estate Deal Solution
             </p>
             <h1 className="max-w-4xl text-5xl font-semibold leading-[0.98] tracking-normal text-stone-950 sm:text-6xl lg:text-7xl">
-              이 딜, 은행이 대출해줄 수 있을까?
+              여러 매물 중,
+              <br />
+              돈 되는 매물을 <br className="sm:hidden" />
+              고릅니다.
             </h1>
             <p className="mt-7 max-w-2xl text-lg leading-8 text-stone-600">
-              BuildMore는 상업용 부동산과 꼬마빌딩 매입 전, LTV·NOI·DSCR·법규 리스크를 은행 관점으로
-              계산해 투자 검토와 대출 상담에 필요한 판단 근거를 제공합니다.
+              BuildMore는 상업용 부동산과 꼬마빌딩 매매·개발 후보를 주소 기반으로 분석해 추천 용도,
+              공사 시나리오, ROE, 최대 매입가, 리스크, 투자자용 리포트까지 연결하는 AI 솔루션입니다.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/analysis"
                 className="inline-flex h-12 items-center justify-center gap-2 bg-stone-950 px-5 text-sm font-semibold text-white hover:bg-stone-800"
               >
-                딜 분석 시작하기
+                매물 분석 시작하기
                 <ArrowRight className="size-4" />
               </Link>
               <a
                 href="#report"
                 className="inline-flex h-12 items-center justify-center gap-2 border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-100"
               >
-                샘플 리포트 보기
+                비교 리포트 보기
                 <ChevronRight className="size-4" />
               </a>
             </div>
@@ -424,15 +425,15 @@ export default function LandingPage() {
 
       <section id="capabilities" className="border-b border-stone-200 bg-white py-18 sm:py-24">
         <SectionHeading
-          eyebrow="핵심 기능"
+          eyebrow="핵심 가치"
           title={
             <>
-              데이터는 많습니다.
+              매물 정보는 많습니다.
               <br />
-              중요한 건 금융 실행 판단입니다.
+              중요한 건 실행 가능한 전략입니다.
             </>
           }
-          desc="BuildMore는 부동산 데이터를 모으는 데서 멈추지 않고, 투자위원회와 은행이 실제로 묻는 질문에 답하도록 설계되었습니다."
+          desc="BuildMore는 매입 후보를 수익성, 개발 가능성, 금융 구조, 리스크, 리포트 활용성까지 한 흐름으로 판단하도록 설계되었습니다."
         />
         <div className="mx-auto grid max-w-7xl border-l border-t border-stone-200 px-4 sm:px-6 md:grid-cols-2">
           {capabilities.map((item, index) => {
@@ -465,15 +466,15 @@ export default function LandingPage() {
       <section className="border-b border-stone-200 py-18 sm:py-24">
         <SectionHeading
           center
-          eyebrow="왜 필요한가"
+          eyebrow="타겟 사용자"
           title={
             <>
-              시장은 커지고,
+              중개사, 투자자, 개발사가
               <br />
-              리스크는 더 빨라집니다.
+              같은 숫자로 의사결정합니다.
             </>
           }
-          desc="아파트는 비교 가능한 시세가 많지만, 상가와 꼬마빌딩은 1m 차이, 도로 조건, 임차 안정성 하나가 수익과 대출 가능성을 바꿉니다."
+          desc="빌드모어의 1차 타겟은 반복적으로 매물을 검토하고, 투자자에게 설명하고, 개발·공사·금융 실행까지 연결해야 하는 실무자입니다."
         />
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3">
           {riskCards.map((card, index) => {
@@ -492,12 +493,12 @@ export default function LandingPage() {
       <section id="process" className="border-b border-stone-200 bg-white py-18 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[390px_1fr]">
           <AnimatedSection>
-            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">분석 과정</p>
+            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">데이터 가공 흐름</p>
             <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
-              주소 입력부터 은행 제출 리포트까지.
+              주소 입력부터 후보 비교 리포트까지.
             </h2>
             <p className="mt-5 leading-7 text-stone-600">
-              입력은 가볍게, 결과는 깊게. 매입 전 판단에 필요한 숫자와 리스크만 순서대로 압축합니다.
+              현재 DB 구조는 공공데이터, 콘텐츠, Wiki, Delta Engine, 분석 결과, 사용자 후보 데이터를 연결해 반복 가능한 의사결정 흐름을 만듭니다.
             </p>
           </AnimatedSection>
 
@@ -523,12 +524,12 @@ export default function LandingPage() {
           eyebrow="데이터 코어"
           title={
             <>
-              공공데이터, 뉴스, 정책 자료를
+              데이터는 수집하고,
               <br />
-              분석 엔진의 근거로 축적합니다.
+              판단 근거로 가공됩니다.
             </>
           }
-          desc="FastAPI, PostgreSQL, SQLAlchemy, Alembic, pgvector 기반 데이터 코어 위에서 실거래와 LLM Wiki 신호를 함께 확장합니다."
+          desc="FastAPI와 PostgreSQL, pgvector 기반으로 실거래·임대·상권·금리·법규·뉴스·정책 자료를 모으고, Queue와 LLM Wiki, Delta Engine을 거쳐 분석 카드와 리포트에 반영합니다."
         />
         <DataMarquee />
         <DataMarquee reverse />
@@ -537,12 +538,12 @@ export default function LandingPage() {
       <section id="report" className="border-b border-stone-200 bg-white py-18 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
           <AnimatedSection>
-            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">리포트</p>
+            <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">주력 서비스</p>
             <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
-              투자위원회가 바로 검토할 수 있는 카드형 결과.
+              빠른 시뮬레이션에서 유료 리포트와 전문가 검토까지.
             </h2>
             <p className="mt-5 leading-7 text-stone-600">
-              결론, 수치, 보완 조건을 분리해 은행 상담 전에 무엇을 준비해야 하는지 명확히 보여줍니다.
+              무료·저가의 반복 분석으로 후보를 모으고, 비교 보드와 심층 리포트, 개발 타당성 검토, 전문가 연결로 BM을 확장합니다.
             </p>
           </AnimatedSection>
 
@@ -550,10 +551,10 @@ export default function LandingPage() {
             <div className="border border-stone-200 bg-white p-5">
               <div className="flex flex-col justify-between gap-4 border-b border-stone-200 pb-5 sm:flex-row sm:items-center">
                 <div>
-                  <p className="text-xs font-semibold uppercase text-stone-500">Investment Committee Memo</p>
-                  <h3 className="mt-2 text-2xl font-semibold text-stone-950">조건부 검토 가능</h3>
+                  <p className="text-xs font-semibold uppercase text-stone-500">BuildMore Deal Report</p>
+                  <h3 className="mt-2 text-2xl font-semibold text-stone-950">리모델링 후 임대수익형 보유 추천</h3>
                 </div>
-                <span className="w-fit bg-emerald-700 px-3 py-1 text-sm font-semibold text-white">결론 B+</span>
+                <span className="w-fit bg-emerald-700 px-3 py-1 text-sm font-semibold text-white">후보 1순위</span>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -578,9 +579,9 @@ export default function LandingPage() {
 
       <section id="pricing" className="border-b border-stone-200 py-18 sm:py-24">
         <SectionHeading
-          eyebrow="가격"
-          title="분석은 가볍게, 실행은 깊게."
-          desc="필요한 깊이에 맞춰 무료 체크부터 은행 제출용 패키지까지 선택할 수 있습니다."
+          eyebrow="BM 구조"
+          title="자주 쓰는 분석은 가볍게, 중요한 결정은 깊게."
+          desc="빌드모어는 반복 시뮬레이션과 후보 저장을 진입점으로 만들고, 비교 리포트·개발 타당성 보고서·전문가 검토에서 수익화합니다."
         />
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3">
           {pricingPlans.map(([name, sub, price, features], index) => (
@@ -632,20 +633,20 @@ export default function LandingPage() {
           <AnimatedSection className="mx-auto max-w-3xl text-center">
             <p className="mx-auto mb-5 inline-flex items-center gap-2 border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-emerald-200">
               <Zap className="size-3.5" />
-              Pre-underwriting starts here
+              Build, compare, execute
             </p>
             <h2 className="text-4xl font-semibold leading-tight tracking-normal sm:text-6xl">
-              매입 전에, 먼저 금융 실행 가능성을 확인하세요.
+              매물 검토를 반복할수록 더 좋은 딜이 보입니다.
             </h2>
             <p className="mx-auto mt-6 max-w-xl leading-8 text-stone-300">
-              LTV, NOI, DSCR, 법규 리스크를 사전에 분석하고 은행 제출용 리포트의 초안을 준비하세요.
+              주소를 넣고 빠르게 시뮬레이션하세요. 후보를 저장하고 비교한 뒤, 투자자에게 보낼 수 있는 리포트로 전환하세요.
             </p>
             <div className="mt-9 flex justify-center">
               <Link
                 href="/analysis"
                 className="inline-flex h-12 items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-200"
               >
-                무료로 딜 분석 시작하기
+                첫 매물 분석 시작하기
                 <ArrowRight className="size-4" />
               </Link>
             </div>
@@ -658,7 +659,7 @@ export default function LandingPage() {
           <div>
             <p className="text-sm font-semibold">BuildMore</p>
             <p className="mt-3 max-w-md leading-7 text-stone-400">
-              상업용 부동산·꼬마빌딩 투자 검토를 위한 AI 기반 Pre-Underwriting 서비스
+              상업용 부동산·꼬마빌딩 매매와 개발 실행을 위한 AI 기반 Deal Solution
             </p>
           </div>
           <div className="grid grid-cols-3 gap-6 text-sm text-stone-400">

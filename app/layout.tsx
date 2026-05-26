@@ -5,9 +5,9 @@ import { EnvDebugBadge } from '@/components/EnvDebugBadge'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BuildMore | 상업용 부동산 AI Pre-Underwriting',
+  title: 'BuildMore | 부동산 매매·개발 AI Deal Solution',
   description:
-    '주소, 실거래, 임대수익, 법규, 금융 조건을 바탕으로 LTV, NOI, DSCR, Bankability Score를 계산하는 상업용 부동산 투자 검토 서비스입니다.',
+    '상업용 부동산과 꼬마빌딩 매매·개발 후보를 주소 기반으로 분석해 추천 용도, 공사 시나리오, ROE, 최대 매입가, 리스크, 리포트까지 연결하는 AI 솔루션입니다.',
   generator: 'BuildMore',
   icons: {
     icon: [
