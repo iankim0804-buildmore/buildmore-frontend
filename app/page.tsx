@@ -159,19 +159,31 @@ function SectionHeading({
   eyebrow,
   title,
   desc,
+  center = false,
 }: {
   eyebrow: string
   title: ReactNode
   desc?: string
+  center?: boolean
 }) {
   return (
-    <AnimatedSection className="mx-auto mb-10 grid max-w-7xl gap-5 px-4 sm:px-6 lg:mb-14 lg:grid-cols-[0.75fr_1.25fr]">
-      <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">{eyebrow}</p>
+    <AnimatedSection
+      className={
+        center
+          ? "mx-auto mb-10 max-w-4xl px-4 text-center sm:px-6 lg:mb-14"
+          : "mx-auto mb-10 grid max-w-7xl gap-5 px-4 sm:px-6 lg:mb-14 lg:grid-cols-[0.75fr_1.25fr]"
+      }
+    >
+      <p className="text-lg font-semibold uppercase tracking-normal text-emerald-700 sm:text-xl">{eyebrow}</p>
       <div>
         <h2 className="text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
           {title}
         </h2>
-        {desc ? <p className="mt-5 max-w-2xl text-base leading-7 text-stone-600 sm:text-lg">{desc}</p> : null}
+        {desc ? (
+          <p className={`mt-5 max-w-2xl text-base leading-7 text-stone-600 sm:text-lg ${center ? "mx-auto" : ""}`}>
+            {desc}
+          </p>
+        ) : null}
       </div>
     </AnimatedSection>
   )
@@ -189,7 +201,7 @@ function HeroVisual() {
       </div>
 
       <div className="mt-16 grid gap-4">
-        <div className="animate-[floatCard_6s_ease-in-out_infinite] border border-stone-200 bg-[#f7f7f2] p-5">
+        <div className="border border-stone-200 bg-[#f7f7f2] p-5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-stone-500">Bankability Score</p>
             <BadgeCheck className="size-5 text-emerald-700" />
@@ -199,7 +211,7 @@ function HeroVisual() {
             <span className="pb-2 text-stone-500">/ 100</span>
           </div>
           <div className="mt-5 h-2 overflow-hidden bg-stone-200">
-            <div className="h-full w-[72%] animate-[scoreFill_2.4s_ease-out_both] bg-emerald-600" />
+            <div className="h-full w-[72%] bg-emerald-600" />
           </div>
         </div>
 
@@ -223,7 +235,7 @@ function HeroVisual() {
           })}
         </div>
 
-        <div className="animate-[floatCard_7s_ease-in-out_1s_infinite] border border-emerald-200 bg-emerald-50 p-4">
+        <div className="border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex items-start gap-3">
             <Sparkles className="mt-1 size-4 shrink-0 text-emerald-700" />
             <p className="text-sm leading-6 text-emerald-950">
@@ -233,7 +245,6 @@ function HeroVisual() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute -bottom-16 left-8 right-8 h-28 animate-[scanLine_5s_linear_infinite] border-t border-emerald-500/40" />
     </div>
   )
 }
@@ -280,27 +291,6 @@ export default function LandingPage() {
         @keyframes marqueeReverse {
           from { transform: translateX(-50%); }
           to { transform: translateX(0); }
-        }
-        @keyframes floatCard {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-12px); }
-        }
-        @keyframes scoreFill {
-          from { width: 0; }
-          to { width: 72%; }
-        }
-        @keyframes scanLine {
-          from { transform: translateY(-420px); opacity: 0; }
-          12%, 78% { opacity: 1; }
-          to { transform: translateY(0); opacity: 0; }
-        }
-        @keyframes pulseGrid {
-          0%, 100% { opacity: 0.35; transform: translateY(0); }
-          50% { opacity: 0.85; transform: translateY(-8px); }
-        }
-        @keyframes ctaDrift {
-          0%, 100% { transform: translate3d(0, 0, 0); }
-          50% { transform: translate3d(14px, -10px, 0); }
         }
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {
@@ -454,10 +444,10 @@ export default function LandingPage() {
                 className="min-h-72 border-b border-r border-stone-200 bg-white p-5 sm:p-6"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-stone-400">{item.no}</span>
-                  <Icon className="size-5 text-emerald-700" />
+                  <span className="text-2xl font-semibold text-stone-400 sm:text-3xl">{item.no}</span>
+                  <Icon className="size-9 text-emerald-700 sm:size-10" />
                 </div>
-                <h3 className="mt-16 text-2xl font-semibold tracking-normal text-stone-950">{item.title}</h3>
+                <h3 className="mt-16 text-3xl font-semibold tracking-normal text-stone-950">{item.title}</h3>
                 <p className="mt-4 max-w-md leading-7 text-stone-600">{item.desc}</p>
                 <div className="mt-6 flex flex-wrap gap-2">
                   {item.chips.map((chip) => (
@@ -474,6 +464,7 @@ export default function LandingPage() {
 
       <section className="border-b border-stone-200 py-18 sm:py-24">
         <SectionHeading
+          center
           eyebrow="왜 필요한가"
           title={
             <>
@@ -489,8 +480,8 @@ export default function LandingPage() {
             const Icon = card.icon
             return (
               <AnimatedSection key={card.title} delay={index * 110} className="border border-stone-200 bg-white p-6">
-                <Icon className="size-6 text-emerald-700" />
-                <h3 className="mt-14 text-xl font-semibold text-stone-950">{card.title}</h3>
+                <Icon className="size-8 text-emerald-700" />
+                <h3 className="mt-14 text-2xl font-semibold text-stone-950">{card.title}</h3>
                 <p className="mt-4 leading-7 text-stone-600">{card.desc}</p>
               </AnimatedSection>
             )
@@ -632,8 +623,7 @@ export default function LandingPage() {
             {Array.from({ length: 60 }).map((_, index) => (
               <span
                 key={index}
-                className="border border-white/10 animate-[pulseGrid_4s_ease-in-out_infinite]"
-                style={{ animationDelay: `${(index % 12) * 120}ms` }}
+                className="border border-white/10"
               />
             ))}
           </div>
@@ -653,7 +643,7 @@ export default function LandingPage() {
             <div className="mt-9 flex justify-center">
               <Link
                 href="/analysis"
-                className="inline-flex h-12 animate-[ctaDrift_5s_ease-in-out_infinite] items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-200"
+                className="inline-flex h-12 items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-200"
               >
                 무료로 딜 분석 시작하기
                 <ArrowRight className="size-4" />
