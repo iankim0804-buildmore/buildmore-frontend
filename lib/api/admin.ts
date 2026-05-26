@@ -76,6 +76,9 @@ export interface AdminWikiNoteSummary {
   title: string
   status: string
   freshness_status: string | null
+  review_status: 'pending' | 'keep' | 'delete' | 'hold'
+  review_note: string | null
+  reviewed_at: string | null
   source_count: number
   version_count: number
   latest_change_summary: string | null
@@ -168,14 +171,19 @@ export interface AdminData {
   usage: AdminUsage | null
 }
 
-async function fetchAdmin<T>(path: string): Promise<{ data: T | null; error: string | null }> {
+async function fetchAdmin<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T | null; error: string | null }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000)
 
   try {
     const res = await fetch(`/api/admin${path}`, {
+      ...init,
       signal: controller.signal,
       credentials: 'include',
+      headers: init?.headers,
     })
 
     clearTimeout(timeoutId)
@@ -211,12 +219,25 @@ export async function fetchWiki(): Promise<AdminWiki | null> {
 }
 
 export async function fetchWikiNotes(limit = 100): Promise<AdminWikiNoteSummary[]> {
-  const result = await fetchAdmin<AdminWikiNoteSummary[]>(`/wiki/notes?limit=${limit}`)
+  const result = await fetchAdmin<AdminWikiNoteSummary[]>(`/wiki/notes?limit=${limit}&status=`)
   return result.data ?? []
 }
 
 export async function fetchWikiNoteDetail(noteId: number): Promise<AdminWikiNoteDetail | null> {
   const result = await fetchAdmin<AdminWikiNoteDetail>(`/wiki/notes/${noteId}`)
+  return result.data
+}
+
+export async function reviewWikiNote(
+  noteId: number,
+  reviewStatus: AdminWikiNoteSummary['review_status'],
+  reviewNote?: string,
+): Promise<AdminWikiNoteDetail | null> {
+  const result = await fetchAdmin<AdminWikiNoteDetail>(`/wiki/notes/${noteId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ review_status: reviewStatus, review_note: reviewNote || null }),
+  })
   return result.data
 }
 

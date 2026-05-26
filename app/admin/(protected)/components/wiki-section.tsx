@@ -12,7 +12,13 @@ import type {
   FrontendWikiStats,
   FrontendWikiUpdate,
 } from '@/lib/api/admin'
-import { fetchCardNewsCandidates, fetchWikiNoteDetail, fetchWikiNotes, fetchWikiTickerItems } from '@/lib/api/admin'
+import {
+  fetchCardNewsCandidates,
+  fetchWikiNoteDetail,
+  fetchWikiNotes,
+  fetchWikiTickerItems,
+  reviewWikiNote,
+} from '@/lib/api/admin'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -69,6 +75,13 @@ function noteStatusLabel(note: AdminWikiNoteSummary): string {
   return '최신'
 }
 
+function reviewStatusLabel(status: AdminWikiNoteSummary['review_status']): string {
+  if (status === 'keep') return '유지'
+  if (status === 'delete') return '삭제'
+  if (status === 'hold') return '보류'
+  return '미검수'
+}
+
 function taskStatusLabel(task: FrontendProcessingTask): string {
   const parts = [
     task.queued > 0 ? `대기 ${formatCount(task.queued)}` : '',
@@ -91,6 +104,7 @@ export function WikiSection({
   const [selectedNote, setSelectedNote] = useState<AdminWikiNoteDetail | null>(null)
   const [isNotesLoading, setIsNotesLoading] = useState(false)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [reviewingStatus, setReviewingStatus] = useState<AdminWikiNoteSummary['review_status'] | null>(null)
   const [notesError, setNotesError] = useState<string | null>(null)
 
   const progressPercent = processingQueue.total > 0
@@ -104,11 +118,18 @@ export function WikiSection({
     [notes],
   )
 
+  const reviewCounts = useMemo(() => ({
+    pending: notes.filter((note) => note.review_status === 'pending').length,
+    keep: notes.filter((note) => note.review_status === 'keep').length,
+    delete: notes.filter((note) => note.review_status === 'delete').length,
+    hold: notes.filter((note) => note.review_status === 'hold').length,
+  }), [notes])
+
   const loadNotes = async () => {
     setIsNotesLoading(true)
     setNotesError(null)
     try {
-      const nextNotes = await fetchWikiNotes(100)
+      const nextNotes = await fetchWikiNotes(500)
       setNotes(nextNotes)
       const [nextTickerItems, nextCardCandidates] = await Promise.all([
         fetchWikiTickerItems(20),
@@ -127,7 +148,9 @@ export function WikiSection({
   }
 
   useEffect(() => {
-    loadNotes()
+    queueMicrotask(() => {
+      void loadNotes()
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -135,24 +158,55 @@ export function WikiSection({
     if (!selectedNoteId) return
 
     let cancelled = false
-    setIsDetailLoading(true)
-    fetchWikiNoteDetail(selectedNoteId)
-      .then((note) => {
-        if (!cancelled) setSelectedNote(note)
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setNotesError(error instanceof Error ? error.message : 'Wiki 문서를 불러오지 못했습니다.')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsDetailLoading(false)
-      })
+    queueMicrotask(() => {
+      setIsDetailLoading(true)
+      fetchWikiNoteDetail(selectedNoteId)
+        .then((note) => {
+          if (!cancelled) setSelectedNote(note)
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setNotesError(error instanceof Error ? error.message : 'Wiki 문서를 불러오지 못했습니다.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsDetailLoading(false)
+        })
+    })
 
     return () => {
       cancelled = true
     }
   }, [selectedNoteId])
+
+  const handleReview = async (reviewStatus: AdminWikiNoteSummary['review_status']) => {
+    if (!selectedNote) return
+
+    setReviewingStatus(reviewStatus)
+    setNotesError(null)
+    try {
+      const nextNote = await reviewWikiNote(selectedNote.id, reviewStatus)
+      if (!nextNote) throw new Error('Wiki note review update failed')
+      setSelectedNote(nextNote)
+      setNotes((current) => current.map((note) => (
+        note.id === nextNote.id
+          ? {
+              ...note,
+              status: nextNote.status,
+              freshness_status: nextNote.freshness_status,
+              review_status: nextNote.review_status,
+              review_note: nextNote.review_note,
+              reviewed_at: nextNote.reviewed_at,
+              updated_at: nextNote.updated_at,
+            }
+          : note
+      )))
+    } catch (error) {
+      setNotesError(error instanceof Error ? error.message : 'Wiki 검수 상태를 저장하지 못했습니다.')
+    } finally {
+      setReviewingStatus(null)
+    }
+  }
 
   return (
     <section>
@@ -439,7 +493,7 @@ export function WikiSection({
                 LLM Wiki 문서 목록
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                published 문서 {formatCount(notes.length)}건
+                전체 {formatCount(notes.length)}건 · 미검수 {formatCount(reviewCounts.pending)}건 · 삭제 {formatCount(reviewCounts.delete)}건
               </p>
             </div>
             <Button
@@ -484,10 +538,10 @@ export function WikiSection({
                         </div>
                       </div>
                       <Badge
-                        variant={note.freshness_status === 'watch' ? 'outline' : 'secondary'}
+                        variant={note.review_status === 'delete' ? 'destructive' : note.review_status === 'pending' ? 'outline' : 'secondary'}
                         className="shrink-0"
                       >
-                        {noteStatusLabel(note)}
+                        {reviewStatusLabel(note.review_status)}
                       </Badge>
                     </div>
                     {note.latest_change_summary && (
@@ -518,6 +572,9 @@ export function WikiSection({
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <Badge variant="secondary">{selectedNote.status}</Badge>
                     <Badge variant="outline">{noteStatusLabel(selectedNote)}</Badge>
+                    <Badge variant={selectedNote.review_status === 'delete' ? 'destructive' : 'secondary'}>
+                      {reviewStatusLabel(selectedNote.review_status)}
+                    </Badge>
                     <span>last_compiled {formatDate(selectedNote.last_compiled_at)}</span>
                     <span>updated {formatDate(selectedNote.updated_at)}</span>
                   </div>
@@ -532,6 +589,25 @@ export function WikiSection({
             <ScrollArea className="h-[520px] pr-4">
               {selectedNote ? (
                 <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-2 rounded border border-sidebar-border bg-sidebar px-3 py-3">
+                    <span className="mr-auto text-xs text-muted-foreground">
+                      검수 결정: 유지하면 분석 Wiki에 남기고, 삭제는 archived로 전환합니다.
+                    </span>
+                    {(['keep', 'delete', 'hold'] as const).map((status) => (
+                      <Button
+                        key={status}
+                        type="button"
+                        size="sm"
+                        variant={selectedNote.review_status === status ? 'default' : 'outline'}
+                        disabled={reviewingStatus !== null}
+                        onClick={() => handleReview(status)}
+                      >
+                        {reviewingStatus === status && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                        {reviewStatusLabel(status)}
+                      </Button>
+                    ))}
+                  </div>
+
                   <article className="prose prose-invert max-w-none text-sm leading-7 text-sidebar-foreground prose-headings:text-sidebar-foreground prose-strong:text-sidebar-foreground prose-li:marker:text-muted-foreground">
                     <ReactMarkdown>{selectedNote.content}</ReactMarkdown>
                   </article>
