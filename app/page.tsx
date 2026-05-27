@@ -28,19 +28,19 @@ const demoSummaries: Array<{ title: string; value: string; desc: string; icon: I
   {
     title: "Scenario",
     value: "리모델링·증축·신축",
-    desc: "같은 주소를 세 가지 미래로 비교",
+    desc: "한 주소의 세 가지 전략",
     icon: Calculator,
   },
   {
     title: "Max Bid",
     value: "42.5억",
-    desc: "수익·금융 기준 매입 상한가",
+    desc: "수익 기준 매입 상한가",
     icon: LineChart,
   },
   {
     title: "Risk Map",
     value: "중간",
-    desc: "인허가·공사·금융 리스크 분해",
+    desc: "인허가·공사·금융 리스크",
     icon: Radar,
   },
 ]
@@ -48,39 +48,39 @@ const demoSummaries: Array<{ title: string; value: string; desc: string; icon: I
 const coreValues: Array<{ title: string; subtitle: string; desc: string; icon: Icon; chips: string[] }> = [
   {
     title: "Decision Coverage",
-    subtitle: "매입부터 리포트까지, 의사결정 전 영역",
-    desc: "토지·건물·실거래·임대·상권·금융·법규를 하나의 분석 화면에 결합합니다. 부분 정보가 아니라 매매·개발 의사결정 전 과정을 다룹니다.",
+    subtitle: "매입·개발·금융·리스크·리포트",
+    desc: "토지·건물·실거래·임대·상권·금융·법규를 한 화면에 결합합니다. 부분 정보가 아닌 의사결정 전 과정입니다.",
     icon: MapPin,
     chips: ["매입 판단", "금융 구조", "실행 리포트"],
   },
   {
     title: "Scenario Intelligence",
-    subtitle: "어떤 전략이 가장 수익성 있는지 비교",
-    desc: "리모델링·증축·신축을 같은 기준으로 추천 용도, 공사비, 공사 기간, NOI 개선폭, 자기자본 ROE까지 시나리오별로 비교합니다.",
+    subtitle: "리모델링·증축·신축 비교",
+    desc: "추천 용도, 공사비, 공사 기간, NOI, 자기자본 ROE를 같은 기준으로 비교합니다. 가장 수익성 있는 전략을 찾습니다.",
     icon: Calculator,
     chips: ["리모델링", "증축", "신축"],
   },
   {
     title: "Data Compounding",
-    subtitle: "시간이 갈수록 똑똑해지는 데이터 구조",
-    desc: "공공데이터·실거래·상권·정책 자료를 LLM Wiki와 Delta Engine으로 누적·해석해 매번 같은 질문에 더 정교한 답을 만듭니다.",
+    subtitle: "쌓일수록 정교한 판단",
+    desc: "공공데이터·실거래·상권·정책 자료를 LLM Wiki와 Delta Engine으로 누적합니다. 같은 질문에 더 나은 답을 만듭니다.",
     icon: Database,
     chips: ["LLM Wiki", "Delta Engine", "유사 사례"],
   },
   {
     title: "Execution-Ready Output",
-    subtitle: "그대로 실행에 쓰는 산출물",
-    desc: "투자자 공유 카드, 후보 비교 보드, 심층 PDF 리포트, 전문가 검토 연결까지. 분석으로 끝나지 않고 실제 매매·시행 단계로 연결됩니다.",
+    subtitle: "바로 쓰는 실행 산출물",
+    desc: "투자자 카드, 후보 비교 보드, 심층 PDF, 전문가 검토까지 연결합니다. 분석 이후의 실행까지 이어집니다.",
     icon: FileText,
     chips: ["공유 카드", "PDF", "전문가 검토"],
   },
 ]
 
 const workflow = [
-  ["01", "매물 입력", "주소·매입가·주거/비주거 방향만 입력하면 토지·건물 기본 정보가 자동으로 채워집니다."],
-  ["02", "데이터 결합", "실거래·임대·상권·유동인구·금리·법규·뉴스·정책 자료가 DB와 LLM Wiki를 통해 해당 주소 기준으로 정리됩니다."],
-  ["03", "시나리오 계산", "리모델링·증축·신축, 추천 용도, 공사비, NOI, ROE, 최대 매입가, 금융·인허가 리스크를 시나리오별로 산출합니다."],
-  ["04", "비교와 리포트", "여러 후보를 저장해 우선순위를 비교하고, 투자자용·내부 투심용·전문가 검토용 리포트로 전환합니다."],
+  ["01", "매물 입력", "주소·매입가·개발 방향만 넣으면 토지·건물 기본 정보가 채워집니다."],
+  ["02", "데이터 결합", "실거래·임대·상권·금리·법규·뉴스가 주소 기준으로 정리됩니다."],
+  ["03", "시나리오 계산", "리모델링·증축·신축별 공사비, NOI, ROE, 최대 매입가, 리스크를 산출합니다."],
+  ["04", "비교와 리포트", "후보를 저장·비교하고 투자자용·투심용·전문가 검토용 리포트로 전환합니다."],
 ]
 
 const scenarioRows = [
@@ -95,17 +95,17 @@ const scenarioRows = [
 const targetUsers: Array<{ title: string; desc: string; icon: Icon }> = [
   {
     title: "중개사",
-    desc: "투자자에게 보낼 수 있는 매물 분석 카드와 비교 리포트로 상담 속도와 신뢰를 끌어올립니다. 왜 이 매물인가를 숫자로 설명합니다.",
+    desc: "투자자에게 보낼 분석 카드와 비교 리포트. 상담 속도와 신뢰를 높이고, 왜 이 매물인지 숫자로 설명합니다.",
     icon: Search,
   },
   {
     title: "꼬마빌딩 투자자·자산가",
-    desc: "여러 후보 중 어떤 매물이 돈이 되는지, 얼마까지 사도 되는지, 어떤 리스크가 큰지를 동일 기준으로 비교합니다.",
+    desc: "어떤 매물이 돈이 되는지, 얼마까지 사도 되는지, 어떤 리스크가 큰지 같은 기준으로 비교합니다.",
     icon: WalletCards,
   },
   {
     title: "소형 개발사·시행사",
-    desc: "용도 변경, 리모델링, 증축, 신축 가능성을 수익성·공사비·인허가 리스크까지 묶어 내부 투심 수준으로 검토합니다.",
+    desc: "용도 변경, 리모델링, 증축, 신축 가능성을 수익성·공사비·인허가 리스크와 함께 검토합니다.",
     icon: Scale,
   },
 ]
@@ -124,19 +124,19 @@ const dataSources = [
 const pricingPlans = [
   [
     "Quick Simulation",
-    "주소 기반 빠른 매물 스크리닝",
+    "주소 기반 빠른 스크리닝",
     "무료/저가",
     ["추천 용도·공사 방향", "매입 상한가·ROE 요약", "핵심 리스크 요약"],
   ],
   [
     "Comparison Board",
-    "여러 후보를 모아 우선순위 결정",
+    "후보 비교와 우선순위",
     "월 구독",
     ["후보 매물 ROE 랭킹", "최대 매입가 비교", "투자자 공유 카드", "후보 메모·피드백 관리"],
   ],
   [
     "Report & Expert",
-    "실행 단계에서 그대로 쓰는 리포트",
+    "실행 단계용 리포트",
     "건별/프리미엄",
     ["심층 투자자 리포트", "3~5개 후보 비교 보고서", "개발 타당성·인허가 검토", "전문가 자문 연결"],
   ],
@@ -267,8 +267,8 @@ function DemoCard() {
         <div className="flex items-start gap-3">
           <Sparkles className="mt-1 size-4 shrink-0 text-emerald-700" />
           <p className="text-sm leading-6 text-emerald-950">
-            1층 F&B·상층 근생 리모델링이 후보 중 ROE가 가장 높습니다. 매입 상한가 대비 현 호가는 협상
-            여지 있으며, 주차 대수·용도지역 적합성은 인허가 사전검토가 필요합니다.
+            1층 F&B·상층 근생 리모델링의 ROE가 가장 높습니다. 현 호가는 협상 여지가 있고, 주차·용도지역은
+            인허가 사전검토 대상입니다.
           </p>
         </div>
       </div>
@@ -406,38 +406,37 @@ export default function LandingPage() {
             </p>
             <h1 className="max-w-4xl text-[2.75rem] font-semibold leading-[0.98] tracking-normal text-stone-950 sm:text-6xl lg:text-7xl">
               <span className="sm:hidden">
-                주소 한 줄로,
+                주소 하나로,
                 <br />
-                매입부터 개발
+                매입부터 개발까지
                 <br />
-                시나리오까지
+                실행 판단
                 <br />
-                끝냅니다.
+                끝.
               </span>
               <span className="hidden sm:inline">
-                주소 한 줄로,
+                주소 하나로,
                 <br />
-                매입부터 개발 시나리오까지 끝냅니다.
+                매입부터 개발까지 실행 판단 끝.
               </span>
             </h1>
             <p className="mt-7 max-w-2xl text-lg leading-8 text-stone-600">
-              BuildMore는 상업용 부동산·꼬마빌딩의 매매 후보를 토지·건물·실거래·상권·금융·법규 데이터로
-              결합하고, 리모델링·증축·신축 시나리오를 비교해 최대 매입가·ROE·리스크·리포트까지 한 흐름으로
-              만드는 AI 매매·개발 솔루션입니다.
+              토지·건물·실거래·상권·금융·법규 데이터를 결합해 리모델링·증축·신축을 비교합니다.
+              최대 매입가, ROE, 리스크, 리포트까지 한 번에 제공합니다.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/analysis"
                 className="inline-flex h-12 items-center justify-center gap-2 bg-stone-950 px-5 text-sm font-semibold text-white hover:bg-stone-800"
               >
-                매물 분석 시작하기
+                분석 시작
                 <ArrowRight className="size-4" />
               </Link>
               <a
                 href="#demo"
                 className="inline-flex h-12 items-center justify-center gap-2 border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-100"
               >
-                샘플 딜 리포트 보기
+                샘플 리포트
                 <ChevronRight className="size-4" />
               </a>
             </div>
@@ -454,12 +453,12 @@ export default function LandingPage() {
           eyebrow="Core Value"
           title={
             <>
-              매물 정보는 충분합니다.
+              정보보다 중요한 건,
               <br />
-              부족한 건 의사결정 흐름입니다.
+              의사결정 흐름.
             </>
           }
-          desc="BuildMore는 매입 판단·개발 시나리오·금융 구조·리스크·실행 리포트까지 한 워크플로우로 연결합니다."
+          desc="BuildMore는 매입 판단, 개발 시나리오, 금융 구조, 리스크, 리포트를 하나의 흐름으로 연결합니다."
         />
         <div className="mx-auto grid max-w-7xl border-l border-t border-stone-200 px-4 sm:px-6 md:grid-cols-2">
           {coreValues.map((item, index) => {
@@ -496,10 +495,10 @@ export default function LandingPage() {
           <AnimatedSection>
             <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">Workflow</p>
             <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-normal text-stone-950 sm:text-4xl lg:text-5xl">
-              주소 입력부터 실행 리포트까지, 한 흐름.
+              주소 입력부터 실행 리포트까지.
             </h2>
             <p className="mt-5 leading-7 text-stone-600">
-              입력은 가볍게 시작하지만 결과는 매입, 개발, 비교, 리포트까지 이어집니다.
+              입력은 짧게, 판단은 끝까지.
             </p>
           </AnimatedSection>
 
@@ -528,10 +527,10 @@ export default function LandingPage() {
             <>
               하나의 매물,
               <br />
-              세 가지 미래.
+              세 가지 전략.
             </>
           }
-          desc="BuildMore는 같은 주소에 대해 리모델링·증축·신축 시나리오를 동시에 만들고, 어떤 방향이 가장 돈이 되는지 비교합니다."
+          desc="같은 주소의 리모델링·증축·신축을 동시에 만들고, 가장 수익성 있는 방향을 비교합니다."
         />
         <AnimatedSection className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="overflow-x-auto border border-stone-200 bg-white">
@@ -557,7 +556,7 @@ export default function LandingPage() {
             </table>
           </div>
           <p className="mt-5 text-center text-sm leading-7 text-stone-500">
-            시나리오 비교는 용도지역, 건폐율·용적률, 주차 기준, 주변 임대 시세, 공사비 단가, 금융 조건을 함께 반영한 결과입니다.
+            용도지역, 건폐율·용적률, 주차 기준, 임대 시세, 공사비, 금융 조건을 함께 반영한 결과입니다.
           </p>
         </AnimatedSection>
       </section>
@@ -568,12 +567,12 @@ export default function LandingPage() {
           eyebrow="For"
           title={
             <>
-              중개사·투자자·시행사가
+              중개사·투자자·시행사,
               <br />
-              같은 숫자로 대화합니다.
+              같은 숫자, 같은 대화.
             </>
           }
-          desc="반복적으로 매물을 검토하고, 투자자에게 설명하고, 인허가·공사·금융 실행까지 책임지는 실무자를 위해 설계되었습니다."
+          desc="매물 검토, 투자자 설명, 인허가·공사·금융 실행을 맡는 실무자를 위한 워크벤치입니다."
         />
         <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
           {targetUsers.map((card, index) => {
@@ -594,12 +593,12 @@ export default function LandingPage() {
           eyebrow="Data Core"
           title={
             <>
-              수집된 데이터가,
+              데이터에서,
               <br />
-              판단 근거로 가공됩니다.
+              판단 근거로.
             </>
           }
-          desc="FastAPI·PostgreSQL·pgvector 기반 인프라에서 실거래·임대·상권·금리·법규·뉴스·정책 자료를 모으고, Processing Queue와 LLM Wiki, Delta Engine을 거쳐 분석 카드와 리포트에 반영됩니다."
+          desc="실거래·임대·상권·금리·법규·뉴스·정책 자료를 모으고, LLM Wiki와 Delta Engine으로 분석 카드와 리포트에 반영합니다."
         />
         <DataMarquee />
         <DataMarquee reverse />
@@ -608,8 +607,8 @@ export default function LandingPage() {
       <section id="pricing" className="border-b border-stone-200 py-18 sm:py-24">
         <SectionHeading
           eyebrow="Pricing"
-          title="가벼운 반복 분석은 무료, 중요한 결정은 깊게."
-          desc="빠른 시뮬레이션과 후보 저장을 진입점으로, 비교 리포트·심층 리포트·전문가 검토에서 수익화합니다."
+          title="반복 분석은 가볍게, 큰 결정은 깊게."
+          desc="빠른 시뮬레이션과 후보 저장에서 시작해 비교 리포트, 심층 리포트, 전문가 검토로 이어집니다."
         />
         <div className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 sm:px-6 lg:grid-cols-3 lg:gap-8">
           {pricingPlans.map(([name, sub, price, features], index) => (
@@ -661,17 +660,17 @@ export default function LandingPage() {
               Build, compare, execute
             </p>
             <h2 className="text-4xl font-semibold leading-tight tracking-normal sm:text-6xl">
-              매물을 더 보는 것보다, 한 번 제대로 분석하는 게 빠릅니다.
+              더 많은 매물보다, 더 정확한 판단.
             </h2>
             <p className="mx-auto mt-6 max-w-2xl leading-8 text-stone-300">
-              주소를 입력해 첫 시뮬레이션을 돌려보세요. 후보를 저장하고 비교한 뒤, 투자자·내부 투심에 그대로 쓸 수 있는 리포트로 전환할 수 있습니다.
+              주소를 입력해 첫 시뮬레이션을 시작하세요. 후보를 저장·비교하고 투자자·내부 투심용 리포트로 전환할 수 있습니다.
             </p>
             <div className="mt-9 flex justify-center">
               <Link
                 href="/analysis"
                 className="inline-flex h-12 items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-stone-950 hover:bg-stone-200"
               >
-                첫 매물 분석 시작하기
+                첫 분석 시작
                 <ArrowRight className="size-4" />
               </Link>
             </div>
