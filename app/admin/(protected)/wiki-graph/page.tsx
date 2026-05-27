@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, GitBranch, Layers3, Network, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
+import { AlertTriangle, ArrowLeft, GitBranch, Layers3, Minus, Network, Plus, RefreshCw, Search, Sparkles } from 'lucide-react'
 import {
   fetchWikiGraph,
   generateWikiGraphLinks,
@@ -16,6 +17,8 @@ const VIEW_WIDTH = 1000
 const VIEW_HEIGHT = 620
 const VIEW_CENTER_X = VIEW_WIDTH / 2
 const VIEW_CENTER_Y = VIEW_HEIGHT / 2
+const MIN_ZOOM = 0.55
+const MAX_ZOOM = 3.4
 
 const relationColor: Record<string, string> = {
   supports: '#22c55e',
@@ -107,10 +110,16 @@ type LayoutLink = {
   id: string
   source: string
   target: string
-  kind: 'category' | 'note'
+  kind: 'category_child' | 'category_peer' | 'note'
   relation_type: string
   weight: number
   confidence?: number | null
+}
+
+type ViewportState = {
+  scale: number
+  x: number
+  y: number
 }
 
 type GraphLayout = {
@@ -183,6 +192,16 @@ function noteTone(node: NoteLayoutNode) {
   return node.color
 }
 
+function categoryLabelLines(label: string) {
+  if (label.includes('·')) return label.split('·')
+  if (label.includes('/')) return label.split('/')
+  return [label]
+}
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+}
+
 function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGraphEdge[]): GraphLayout {
   const counts = new Map<CategoryId, number>(categoryDefinitions.map((category) => [category.id, 0]))
   const noteCategory = new Map<number, CategoryId>()
@@ -208,7 +227,7 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
       y: anchor.y,
       vx: 0,
       vy: 0,
-      r: 24 + Math.min(14, Math.sqrt(count) * 2.2),
+      r: 44 + Math.min(18, Math.sqrt(count) * 2.4),
       anchorX: anchor.x,
       anchorY: anchor.y,
     }
@@ -247,10 +266,26 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
     id: `category-link-${node.categoryId}-${node.noteId}`,
     source: `category-${node.categoryId}`,
     target: node.graphId,
-    kind: 'category',
+    kind: 'category_child',
     relation_type: 'category',
     weight: 42,
   }))
+
+  const categoryPeerLinks: LayoutLink[] = []
+  for (let sourceIndex = 0; sourceIndex < categoryNodes.length; sourceIndex += 1) {
+    for (let targetIndex = sourceIndex + 1; targetIndex < categoryNodes.length; targetIndex += 1) {
+      const source = categoryNodes[sourceIndex]
+      const target = categoryNodes[targetIndex]
+      categoryPeerLinks.push({
+        id: `category-peer-${source.categoryId}-${target.categoryId}`,
+        source: source.graphId,
+        target: target.graphId,
+        kind: 'category_peer',
+        relation_type: 'category_peer',
+        weight: 24,
+      })
+    }
+  }
 
   const graphNoteIds = new Set(noteNodes.map((node) => node.id))
   const graphNoteEdges: LayoutLink[] = noteEdges
@@ -267,7 +302,7 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
 
   return {
     nodes: [...categoryNodes, ...noteNodes],
-    links: [...categoryLinks, ...graphNoteEdges],
+    links: [...categoryPeerLinks, ...categoryLinks, ...graphNoteEdges],
     categoryCounts: counts,
   }
 }
@@ -310,8 +345,12 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
     const dx = target.x - source.x
     const dy = target.y - source.y
     const distance = Math.max(1, Math.hypot(dx, dy))
-    const desired = link.kind === 'category' ? 96 : Math.max(92, 150 - Math.min(45, link.weight / 2))
-    const stiffness = link.kind === 'category' ? 0.01 : 0.007
+    const desired = link.kind === 'category_child'
+      ? 112
+      : link.kind === 'category_peer'
+        ? 315
+        : Math.max(92, 150 - Math.min(45, link.weight / 2))
+    const stiffness = link.kind === 'category_child' ? 0.01 : link.kind === 'category_peer' ? 0.004 : 0.007
     const force = (distance - desired) * stiffness
     const fx = (dx / distance) * force
     const fy = (dy / distance) * force
@@ -374,6 +413,8 @@ export default function WikiGraphPage() {
   const [isMutating, setIsMutating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [motionNodes, setMotionNodes] = useState<LayoutNode[]>([])
+  const [viewport, setViewport] = useState<ViewportState>({ scale: 1, x: 0, y: 0 })
+  const panRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
 
   const loadGraph = useCallback(async () => {
     setIsLoading(true)
@@ -448,7 +489,8 @@ export default function WikiGraphPage() {
   }, [layout])
 
   const motionNodeById = useMemo(() => new Map(motionNodes.map((node) => [node.graphId, node])), [motionNodes])
-  const visibleCategoryLinks = useMemo(() => layout.links.filter((link) => link.kind === 'category'), [layout.links])
+  const visibleCategoryChildLinks = useMemo(() => layout.links.filter((link) => link.kind === 'category_child'), [layout.links])
+  const visibleCategoryPeerLinks = useMemo(() => layout.links.filter((link) => link.kind === 'category_peer'), [layout.links])
   const visibleNoteLinks = useMemo(() => layout.links.filter((link) => link.kind === 'note'), [layout.links])
   const activeCategoryCount = useMemo(() => {
     return categoryDefinitions.filter((category) => (layout.categoryCounts.get(category.id) ?? 0) > 0).length
@@ -483,6 +525,66 @@ export default function WikiGraphPage() {
       setError(err instanceof Error ? err.message : '작업에 실패했습니다.')
     } finally {
       setIsMutating(false)
+    }
+  }
+
+  const zoomAt = useCallback((point: { x: number; y: number }, nextScale: number) => {
+    setViewport((current) => {
+      const scale = clampZoom(nextScale)
+      const ratio = scale / current.scale
+      return {
+        scale,
+        x: point.x - (point.x - current.x) * ratio,
+        y: point.y - (point.y - current.y) * ratio,
+      }
+    })
+  }, [])
+
+  const zoomFromCenter = useCallback((factor: number) => {
+    zoomAt({ x: VIEW_CENTER_X, y: VIEW_CENTER_Y }, viewport.scale * factor)
+  }, [viewport.scale, zoomAt])
+
+  function svgPoint(event: ReactPointerEvent<SVGSVGElement> | ReactWheelEvent<SVGSVGElement>) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * VIEW_WIDTH,
+      y: ((event.clientY - rect.top) / rect.height) * VIEW_HEIGHT,
+    }
+  }
+
+  function handleWheel(event: ReactWheelEvent<SVGSVGElement>) {
+    event.preventDefault()
+    const point = svgPoint(event)
+    const factor = event.deltaY < 0 ? 1.12 : 0.88
+    zoomAt(point, viewport.scale * factor)
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
+    const target = event.target as SVGElement
+    if (target.closest('[data-graph-node="true"]')) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    panRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: viewport.x,
+      originY: viewport.y,
+    }
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    const pan = panRef.current
+    if (!pan || pan.pointerId !== event.pointerId) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const dx = ((event.clientX - pan.startX) / rect.width) * VIEW_WIDTH
+    const dy = ((event.clientY - pan.startY) / rect.height) * VIEW_HEIGHT
+    setViewport((current) => ({ ...current, x: pan.originX + dx, y: pan.originY + dy }))
+  }
+
+  function handlePointerEnd(event: ReactPointerEvent<SVGSVGElement>) {
+    if (panRef.current?.pointerId === event.pointerId) {
+      panRef.current = null
+      event.currentTarget.releasePointerCapture(event.pointerId)
     }
   }
 
@@ -564,7 +666,7 @@ export default function WikiGraphPage() {
                 <Network className="size-4 text-emerald-400" />
                 <span className="text-sm font-semibold">Graph View</span>
                 <span className="text-xs text-muted-foreground">
-                  {visibleNodes.length} notes / {visibleCategoryLinks.length} category links / {visibleNoteLinks.length} note links
+                  {visibleNodes.length} notes / {visibleCategoryChildLinks.length} child links / {visibleCategoryPeerLinks.length} category links / {visibleNoteLinks.length} note links
                 </span>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -589,11 +691,19 @@ export default function WikiGraphPage() {
                 </select>
               </div>
             </div>
-            <div className="h-[620px] overflow-hidden bg-[#090c11]">
+            <div className="relative h-[620px] overflow-hidden bg-[#090c11]">
               {isLoading && !graph ? (
                 <div className="grid h-full place-items-center text-sm text-muted-foreground">로딩 중...</div>
               ) : (
-                <svg viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`} className="h-full w-full">
+                <svg
+                  viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+                  className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
+                  onWheel={handleWheel}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerEnd}
+                  onPointerCancel={handlePointerEnd}
+                >
                   <defs>
                     <radialGradient id="nodeGlow">
                       <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
@@ -608,12 +718,14 @@ export default function WikiGraphPage() {
                     </filter>
                   </defs>
 
+                  <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}>
                   {layout.links.map((link) => {
                     const source = motionNodeById.get(link.source)
                     const target = motionNodeById.get(link.target)
                     if (!source || !target) return null
-                    const isCategoryLink = link.kind === 'category'
-                    const color = isCategoryLink ? '#334155' : relationColor[link.relation_type] ?? relationColor.related
+                    const isCategoryChildLink = link.kind === 'category_child'
+                    const isCategoryPeerLink = link.kind === 'category_peer'
+                    const color = isCategoryChildLink || isCategoryPeerLink ? '#334155' : relationColor[link.relation_type] ?? relationColor.related
                     return (
                       <line
                         key={link.id}
@@ -622,9 +734,9 @@ export default function WikiGraphPage() {
                         x2={target.x}
                         y2={target.y}
                         stroke={color}
-                        strokeDasharray={isCategoryLink ? '4 7' : undefined}
-                        strokeOpacity={isCategoryLink ? 0.44 : selectedId && link.source !== `note-${selectedId}` && link.target !== `note-${selectedId}` ? 0.13 : 0.42}
-                        strokeWidth={isCategoryLink ? 1 : Math.max(0.8, Math.min(3.5, (link.weight || 1) / 35))}
+                        strokeDasharray={isCategoryChildLink ? '4 7' : undefined}
+                        strokeOpacity={isCategoryPeerLink ? 0.18 : isCategoryChildLink ? 0.36 : selectedId && link.source !== `note-${selectedId}` && link.target !== `note-${selectedId}` ? 0.13 : 0.42}
+                        strokeWidth={isCategoryPeerLink ? 1.2 : isCategoryChildLink ? 0.9 : Math.max(0.8, Math.min(3.5, (link.weight || 1) / 35))}
                       />
                     )
                   })}
@@ -633,14 +745,13 @@ export default function WikiGraphPage() {
                     <g key={node.graphId} filter="url(#categoryGlow)">
                       <circle cx={node.x} cy={node.y} r={node.r + 10} fill={node.color} opacity="0.12" />
                       <circle cx={node.x} cy={node.y} r={node.r} fill={node.color} opacity="0.92" stroke="#f8fafc" strokeOpacity="0.72" strokeWidth="1.4" />
-                      <text x={node.x} y={node.y + 4} textAnchor="middle" fill="#020617" fontSize="12" fontWeight="700">
-                        {node.count}
+                      <text x={node.x} y={node.y - 7} textAnchor="middle" fill="#020617" fontSize="11" fontWeight="800">
+                        {categoryLabelLines(node.label).slice(0, 2).map((line, index) => (
+                          <tspan key={line} x={node.x} dy={index === 0 ? 0 : 13}>{line}</tspan>
+                        ))}
                       </text>
-                      <text x={node.x + node.r + 9} y={node.y - 3} fill="#e2e8f0" fontSize="12" fontWeight="700">
-                        {node.label}
-                      </text>
-                      <text x={node.x + node.r + 9} y={node.y + 14} fill="#94a3b8" fontSize="10">
-                        {node.description}
+                      <text x={node.x} y={node.y + 29} textAnchor="middle" fill="#020617" fontSize="12" fontWeight="700">
+                        {node.count} notes
                       </text>
                     </g>
                   ))}
@@ -648,7 +759,7 @@ export default function WikiGraphPage() {
                   {motionNodes.filter((node): node is NoteLayoutNode => node.kind === 'note').map((node) => {
                     const selected = selectedId === node.id
                     return (
-                      <g key={node.graphId} onClick={() => setSelectedId(node.id)} className="cursor-pointer">
+                      <g key={node.graphId} data-graph-node="true" onClick={() => setSelectedId(node.id)} className="cursor-pointer">
                         {selected ? <circle cx={node.x} cy={node.y} r={node.r + 12} fill="url(#nodeGlow)" opacity="0.55" /> : null}
                         <circle
                           cx={node.x}
@@ -667,8 +778,35 @@ export default function WikiGraphPage() {
                       </g>
                     )
                   })}
+                  </g>
                 </svg>
               )}
+              <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-slate-700/70 bg-slate-950/80 p-1 text-xs text-slate-100 shadow-lg backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => zoomFromCenter(0.82)}
+                  className="grid size-8 place-items-center rounded text-slate-200 hover:bg-slate-800"
+                  aria-label="축소"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span className="w-12 text-center tabular-nums">{Math.round(viewport.scale * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => zoomFromCenter(1.18)}
+                  className="grid size-8 place-items-center rounded text-slate-200 hover:bg-slate-800"
+                  aria-label="확대"
+                >
+                  <Plus className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewport({ scale: 1, x: 0, y: 0 })}
+                  className="h-8 rounded px-2 text-slate-200 hover:bg-slate-800"
+                >
+                  Fit
+                </button>
+              </div>
             </div>
           </div>
 

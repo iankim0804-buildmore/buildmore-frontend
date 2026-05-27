@@ -307,7 +307,7 @@ export async function generateWikiGraphLinks(noteId?: number): Promise<Record<st
   const result = await fetchAdmin<Record<string, unknown>>('/wiki-graph/generate-links', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(noteId ? { note_id: noteId } : { recent_limit: 20 }),
+    body: JSON.stringify(noteId ? { note_id: noteId } : { recent_limit: 100 }),
   })
   return result.data
 }
