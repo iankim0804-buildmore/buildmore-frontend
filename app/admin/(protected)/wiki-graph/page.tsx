@@ -2,23 +2,29 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { AlertTriangle, ArrowLeft, GitBranch, Layers3, Minus, Network, Plus, RefreshCw, Search, Sparkles } from 'lucide-react'
 import {
   fetchWikiGraph,
+  fetchWikiNoteDetail,
   generateWikiGraphLinks,
   runWikiGraphLint,
   type AdminWikiGraph,
   type AdminWikiGraphEdge,
   type AdminWikiGraphNode,
+  type AdminWikiNoteDetail,
 } from '@/lib/api/admin'
 
-const VIEW_WIDTH = 1000
-const VIEW_HEIGHT = 620
+const VIEW_WIDTH = 1500
+const VIEW_HEIGHT = 900
 const VIEW_CENTER_X = VIEW_WIDTH / 2
 const VIEW_CENTER_Y = VIEW_HEIGHT / 2
-const MIN_ZOOM = 0.55
+const MIN_ZOOM = 0.42
 const MAX_ZOOM = 3.4
+const CATEGORY_CHILD_DISTANCE = 270
+const NOTE_MIN_GAP = 34
+const CATEGORY_MIN_GAP = 68
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
 const relationColor: Record<string, string> = {
   supports: '#22c55e',
@@ -150,8 +156,8 @@ function hashString(value: string) {
 function categoryAnchor(index: number, total: number) {
   const angle = -Math.PI / 2 + (index / total) * Math.PI * 2
   return {
-    x: VIEW_CENTER_X + Math.cos(angle) * 280,
-    y: VIEW_CENTER_Y + Math.sin(angle) * 205,
+    x: VIEW_CENTER_X + Math.cos(angle) * 500,
+    y: VIEW_CENTER_Y + Math.sin(angle) * 305,
   }
 }
 
@@ -244,8 +250,9 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
     categoryOffsets.set(categoryId, localIndex + 1)
 
     const seed = hashString(`${categoryId}:${note.id}:${note.title}`)
-    const angle = ((seed % 1000) / 1000) * Math.PI * 2 + localIndex * 0.37
-    const radius = 62 + ((seed >>> 8) % 90)
+    const ring = Math.floor(localIndex / 14)
+    const angle = (localIndex * GOLDEN_ANGLE) + ((seed % 100) / 100) * 0.32
+    const radius = categoryNode.r + 105 + ring * 58 + ((seed >>> 8) % 28)
 
     return {
       ...note,
@@ -255,7 +262,7 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
       categoryId,
       color: category.color,
       x: categoryNode.x + Math.cos(angle) * radius,
-      y: categoryNode.y + Math.sin(angle) * radius * 0.78,
+      y: categoryNode.y + Math.sin(angle) * radius * 0.9,
       vx: 0,
       vy: 0,
       r: noteRadius(note),
@@ -330,11 +337,18 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
 
     const category = categoryNodeById.get(node.categoryId)
     if (category) {
-      node.vx += (category.x - node.x) * 0.001
-      node.vy += (category.y - node.y) * 0.001
+      const dx = node.x - category.x
+      const dy = node.y - category.y
+      const distance = Math.max(1, Math.hypot(dx, dy))
+      const desired = category.r + CATEGORY_CHILD_DISTANCE
+      const radialForce = (distance - desired) * 0.0018
+      node.vx -= (dx / distance) * radialForce
+      node.vy -= (dy / distance) * radialForce
+      node.vx += (category.x - node.x) * 0.00034
+      node.vy += (category.y - node.y) * 0.00034
     }
-    node.vx += (VIEW_CENTER_X - node.x) * 0.00015
-    node.vy += (VIEW_CENTER_Y - node.y) * 0.00015
+    node.vx += (VIEW_CENTER_X - node.x) * 0.00004
+    node.vy += (VIEW_CENTER_Y - node.y) * 0.00004
   })
 
   links.forEach((link) => {
@@ -345,12 +359,21 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
     const dx = target.x - source.x
     const dy = target.y - source.y
     const distance = Math.max(1, Math.hypot(dx, dy))
+    const sameNoteCategory = source.kind === 'note' && target.kind === 'note' && source.categoryId === target.categoryId
     const desired = link.kind === 'category_child'
-      ? 112
+      ? (source.kind === 'category' ? source.r : target.r) + CATEGORY_CHILD_DISTANCE
       : link.kind === 'category_peer'
-        ? 315
-        : Math.max(92, 150 - Math.min(45, link.weight / 2))
-    const stiffness = link.kind === 'category_child' ? 0.01 : link.kind === 'category_peer' ? 0.004 : 0.007
+        ? 560
+        : sameNoteCategory
+          ? Math.max(215, 310 - Math.min(55, (link.weight || 1) * 0.5))
+          : 430
+    const stiffness = link.kind === 'category_child'
+      ? 0.006
+      : link.kind === 'category_peer'
+        ? 0.0026
+        : sameNoteCategory
+          ? 0.0009
+          : 0.00022
     const force = (distance - desired) * stiffness
     const fx = (dx / distance) * force
     const fy = (dy / distance) * force
@@ -372,7 +395,8 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
       const distanceSq = Math.max(25, dx * dx + dy * dy)
       const distance = Math.sqrt(distanceSq)
       const hasCategory = a.kind === 'category' || b.kind === 'category'
-      const strength = hasCategory ? 760 : 62
+      const sameCategory = a.kind === 'note' && b.kind === 'note' && a.categoryId === b.categoryId
+      const strength = hasCategory ? 5200 : sameCategory ? 2300 : 1700
       const repel = strength / distanceSq
       const ax = (dx / distance) * repel
       const ay = (dy / distance) * repel
@@ -384,9 +408,9 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
       b.vx += ax / bMass
       b.vy += ay / bMass
 
-      const minDistance = a.r + b.r + (hasCategory ? 26 : 8)
+      const minDistance = a.r + b.r + (hasCategory ? CATEGORY_MIN_GAP : NOTE_MIN_GAP)
       if (distance < minDistance) {
-        const correction = (minDistance - distance) * 0.022
+        const correction = (minDistance - distance) * 0.16
         a.vx -= (dx / distance) * correction
         a.vy -= (dy / distance) * correction
         b.vx += (dx / distance) * correction
@@ -414,7 +438,9 @@ export default function WikiGraphPage() {
   const [error, setError] = useState<string | null>(null)
   const [motionNodes, setMotionNodes] = useState<LayoutNode[]>([])
   const [viewport, setViewport] = useState<ViewportState>({ scale: 1, x: 0, y: 0 })
+  const [selectedDetail, setSelectedDetail] = useState<{ noteId: number; detail: AdminWikiNoteDetail | null } | null>(null)
   const panRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const graphStageRef = useRef<HTMLDivElement | null>(null)
 
   const loadGraph = useCallback(async () => {
     setIsLoading(true)
@@ -473,6 +499,11 @@ export default function WikiGraphPage() {
     let cancelled = false
     const nodes = snapshot(layout.nodes)
     const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!reduceMotion) {
+      for (let index = 0; index < 150; index += 1) {
+        stepSimulation(nodes, layout.links, index * 16)
+      }
+    }
 
     const tick = (time: number) => {
       if (cancelled) return
@@ -501,6 +532,25 @@ export default function WikiGraphPage() {
     return graph.nodes.find((node) => node.id === selectedId) ?? null
   }, [graph, selectedId])
 
+  useEffect(() => {
+    let cancelled = false
+    if (selectedId == null) return () => {
+      cancelled = true
+    }
+
+    fetchWikiNoteDetail(selectedId)
+      .then((detail) => {
+        if (!cancelled) setSelectedDetail({ noteId: selectedId, detail })
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedDetail({ noteId: selectedId, detail: null })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
+
   const selectedCategory = useMemo(() => {
     if (!selectedNode) return null
     return categoryById(classifyNote(selectedNode))
@@ -510,6 +560,10 @@ export default function WikiGraphPage() {
     if (!graph || selectedId == null) return []
     return graph.edges.filter((edge) => edge.source === selectedId || edge.target === selectedId)
   }, [graph, selectedId])
+
+  const selectedBody = selectedDetail?.noteId === selectedId
+    ? selectedDetail.detail?.content || selectedNode?.summary || '요약 없음'
+    : selectedNode?.summary || '요약 없음'
 
   async function runMutation(kind: 'links' | 'lint') {
     setIsMutating(true)
@@ -528,9 +582,9 @@ export default function WikiGraphPage() {
     }
   }
 
-  const zoomAt = useCallback((point: { x: number; y: number }, nextScale: number) => {
+  const zoomAtFactor = useCallback((point: { x: number; y: number }, factor: number) => {
     setViewport((current) => {
-      const scale = clampZoom(nextScale)
+      const scale = clampZoom(current.scale * factor)
       const ratio = scale / current.scale
       return {
         scale,
@@ -541,23 +595,27 @@ export default function WikiGraphPage() {
   }, [])
 
   const zoomFromCenter = useCallback((factor: number) => {
-    zoomAt({ x: VIEW_CENTER_X, y: VIEW_CENTER_Y }, viewport.scale * factor)
-  }, [viewport.scale, zoomAt])
+    zoomAtFactor({ x: VIEW_CENTER_X, y: VIEW_CENTER_Y }, factor)
+  }, [zoomAtFactor])
 
-  function svgPoint(event: ReactPointerEvent<SVGSVGElement> | ReactWheelEvent<SVGSVGElement>) {
-    const rect = event.currentTarget.getBoundingClientRect()
-    return {
-      x: ((event.clientX - rect.left) / rect.width) * VIEW_WIDTH,
-      y: ((event.clientY - rect.top) / rect.height) * VIEW_HEIGHT,
+  useEffect(() => {
+    const stage = graphStageRef.current
+    if (!stage) return undefined
+
+    const handleStageWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const rect = stage.getBoundingClientRect()
+      const point = {
+        x: ((event.clientX - rect.left) / rect.width) * VIEW_WIDTH,
+        y: ((event.clientY - rect.top) / rect.height) * VIEW_HEIGHT,
+      }
+      zoomAtFactor(point, event.deltaY < 0 ? 1.12 : 0.88)
     }
-  }
 
-  function handleWheel(event: ReactWheelEvent<SVGSVGElement>) {
-    event.preventDefault()
-    const point = svgPoint(event)
-    const factor = event.deltaY < 0 ? 1.12 : 0.88
-    zoomAt(point, viewport.scale * factor)
-  }
+    stage.addEventListener('wheel', handleStageWheel, { passive: false })
+    return () => stage.removeEventListener('wheel', handleStageWheel)
+  }, [zoomAtFactor])
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
     const target = event.target as SVGElement
@@ -591,7 +649,7 @@ export default function WikiGraphPage() {
   return (
     <div className="admin-shadcn-surface min-h-screen bg-sidebar pb-10 text-sidebar-foreground">
       <header className="border-b border-sidebar-border bg-sidebar/95">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1720px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <Link
               href="/admin"
@@ -637,7 +695,7 @@ export default function WikiGraphPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-5 px-4 pt-5 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-[1720px] space-y-5 px-4 pt-5 sm:px-6 lg:px-8">
         {error ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
@@ -659,7 +717,7 @@ export default function WikiGraphPage() {
           ))}
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
+        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_500px]">
           <div className="rounded-lg border border-sidebar-border bg-sidebar-accent">
             <div className="flex flex-col gap-3 border-b border-sidebar-border p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
@@ -691,14 +749,13 @@ export default function WikiGraphPage() {
                 </select>
               </div>
             </div>
-            <div className="relative h-[620px] overflow-hidden bg-[#090c11]">
+            <div ref={graphStageRef} className="relative h-[700px] overflow-hidden overscroll-none bg-[#090c11]">
               {isLoading && !graph ? (
                 <div className="grid h-full place-items-center text-sm text-muted-foreground">로딩 중...</div>
               ) : (
                 <svg
                   viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
                   className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
-                  onWheel={handleWheel}
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerEnd}
@@ -758,6 +815,7 @@ export default function WikiGraphPage() {
 
                   {motionNodes.filter((node): node is NoteLayoutNode => node.kind === 'note').map((node) => {
                     const selected = selectedId === node.id
+                    const showLabel = selected || (viewport.scale >= 1.22 && node.degree >= 18)
                     return (
                       <g key={node.graphId} data-graph-node="true" onClick={() => setSelectedId(node.id)} className="cursor-pointer">
                         {selected ? <circle cx={node.x} cy={node.y} r={node.r + 12} fill="url(#nodeGlow)" opacity="0.55" /> : null}
@@ -770,8 +828,8 @@ export default function WikiGraphPage() {
                           strokeWidth={selected ? 2.5 : node.degree === 0 ? 1.4 : 1}
                           opacity={selectedId && !selected ? 0.76 : 1}
                         />
-                        {selected || node.degree >= 8 ? (
-                          <text x={node.x + node.r + 5} y={node.y + 4} fill="#dbeafe" fontSize="11">
+                        {showLabel ? (
+                          <text x={node.x + node.r + 6} y={node.y + 4} fill="#dbeafe" fontSize={selected ? 12 : 10} fontWeight={selected ? 700 : 500} pointerEvents="none">
                             {node.title.slice(0, 18)}
                           </text>
                         ) : null}
@@ -833,7 +891,9 @@ export default function WikiGraphPage() {
                     <Metric label="In" value={selectedNode.incoming} />
                     <Metric label="Out" value={selectedNode.outgoing} />
                   </div>
-                  <p className="line-clamp-5 text-sm leading-6 text-muted-foreground">{selectedNode.summary || '요약 없음'}</p>
+                  <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap rounded-md border border-sidebar-border bg-sidebar p-4 text-sm leading-7 text-muted-foreground">
+                    {selectedBody}
+                  </div>
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">Links</p>
                     {selectedEdges.slice(0, 8).map((edge) => {
