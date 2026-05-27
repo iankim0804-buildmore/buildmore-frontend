@@ -21,10 +21,11 @@ const VIEW_CENTER_X = VIEW_WIDTH / 2
 const VIEW_CENTER_Y = VIEW_HEIGHT / 2
 const MIN_ZOOM = 0.42
 const MAX_ZOOM = 3.4
-const CATEGORY_CHILD_DISTANCE = 270
+const GRAPH_RADIUS = 405
+const CATEGORY_ORBIT_RADIUS = 220
+const CATEGORY_CHILD_DISTANCE = 225
 const NOTE_MIN_GAP = 34
 const CATEGORY_MIN_GAP = 68
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
 const relationColor: Record<string, string> = {
   supports: '#22c55e',
@@ -153,11 +154,74 @@ function hashString(value: string) {
   return hash >>> 0
 }
 
-function categoryAnchor(index: number, total: number) {
-  const angle = -Math.PI / 2 + (index / total) * Math.PI * 2
+function categoryAngle(index: number, total: number) {
+  return -Math.PI / 2 + (index / total) * Math.PI * 2
+}
+
+function categoryAnchor(index: number, total: number, count = 0) {
+  const angle = categoryAngle(index, total)
+  const radius = CATEGORY_ORBIT_RADIUS - Math.min(62, count * 1.35)
   return {
-    x: VIEW_CENTER_X + Math.cos(angle) * 500,
-    y: VIEW_CENTER_Y + Math.sin(angle) * 305,
+    x: VIEW_CENTER_X + Math.cos(angle) * radius,
+    y: VIEW_CENTER_Y + Math.sin(angle) * radius,
+  }
+}
+
+function circularBounds(node: LayoutNode) {
+  const dx = node.x - VIEW_CENTER_X
+  const dy = node.y - VIEW_CENTER_Y
+  const distance = Math.max(1, Math.hypot(dx, dy))
+  const limit = GRAPH_RADIUS - node.r - 16
+  return { dx, dy, distance, limit }
+}
+
+function containInCircle(node: LayoutNode) {
+  const nextX = node.x + node.vx
+  const nextY = node.y + node.vy
+  const dx = nextX - VIEW_CENTER_X
+  const dy = nextY - VIEW_CENTER_Y
+  const distance = Math.max(1, Math.hypot(dx, dy))
+  const limit = GRAPH_RADIUS - node.r - 16
+
+  if (distance > limit) {
+    const overshoot = distance - limit
+    node.vx -= (dx / distance) * overshoot * 0.18
+    node.vy -= (dy / distance) * overshoot * 0.18
+  }
+
+  node.x += node.vx
+  node.y += node.vy
+
+  const bounds = circularBounds(node)
+  if (bounds.distance <= bounds.limit) return
+
+  const nx = bounds.dx / bounds.distance
+  const ny = bounds.dy / bounds.distance
+  node.x = VIEW_CENTER_X + nx * bounds.limit
+  node.y = VIEW_CENTER_Y + ny * bounds.limit
+
+  const radialVelocity = node.vx * nx + node.vy * ny
+  if (radialVelocity > 0) {
+    node.vx -= nx * radialVelocity
+    node.vy -= ny * radialVelocity
+  }
+}
+
+function categorySectorPosition(categoryIndex: number, totalCategories: number, localIndex: number, totalInCategory: number, seed: number) {
+  const ringSize = 12
+  const ring = Math.floor(localIndex / ringSize)
+  const indexInRing = localIndex % ringSize
+  const remaining = Math.max(1, totalInCategory - ring * ringSize)
+  const slots = Math.min(ringSize, remaining)
+  const offsetRatio = slots === 1 ? 0 : indexInRing / (slots - 1) - 0.5
+  const sectorWidth = (Math.PI * 2 / totalCategories) * 0.76
+  const jitter = (((seed >>> 12) % 100) / 100 - 0.5) * 0.12
+  const angle = categoryAngle(categoryIndex, totalCategories) + offsetRatio * sectorWidth + jitter + ring * 0.07
+  const radius = 132 + ring * 58 + ((seed >>> 8) % 24)
+
+  return {
+    x: VIEW_CENTER_X + Math.cos(angle) * radius,
+    y: VIEW_CENTER_Y + Math.sin(angle) * radius,
   }
 }
 
@@ -219,8 +283,8 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
   })
 
   const categoryNodes: CategoryLayoutNode[] = categoryDefinitions.map((category, index) => {
-    const anchor = categoryAnchor(index, categoryDefinitions.length)
     const count = counts.get(category.id) ?? 0
+    const anchor = categoryAnchor(index, categoryDefinitions.length, count)
     return {
       kind: 'category',
       graphId: `category-${category.id}`,
@@ -239,20 +303,23 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
     }
   })
 
-  const categoryNodeById = new Map(categoryNodes.map((node) => [node.categoryId, node]))
   const categoryOffsets = new Map<CategoryId, number>(categoryDefinitions.map((category) => [category.id, 0]))
 
   const noteNodes: NoteLayoutNode[] = notes.map((note) => {
     const categoryId = noteCategory.get(note.id) ?? categoryDefinitions[0].id
     const category = categoryById(categoryId)
-    const categoryNode = categoryNodeById.get(categoryId) ?? categoryNodes[0]
+    const categoryIndex = Math.max(0, categoryDefinitions.findIndex((item) => item.id === categoryId))
     const localIndex = categoryOffsets.get(categoryId) ?? 0
     categoryOffsets.set(categoryId, localIndex + 1)
 
     const seed = hashString(`${categoryId}:${note.id}:${note.title}`)
-    const ring = Math.floor(localIndex / 14)
-    const angle = (localIndex * GOLDEN_ANGLE) + ((seed % 100) / 100) * 0.32
-    const radius = categoryNode.r + 105 + ring * 58 + ((seed >>> 8) % 28)
+    const position = categorySectorPosition(
+      categoryIndex,
+      categoryDefinitions.length,
+      localIndex,
+      counts.get(categoryId) ?? 1,
+      seed,
+    )
 
     return {
       ...note,
@@ -261,8 +328,8 @@ function createInitialLayout(notes: AdminWikiGraphNode[], noteEdges: AdminWikiGr
       noteId: note.id,
       categoryId,
       color: category.color,
-      x: categoryNode.x + Math.cos(angle) * radius,
-      y: categoryNode.y + Math.sin(angle) * radius * 0.9,
+      x: position.x,
+      y: position.y,
       vx: 0,
       vy: 0,
       r: noteRadius(note),
@@ -318,10 +385,6 @@ function snapshot(nodes: LayoutNode[]) {
   return nodes.map((node) => ({ ...node }))
 }
 
-function bounded(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
 function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) {
   const nodeById = new Map(nodes.map((node) => [node.graphId, node]))
   const categoryNodeById = new Map(
@@ -363,7 +426,7 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
     const desired = link.kind === 'category_child'
       ? (source.kind === 'category' ? source.r : target.r) + CATEGORY_CHILD_DISTANCE
       : link.kind === 'category_peer'
-        ? 560
+        ? 360
         : sameNoteCategory
           ? Math.max(215, 310 - Math.min(55, (link.weight || 1) * 0.5))
           : 430
@@ -423,8 +486,7 @@ function stepSimulation(nodes: LayoutNode[], links: LayoutLink[], time: number) 
     const damping = node.kind === 'category' ? 0.76 : 0.86
     node.vx *= damping
     node.vy *= damping
-    node.x = bounded(node.x + node.vx, node.r + 18, VIEW_WIDTH - node.r - 18)
-    node.y = bounded(node.y + node.vy, node.r + 18, VIEW_HEIGHT - node.r - 18)
+    containInCircle(node)
   })
 }
 
