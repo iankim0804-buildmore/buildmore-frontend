@@ -93,6 +93,76 @@ export interface AdminWikiNoteDetail extends AdminWikiNoteSummary {
   versions: AdminWikiNoteVersion[]
 }
 
+export interface AdminWikiGraphNode {
+  id: number
+  title: string
+  status: string
+  freshness_status: string | null
+  review_status: string
+  source_count: number
+  degree: number
+  incoming: number
+  outgoing: number
+  updated_at: string | null
+  last_compiled_at: string | null
+  summary: string
+}
+
+export interface AdminWikiGraphEdge {
+  id: number
+  source: number
+  target: number
+  relation_type: string
+  weight: number
+  confidence: number | null
+  reason: string | null
+  classifier_model: string | null
+  created_at: string | null
+}
+
+export interface AdminWikiGraphCluster {
+  id: string
+  label: string
+  note_ids: number[]
+  size: number
+}
+
+export interface AdminWikiGraphFinding {
+  id: number
+  finding_type: string
+  severity: string
+  target_id: number | null
+  summary: string
+  suggested_fix: string | null
+  created_at: string | null
+}
+
+export interface AdminWikiGraphEvent {
+  id: number
+  event_type: string
+  note_id: number | null
+  edge_id: number | null
+  summary: string | null
+  created_at: string | null
+}
+
+export interface AdminWikiGraph {
+  stats: {
+    nodes: number
+    edges: number
+    orphan_notes: number
+    stale_notes: number
+    open_findings: number
+    relation_counts: Record<string, number>
+    clusters: number
+  }
+  nodes: AdminWikiGraphNode[]
+  edges: AdminWikiGraphEdge[]
+  clusters: AdminWikiGraphCluster[]
+  findings: AdminWikiGraphFinding[]
+  recent_events: AdminWikiGraphEvent[]
+}
+
 export interface AdminSignalTickerItem {
   id: number
   headline: string
@@ -225,6 +295,25 @@ export async function fetchWikiNotes(limit = 100): Promise<AdminWikiNoteSummary[
 
 export async function fetchWikiNoteDetail(noteId: number): Promise<AdminWikiNoteDetail | null> {
   const result = await fetchAdmin<AdminWikiNoteDetail>(`/wiki/notes/${noteId}`)
+  return result.data
+}
+
+export async function fetchWikiGraph(): Promise<AdminWikiGraph | null> {
+  const result = await fetchAdmin<AdminWikiGraph>('/wiki-graph')
+  return result.data
+}
+
+export async function generateWikiGraphLinks(noteId?: number): Promise<Record<string, unknown> | null> {
+  const result = await fetchAdmin<Record<string, unknown>>('/wiki-graph/generate-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(noteId ? { note_id: noteId } : { recent_limit: 20 }),
+  })
+  return result.data
+}
+
+export async function runWikiGraphLint(): Promise<Record<string, unknown> | null> {
+  const result = await fetchAdmin<Record<string, unknown>>('/wiki-graph/lint', { method: 'POST' })
   return result.data
 }
 

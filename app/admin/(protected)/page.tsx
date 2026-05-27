@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { fetchAdminDashboardData, type AdminDashboardData } from '@/lib/api/admin'
 import { StatusBar } from './components/status-bar'
@@ -132,6 +133,15 @@ export default function AdminDashboardPage() {
       />
 
       <main className="mx-auto max-w-7xl space-y-8 px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="flex justify-end">
+          <Link
+            href="/admin/wiki-graph"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground hover:border-emerald-500/60"
+          >
+            Wiki Graph
+          </Link>
+        </div>
+
         <DevLogSection />
 
         <SchedulerSection
