@@ -61,6 +61,15 @@ interface MetricCatalogMetric {
   user_action_required?: string[] | null
   stored_count?: number | null
   probe_value_present?: boolean | null
+  metric_role?: string | null
+  delta_enabled?: boolean | null
+  signal_enabled?: boolean | null
+  report_enabled?: boolean | null
+  delta_priority?: number | null
+  delta_group?: string | null
+  period_grain?: string | null
+  directionality?: string | null
+  classification_reason?: string | null
 }
 
 interface SourceFieldDiscovery {
@@ -119,6 +128,27 @@ interface SourceCollectorRecipe {
   connection_help?: string | null
   user_action_required?: string[] | null
   probe_value_present?: boolean | null
+  metric_role?: string | null
+  delta_enabled?: boolean | null
+  signal_enabled?: boolean | null
+  report_enabled?: boolean | null
+  delta_priority?: number | null
+  delta_group?: string | null
+  entity_level?: string | null
+  period_grain?: string | null
+  min_history_months?: number | null
+  comparison_windows?: string[] | null
+  directionality?: string | null
+  classification_reason?: string | null
+  delta_policy_source?: string | null
+  period_coverage?: MetricPeriodCoverage | null
+}
+
+interface MetricPeriodCoverage {
+  source?: string | null
+  row_count?: number | null
+  first_period?: string | number | null
+  latest_period?: string | number | null
 }
 
 interface SourceApiStatus {
@@ -187,6 +217,14 @@ interface SourceCollectorStatusResponse {
     recipe_total: number
     snapshot_total: number
     delta_total: number
+  }
+  delta_policy?: {
+    total: number
+    delta_enabled: number
+    signal_enabled: number
+    report_enabled: number
+    by_role?: Record<string, number>
+    by_group?: Record<string, number>
   }
   categories: SourceCollectorCategory[]
 }
@@ -537,6 +575,91 @@ function recipeStatusClass(recipe: SourceCollectorRecipe): string {
   return statusRule(recipeStatusKind(recipe)).className
 }
 
+function metricRoleLabel(role?: string | null): string {
+  switch (role) {
+    case 'core_delta':
+      return 'Core Delta'
+    case 'support_delta':
+      return 'Support Delta'
+    case 'context':
+      return 'Context'
+    case 'static_risk':
+      return 'Static Risk'
+    case 'dormant':
+      return 'Dormant'
+    default:
+      return 'Candidate'
+  }
+}
+
+function metricRoleClass(role?: string | null): string {
+  switch (role) {
+    case 'core_delta':
+      return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600'
+    case 'support_delta':
+      return 'border-sky-500/30 bg-sky-500/10 text-sky-600'
+    case 'context':
+      return 'border-violet-500/30 bg-violet-500/10 text-violet-600'
+    case 'static_risk':
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-600'
+    default:
+      return 'border-border bg-muted text-muted-foreground'
+  }
+}
+
+function periodCoverageLabel(coverage?: MetricPeriodCoverage | null): string {
+  if (!coverage) return '24M coverage: not checked'
+  const first = coverage.first_period || '-'
+  const latest = coverage.latest_period || '-'
+  return `24M source ${coverage.source || '-'} · ${first} ~ ${latest} · ${formatCount(coverage.row_count || 0)} rows`
+}
+
+function metricImportanceLabel(recipe: SourceCollectorRecipe): string {
+  switch (recipe.metric_role) {
+    case 'core_delta':
+      return `P1 Core${recipe.delta_priority ? ` · ${recipe.delta_priority}` : ''}`
+    case 'support_delta':
+      return `P2 Support${recipe.delta_priority ? ` · ${recipe.delta_priority}` : ''}`
+    case 'context':
+      return 'P3 Context'
+    case 'static_risk':
+      return 'P4 Static'
+    case 'dormant':
+      return 'P5 Dormant'
+    default:
+      return 'P5 Candidate'
+  }
+}
+
+function metricImportanceRank(recipe: SourceCollectorRecipe): number {
+  switch (recipe.metric_role) {
+    case 'core_delta':
+      return 1
+    case 'support_delta':
+      return 2
+    case 'context':
+      return 3
+    case 'static_risk':
+      return 4
+    case 'dormant':
+      return 6
+    default:
+      return 5
+  }
+}
+
+function metricPolicyNote(recipe: SourceCollectorRecipe): string {
+  return recipe.classification_reason || recipe.reason || recipe.connection_help || '-'
+}
+
+function metricLoadCount(recipe: SourceCollectorRecipe): number {
+  return recipe.period_coverage?.row_count || recipe.snapshot_count || recipe.observation_count || 0
+}
+
+function metricProcessText(recipe: SourceCollectorRecipe): string {
+  return `obs ${formatCount(recipe.observation_count)} · snap ${formatCount(recipe.snapshot_count)} · delta ${formatCount(recipe.delta_count)}`
+}
+
 function sourceProviderLabel(recipe: SourceCollectorRecipe): string {
   return recipe.provider || '내부 산출/카탈로그'
 }
@@ -567,6 +690,15 @@ function catalogMetricToRecipe(metric: MetricCatalogMetric, categoryKey: string)
     connection_help: metric.connection_help || null,
     user_action_required: metric.user_action_required || null,
     probe_value_present: metric.probe_value_present || null,
+    metric_role: metric.metric_role || null,
+    delta_enabled: metric.delta_enabled || false,
+    signal_enabled: metric.signal_enabled || false,
+    report_enabled: metric.report_enabled || false,
+    delta_priority: metric.delta_priority || null,
+    delta_group: metric.delta_group || null,
+    period_grain: metric.period_grain || null,
+    directionality: metric.directionality || null,
+    classification_reason: metric.classification_reason || null,
   }
 }
 
@@ -582,10 +714,18 @@ function mergeLiveCatalogCategories(
     const liveCatalog = catalogByCode.get(category.category_code)
     if (!liveCatalog) return category
 
+    const liveRecipeByMetric = new Map(
+      category.recipes
+        .filter((recipe) => recipe.metric_key)
+        .map((recipe) => [recipe.metric_key, recipe]),
+    )
     const recipes = liveCatalog.metrics
       .slice()
       .sort((a, b) => (a.priority || 999) - (b.priority || 999))
-      .map((metric) => catalogMetricToRecipe(metric, category.category_key))
+      .map((metric) => ({
+        ...catalogMetricToRecipe(metric, category.category_key),
+        ...(liveRecipeByMetric.get(metric.metric_key) || {}),
+      }))
     const activeCount = recipes.filter((recipe) => recipe.is_available).length
     const status = activeCount === 0
       ? 'catalog_only'
@@ -665,6 +805,8 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
         const observations = countObservations(category)
         const latestRunStatus = category.latest_run?.status || category.status
         const isOpen = openCategoryKey === category.category_key
+        const deltaMetricCount = category.recipes.filter((recipe) => recipe.delta_enabled).length
+        const reportMetricCount = category.recipes.filter((recipe) => recipe.report_enabled).length
 
         return (
           <div
@@ -716,6 +858,7 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                 </div>
                 <div>주기 {category.frequencies.map(frequencyLabel).join(', ') || '-'}</div>
                 <div>마지막 결과 {runStatusLabel(latestRunStatus)}</div>
+                <div>Delta {formatCount(deltaMetricCount)} · Report {formatCount(reportMetricCount)}</div>
                 <div className="truncate">대표 지표 {representativeMetrics(category)}</div>
               </div>
             </button>
@@ -748,9 +891,19 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                                 {metricLabel(recipe)}
                               </div>
                             </div>
-                            <Badge variant="outline" className={`shrink-0 ${recipeStatusClass(recipe)}`}>
-                              {recipeStatusLabel(recipe)}
-                            </Badge>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                              <Badge variant="outline" className={metricRoleClass(recipe.metric_role)}>
+                                {metricRoleLabel(recipe.metric_role)}
+                              </Badge>
+                              <Badge variant="outline" className={recipeStatusClass(recipe)}>
+                                {recipeStatusLabel(recipe)}
+                              </Badge>
+                              {recipe.report_enabled ? (
+                                <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-600">
+                                  Report
+                                </Badge>
+                              ) : null}
+                            </div>
                           </div>
 
                           <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground">
@@ -791,6 +944,17 @@ function CategoryGrid({ categories }: { categories: SourceCollectorCategory[] })
                                 주기 {frequencyLabel(recipe.refresh_frequency || '')} · 원천수집 {formatCount(recipe.observation_count)} · 스냅샷 {formatCount(recipe.snapshot_count)}
                               </span>
                             </div>
+                            {recipe.delta_enabled ? (
+                              <div className="rounded-md border border-sidebar-border bg-background/30 p-2 text-[11px] leading-4 text-muted-foreground">
+                                <div className="font-semibold text-sidebar-foreground">
+                                  Delta policy · {recipe.delta_group || 'ungrouped'} · P{recipe.delta_priority || '-'} · {recipe.period_grain || '-'}
+                                </div>
+                                <div className="mt-1">{periodCoverageLabel(recipe.period_coverage)}</div>
+                                {recipe.classification_reason ? (
+                                  <div className="mt-1">{recipe.classification_reason}</div>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {recipe.reason ? (
                               <div className="rounded-md border border-sidebar-border bg-background/30 p-2 text-[11px] leading-4 text-muted-foreground">
                                 {recipe.reason}
@@ -893,6 +1057,137 @@ function ApiStatusLegend() {
         ))}
       </div>
     </div>
+  )
+}
+
+function DeltaPolicyClassificationTable({ categories }: { categories: SourceCollectorCategory[] }) {
+  const rows = useMemo(() => {
+    return categories
+      .flatMap((category) => category.recipes.map((recipe) => ({ category, recipe })))
+      .sort((a, b) => {
+        const rankDiff = metricImportanceRank(a.recipe) - metricImportanceRank(b.recipe)
+        if (rankDiff !== 0) return rankDiff
+        const priorityDiff = (a.recipe.delta_priority || 99) - (b.recipe.delta_priority || 99)
+        if (priorityDiff !== 0) return priorityDiff
+        const categoryDiff = a.category.category_code.localeCompare(b.category.category_code)
+        if (categoryDiff !== 0) return categoryDiff
+        return (a.recipe.metric_key || a.recipe.source_key).localeCompare(b.recipe.metric_key || b.recipe.source_key)
+      })
+  }, [categories])
+
+  const p1Count = rows.filter(({ recipe }) => recipe.metric_role === 'core_delta').length
+  const p2Count = rows.filter(({ recipe }) => recipe.metric_role === 'support_delta').length
+  const reportCount = rows.filter(({ recipe }) => recipe.report_enabled).length
+  const loadedCount = rows.filter(({ recipe }) => metricLoadCount(recipe) > 0).length
+
+  return (
+    <Card className="border-sidebar-border bg-sidebar-accent">
+      <CardHeader className="pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-semibold text-sidebar-foreground">델타 지표 분류표</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              중요도, 카테고리, 세부지표, 정책 노트, 적재량, 처리량을 한 번에 확인합니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+              P1 {formatCount(p1Count)}
+            </Badge>
+            <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-600">
+              P2 {formatCount(p2Count)}
+            </Badge>
+            <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-600">
+              Report {formatCount(reportCount)}
+            </Badge>
+            <Badge variant="outline" className="border-sidebar-border bg-background/30 text-muted-foreground">
+              Loaded {formatCount(loadedCount)} / {formatCount(rows.length)}
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-[560px] overflow-auto">
+          <table className="w-full min-w-[1380px] text-left text-xs">
+            <thead className="sticky top-0 z-10 border-b border-sidebar-border bg-sidebar-accent text-sidebar-foreground">
+              <tr>
+                <th className="py-2 pr-3 font-semibold">중요도</th>
+                <th className="py-2 pr-3 font-semibold">카테고리</th>
+                <th className="py-2 pr-3 font-semibold">세부지표</th>
+                <th className="py-2 pr-3 font-semibold">그룹</th>
+                <th className="py-2 pr-3 font-semibold">주기</th>
+                <th className="py-2 pr-3 text-right font-semibold">적재량</th>
+                <th className="py-2 pr-3 font-semibold">처리량</th>
+                <th className="py-2 pr-3 font-semibold">커버리지</th>
+                <th className="py-2 pr-3 font-semibold">노트</th>
+                <th className="py-2 pr-3 font-semibold">노출</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-sidebar-border">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-6 text-center text-muted-foreground">
+                    분류할 세부지표가 없습니다.
+                  </td>
+                </tr>
+              ) : rows.map(({ category, recipe }) => (
+                <tr key={`${category.category_key}-${recipe.metric_key || recipe.source_key}`} className="align-top">
+                  <td className="py-3 pr-3">
+                    <Badge variant="outline" className={metricRoleClass(recipe.metric_role)}>
+                      {metricImportanceLabel(recipe)}
+                    </Badge>
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="font-medium text-sidebar-foreground">{categoryName(category)}</div>
+                    <div className="font-mono text-[11px] text-muted-foreground">{category.category_key}</div>
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="max-w-[220px] break-words font-medium text-sidebar-foreground">{metricLabel(recipe)}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{recipe.metric_key || recipe.source_key}</div>
+                  </td>
+                  <td className="py-3 pr-3 text-muted-foreground">{recipe.delta_group || '-'}</td>
+                  <td className="py-3 pr-3 text-muted-foreground">
+                    <div>{recipe.period_grain || frequencyLabel(recipe.refresh_frequency || '') || '-'}</div>
+                    <div className="font-mono text-[11px]">{recipe.entity_level || '-'}</div>
+                  </td>
+                  <td className="py-3 pr-3 text-right font-semibold text-sidebar-foreground">{formatCount(metricLoadCount(recipe))}</td>
+                  <td className="py-3 pr-3 text-muted-foreground">{metricProcessText(recipe)}</td>
+                  <td className="py-3 pr-3">
+                    <div className="max-w-[240px] break-words text-[11px] leading-4 text-muted-foreground">
+                      {periodCoverageLabel(recipe.period_coverage)}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="max-w-[360px] break-words text-[11px] leading-4 text-muted-foreground">
+                      {metricPolicyNote(recipe)}
+                    </div>
+                  </td>
+                  <td className="py-3 pr-3">
+                    <div className="flex flex-wrap gap-1">
+                      {recipe.delta_enabled ? (
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+                          Delta
+                        </Badge>
+                      ) : null}
+                      {recipe.signal_enabled ? (
+                        <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-600">
+                          Signal
+                        </Badge>
+                      ) : null}
+                      {recipe.report_enabled ? (
+                        <Badge variant="outline" className="border-indigo-500/30 bg-indigo-500/10 text-indigo-600">
+                          Report
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1179,6 +1474,9 @@ export function DataCoverageSection() {
           </div>
         </div>
       ) : null}
+      <div className="mt-4">
+        <DeltaPolicyClassificationTable categories={sortedCategories} />
+      </div>
     </section>
   )
 }
