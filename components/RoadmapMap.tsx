@@ -25,6 +25,13 @@ interface EdgePopup {
   screenY: number
 }
 
+const SEVERITY_HEX: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#f59e0b",
+  low:      "#10b981",
+}
+
 interface Props {
   nodes: RoadmapNode[]
   edges: RoadmapEdge[]
@@ -33,9 +40,10 @@ interface Props {
   selectedId: string | null
   onSelect: (node: RoadmapNode) => void
   onDeselect: () => void
+  nodeScores?: Record<string, { score: number | null; gap_severity: string | null }>
 }
 
-export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, selectedId, onSelect, onDeselect }: Props) {
+export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, selectedId, onSelect, onDeselect, nodeScores }: Props) {
   const rawUid  = useId()
   const uid     = rawUid.replace(/:/g, "")
   const arrowId = `arw-${uid}`
@@ -244,6 +252,8 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
             const s = STATUS_STYLE[node.status] ?? STATUS_STYLE.unknown
             const isFiltered = connectedEdgeIds === null && filterStatus !== null && node.status !== filterStatus
             const isSelected = node.node_id === selectedId
+            const ns  = nodeScores?.[node.node_id]
+            const sev = ns?.gap_severity ?? "medium"
             return (
               <button key={node.node_id}
                 onClick={(e) => { e.stopPropagation(); onSelect(node) }}
@@ -271,6 +281,13 @@ export default function RoadmapMap({ nodes, edges, layerLabels, filterStatus, se
                       ))}
                     </div>
                     <span className="text-[9px] text-zinc-400 ml-0.5">{node.user_impact_score}</span>
+                    {ns && ns.score !== null && (
+                      <span className="ml-auto text-[9px] font-bold text-white rounded px-1 py-0.5 leading-none"
+                        style={{ background: SEVERITY_HEX[sev] ?? "#a1a1aa" }}
+                        title={`데이터 충족도 ${Math.round(ns.score)}/100 · ${sev}`}>
+                        {Math.round(ns.score)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>

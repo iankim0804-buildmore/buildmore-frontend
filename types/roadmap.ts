@@ -35,11 +35,46 @@ export interface RoadmapEdge {
   dashed: boolean
 }
 
+export interface LayerHealth {
+  health: number
+  count: number
+}
+
+export interface MaturitySummary {
+  stage: "Pre-MVP" | "MVP" | "Beta" | "Prod" | string
+  levels: Record<string, number>
+}
+
 export interface HealthSummary {
   health_score: number
+  grade?: string
   total: number
   by_status: Record<string, number>
+  by_layer?: Record<string, LayerHealth>
+  maturity?: MaturitySummary
   last_updated: string
+}
+
+export interface PulseMetric {
+  key: string
+  label: string
+  value: number
+  unit: string
+  group: string
+  invert?: boolean
+}
+
+export interface NodeScore {
+  score: number | null
+  gap_severity: string | null
+  gaps: string[]
+}
+
+export interface PulseResponse {
+  health: HealthSummary
+  pulse_metrics: PulseMetric[]
+  node_scores: Record<string, NodeScore>
+  computed_at: string
 }
 
 export interface InsightPanel {
@@ -59,6 +94,8 @@ export interface RoadmapGraph {
   edges: RoadmapEdge[]
   layer_labels: Record<string, string>
   health: HealthSummary
+  pulse_metrics?: PulseMetric[]
+  node_scores?: Record<string, NodeScore>
   insights?: InsightPanel
   system_diagnosis: SystemDiagnosis
   last_audited_at: string | null

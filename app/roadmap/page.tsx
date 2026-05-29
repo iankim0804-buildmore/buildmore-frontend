@@ -1,25 +1,34 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect, useCallback, useRef } from "react"
-import { ArrowLeft } from "lucide-react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { ArrowLeft, Activity, RefreshCw } from "lucide-react"
 import RoadmapMap from "@/components/RoadmapMap"
-import type { RoadmapGraph, RoadmapNode, NodeStatus, SystemDiagnosis } from "@/types/roadmap"
+import type {
+  RoadmapGraph, RoadmapNode, NodeStatus, SystemDiagnosis, PulseResponse,
+} from "@/types/roadmap"
 
 const EMPTY_DIAGNOSIS: SystemDiagnosis = {
-  system_verdict: "아직 감사가 실행되지 않았습니다. 🔍 시스템 감사 버튼을 눌러 분석을 시작하세요.",
+  system_verdict: "아직 심층 감사가 실행되지 않았습니다. 🧠 심층 감사 버튼으로 LLM 종합 진단을 받아보세요.",
   critical_bottlenecks: [],
   pipeline_risk: "",
-  immediate_actions: ["시스템 감사 버튼 클릭"],
+  immediate_actions: ["심층 감사 버튼 클릭"],
 }
 
 const FALLBACK: RoadmapGraph = {
   nodes: [], edges: [], layer_labels: {},
-  health: { health_score: 0, total: 0, by_status: {}, last_updated: "-" },
+  health: {
+    health_score: 0, grade: "F", total: 0, by_status: {}, by_layer: {},
+    maturity: { stage: "Pre-MVP", levels: {} }, last_updated: "-",
+  },
+  pulse_metrics: [],
+  node_scores: {},
   system_diagnosis: EMPTY_DIAGNOSIS,
   last_audited_at: null,
   audit_run_id: null,
 }
+
+const LAYER_ORDER = ["source", "collection", "processing", "database", "wiki", "delta", "api", "frontend", "ops"]
 
 const STATUS_FILTERS: Array<{ value: NodeStatus | null; label: string; color: string }> = [
   { value: null,      label: "전체",    color: "#a1a1aa" },
@@ -45,28 +54,26 @@ const STATUS_DOT: Record<string, string> = {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: "#ef4444",
-  high:     "#f97316",
-  medium:   "#f59e0b",
-  low:      "#10b981",
+  critical: "#ef4444", high: "#f97316", medium: "#f59e0b", low: "#10b981",
 }
+const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
 
-function HealthBar({ score }: { score: number }) {
-  const color = score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-500" : "bg-red-500"
-  return (
-    <div className="mt-2 h-2 rounded-full bg-zinc-100 overflow-hidden">
-      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${score}%` }} />
-    </div>
-  )
+const GROUP_COLOR: Record<string, string> = {
+  source: "#60a5fa", collection: "#a78bfa", processing: "#f59e0b",
+  wiki: "#c084fc", delta: "#fb923c", serve: "#10b981", ops: "#64748b",
 }
+const INVERT_WARN: Record<string, number> = { queue: 100, queue_failed: 1, stale_ratio: 20 }
 
-function AuditScoreBar({ score, severity }: { score: number; severity: string }) {
-  const color = SEVERITY_COLOR[severity] ?? "#a1a1aa"
-  return (
-    <div className="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
-      <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
-    </div>
-  )
+const MATURITY_STAGES = ["Pre-MVP", "MVP", "Beta", "Prod"]
+
+function scoreHex(score: number): string {
+  if (score >= 80) return "#10b981"
+  if (score >= 65) return "#22c55e"
+  if (score >= 45) return "#f59e0b"
+  return "#ef4444"
+}
+function gradeHex(grade: string): string {
+  return ({ A: "#10b981", B: "#22c55e", C: "#f59e0b", D: "#f97316", F: "#ef4444" } as Record<string, string>)[grade] ?? "#a1a1aa"
 }
 
 function DiagSection({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
@@ -76,6 +83,15 @@ function DiagSection({ icon, title, children }: { icon: string; title: string; c
         <span>{icon}</span>{title}
       </p>
       <div style={{ fontSize: 13, lineHeight: 1.6, color: "#52525b" }}>{children}</div>
+    </div>
+  )
+}
+
+function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <p className="font-semibold uppercase tracking-widest text-zinc-400" style={{ fontSize: 11 }}>{children}</p>
+      {right}
     </div>
   )
 }
@@ -93,18 +109,23 @@ interface NodeAuditData {
 
 export default function RoadmapPage() {
   const [graph, setGraph]               = useState<RoadmapGraph>(FALLBACK)
+  const [pulse, setPulse]               = useState<PulseResponse | null>(null)
+  const [pulseAt, setPulseAt]           = useState<string | null>(null)
+  const [pulseRefreshing, setPulseRefreshing] = useState(false)
   const [loading, setLoading]           = useState(true)
   const [filterStatus, setFilterStatus] = useState<NodeStatus | null>(null)
   const [selected, setSelected]         = useState<RoadmapNode | null>(null)
   const [error, setError]               = useState<string | null>(null)
+  const [verdictOpen, setVerdictOpen]   = useState(false)
 
-  // 감사 관련 상태
+  // 심층 감사 (LLM) 관련 상태
   const [auditLoading, setAuditLoading] = useState(false)
-  const [auditRunId,   setAuditRunId]   = useState<string | null>(null)
-  const [nodeAudit,    setNodeAudit]    = useState<NodeAuditData | null>(null)
+  const [, setAuditRunId]               = useState<string | null>(null)
+  const [nodeAudit, setNodeAudit]       = useState<NodeAuditData | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pulsePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const [sidebarW, setSidebarW] = useState(268)
+  const [sidebarW, setSidebarW] = useState(300)
   const [rightW,   setRightW]   = useState(340)
   const dragging    = useRef<null | "left" | "right">(null)
   const [dragCursor, setDragCursor] = useState(false)
@@ -132,9 +153,29 @@ export default function RoadmapPage() {
     } catch { setError("백엔드 연결 실패") } finally { setLoading(false) }
   }
 
+  const loadPulse = useCallback(async () => {
+    setPulseRefreshing(true)
+    try {
+      const res = await fetch("/api/roadmap/pulse", { cache: "no-store" })
+      if (res.ok) {
+        const data: PulseResponse = await res.json()
+        setPulse(data)
+        setPulseAt(data.computed_at ?? new Date().toISOString())
+        setError(null)
+      }
+    } catch { /* 마지막 값 유지 */ } finally { setPulseRefreshing(false) }
+  }, [])
+
   useEffect(() => { loadGraph() }, [])
 
-  // 노드 선택 시 감사 데이터 조회
+  // 실시간 맥박 — 45초 주기 폴링 (LLM 비용 없음)
+  useEffect(() => {
+    loadPulse()
+    pulsePollRef.current = setInterval(loadPulse, 45000)
+    return () => { if (pulsePollRef.current) clearInterval(pulsePollRef.current) }
+  }, [loadPulse])
+
+  // 노드 선택 시 (마지막 심층 감사의) 노드 감사 데이터 조회
   useEffect(() => {
     if (!selected) { setNodeAudit(null); return }
     fetch(`/api/roadmap/audit/node/${selected.node_id}`, { cache: "no-store" })
@@ -143,7 +184,7 @@ export default function RoadmapPage() {
       .catch(() => setNodeAudit(null))
   }, [selected?.node_id])
 
-  // 감사 트리거
+  // 심층 감사 트리거 (LLM)
   async function triggerAudit() {
     if (auditLoading) return
     setAuditLoading(true)
@@ -155,7 +196,6 @@ export default function RoadmapPage() {
       setAuditRunId(audit_run_id)
       setError(null)
 
-      // 5초 간격 폴링 (최대 3분)
       let elapsed = 0
       pollRef.current = setInterval(async () => {
         elapsed += 5
@@ -168,9 +208,10 @@ export default function RoadmapPage() {
           const status = await pr.json()
           if (status.status === "success" || status.status === "failed") {
             clearInterval(pollRef.current!); setAuditLoading(false); setAuditRunId(null)
-            if (status.status === "failed") setError("감사 실행 실패")
-            // 그래프 + 노드 감사 갱신
+            if (status.status === "failed") setError("심층 감사 실행 실패")
             await loadGraph()
+            await loadPulse()
+            setVerdictOpen(true)
             if (selected) {
               const nr = await fetch(`/api/roadmap/audit/node/${selected.node_id}`, { cache: "no-store" })
               if (nr.ok) setNodeAudit(await nr.json())
@@ -179,19 +220,18 @@ export default function RoadmapPage() {
         } catch { /* ignore */ }
       }, 5000)
     } catch {
-      setError("감사 실행 요청 실패")
+      setError("심층 감사 요청 실패")
       setAuditLoading(false)
     }
   }
 
-  // cleanup on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
   // Panel resize
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (dragging.current === "left")
-        setSidebarW(Math.min(480, Math.max(160, e.clientX)))
+        setSidebarW(Math.min(480, Math.max(220, e.clientX)))
       if (dragging.current === "right")
         setRightW(Math.min(520, Math.max(200, window.innerWidth - e.clientX)))
     }
@@ -205,65 +245,94 @@ export default function RoadmapPage() {
   const deselect     = useCallback(() => setSelected(null), [])
   const toggleFilter = (s: NodeStatus | null) => setFilterStatus(p => p === s ? null : s)
 
-  const { health } = graph
-  const diagnosis  = graph.system_diagnosis ?? EMPTY_DIAGNOSIS
+  // ── 라이브 vs 그래프 병합 ──
+  const health       = pulse?.health ?? graph.health
+  const pulseMetrics = pulse?.pulse_metrics ?? graph.pulse_metrics ?? []
+  const nodeScores   = pulse?.node_scores ?? graph.node_scores ?? {}
+  const diagnosis    = graph.system_diagnosis ?? EMPTY_DIAGNOSIS
 
-  const activeCount  = health.by_status["active"]  ?? 0
-  const warningCount = health.by_status["warning"] ?? 0
-  const todoCount    = health.by_status["todo"]    ?? 0
-  const brokenCount  = health.by_status["broken"]  ?? 0
-  const totalCount   = health.total || graph.nodes.length || 1
+  const nodeMap = useMemo(() => new Map(graph.nodes.map(n => [n.node_id, n])), [graph.nodes])
 
-  const warnList   = graph.nodes.filter(n => n.status === "warning").slice(0, 3)
-  const todoList   = graph.nodes.filter(n => n.status === "todo").slice(0, 3)
-  const brokenList = graph.nodes.filter(n => n.status === "broken")
-  const topImpact  = [...graph.nodes].sort((a, b) => b.user_impact_score - a.user_impact_score).slice(0, 3)
+  const grade  = health.grade ?? "F"
+  const stage  = health.maturity?.stage ?? "MVP"
+  const levels = health.maturity?.levels ?? {}
+  const stageIdx = Math.max(0, MATURITY_STAGES.indexOf(stage))
 
-  const edgeCnt: Record<string, number> = {}
-  for (const e of graph.edges) {
-    edgeCnt[e.source] = (edgeCnt[e.source] || 0) + 1
-    edgeCnt[e.target] = (edgeCnt[e.target] || 0) + 1
-  }
-  const spofList = graph.nodes
-    .filter(n => (edgeCnt[n.node_id] || 0) >= 4)
-    .sort((a, b) => (edgeCnt[b.node_id] || 0) - (edgeCnt[a.node_id] || 0))
-    .slice(0, 3)
+  const layerHealth = useMemo(() =>
+    LAYER_ORDER
+      .filter(l => health.by_layer?.[l])
+      .map(l => ({ layer: l, label: graph.layer_labels[l] ?? l, ...health.by_layer![l] })),
+    [health.by_layer, graph.layer_labels])
 
-  // legacy fallback actions
-  const nextActions: string[] = diagnosis.immediate_actions.length > 0
-    ? diagnosis.immediate_actions.slice(0, 3)
-    : (() => {
-        const a: string[] = []
-        if (brokenList[0])  a.push(`${brokenList[0].label} 즉시 복구`)
-        if (warnList[0])    a.push(`${warnList[0].label} 경고 원인 분석`)
-        if (topImpact[0] && topImpact[0].status !== "active")
-          a.push(`${topImpact[0].label} 활성화로 임팩트 극대화`)
-        if (a.length === 0 && topImpact[0])
-          a.push(`${topImpact[0].label} 확장 개선 집중`)
-        return a
-      })()
+  const criticalIssues = useMemo(() => {
+    return Object.entries(nodeScores)
+      .filter(([, v]) => v.gap_severity === "critical" || v.gap_severity === "high")
+      .map(([nid, v]) => {
+        const node = nodeMap.get(nid)
+        return {
+          node_id: nid,
+          label: node?.label ?? nid,
+          impact: node?.user_impact_score ?? 5,
+          severity: v.gap_severity ?? "medium",
+          score: v.score,
+          gap: v.gaps?.[0] ?? "",
+          node,
+        }
+      })
+      .sort((a, b) => (SEV_RANK[a.severity] - SEV_RANK[b.severity]) || (b.impact - a.impact))
+      .slice(0, 6)
+  }, [nodeScores, nodeMap])
+
+  const liveScore = selected ? nodeScores[selected.node_id] : undefined
 
   const fmtDate = (iso: string | null) => iso
     ? new Date(iso).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
     : null
+  const fmtTime = (iso: string | null) => iso
+    ? new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "—"
+
+  function metricValueHex(key: string, value: number, invert?: boolean): string {
+    if (key === "ops_rate") return value >= 90 ? "#059669" : value >= 70 ? "#d97706" : "#dc2626"
+    if (invert) {
+      const t = INVERT_WARN[key]
+      if (t !== undefined && value >= t) return "#d97706"
+    }
+    return "#18181b"
+  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans" style={{ cursor: dragCursor ? "col-resize" : undefined }}>
       {/* ════ Header ════ */}
-      <header className="border-b border-zinc-200 bg-white px-6 py-5 flex-shrink-0">
+      <header className="border-b border-zinc-200 bg-white px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-400">BuildMore</p>
-            <h1 className="mt-0.5 font-bold text-zinc-900" style={{ fontSize: 20 }}>시스템 DNA맵 대시보드</h1>
-            <p className="mt-1 text-zinc-400" style={{ fontSize: 13 }}>
-              노드 {graph.nodes.length}개 · 엣지 {graph.edges.length}개 · 레이어 {Object.keys(graph.layer_labels).length}개
-            </p>
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-400">BuildMore</p>
+              <h1 className="mt-0.5 font-bold text-zinc-900" style={{ fontSize: 19 }}>시스템 DNA맵 대시보드</h1>
+            </div>
+            {/* 헤드라인 칩: 등급 · 점수 · 성숙도 */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5"
+                style={{ borderColor: gradeHex(grade) + "55", background: gradeHex(grade) + "12" }}>
+                <span className="font-extrabold" style={{ fontSize: 16, color: gradeHex(grade) }}>{grade}</span>
+                <span className="font-bold text-zinc-800" style={{ fontSize: 15 }}>{health.health_score.toFixed(1)}</span>
+                <span className="text-zinc-400" style={{ fontSize: 11 }}>건강도</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-zinc-600" style={{ fontSize: 12 }}>
+                <span className="font-semibold text-zinc-800">{stage}</span> 단계
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5" style={{ fontSize: 12 }}>
+                <Activity className="h-3.5 w-3.5" style={{ color: pulseRefreshing ? "#10b981" : "#a1a1aa" }} />
+                <span className="text-zinc-500">LIVE</span>
+                <span className="text-zinc-400">{fmtTime(pulseAt)}</span>
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {error && (
               <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">{error}</span>
             )}
-            {/* 🔍 시스템 감사 버튼 */}
             <Link
               href="/admin"
               aria-label="Admin으로 돌아가기"
@@ -271,6 +340,14 @@ export default function RoadmapPage() {
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
+            <button
+              onClick={loadPulse}
+              disabled={pulseRefreshing}
+              title="실시간 맥박 새로고침"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-100 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${pulseRefreshing ? "animate-spin" : ""}`} />
+            </button>
             <button
               onClick={triggerAudit}
               disabled={auditLoading}
@@ -284,17 +361,17 @@ export default function RoadmapPage() {
               {auditLoading ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-zinc-200 rounded-full animate-spin" />
-                  감사 중...
+                  심층 감사 중...
                 </>
               ) : (
-                <>🔍 시스템 감사</>
+                <>🧠 심층 감사 (LLM)</>
               )}
             </button>
           </div>
         </div>
 
-        {/* Filter pills */}
-        <div className="flex gap-2 mt-4 flex-wrap">
+        {/* Filter pills + 카운트 */}
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
           {STATUS_FILTERS.map(f => (
             <button key={String(f.value)} onClick={() => toggleFilter(f.value)}
               className={[
@@ -303,7 +380,7 @@ export default function RoadmapPage() {
                   ? "bg-zinc-900 text-white border-zinc-900"
                   : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300",
               ].join(" ")}
-              style={{ fontSize: 13 }}>
+              style={{ fontSize: 12 }}>
               <span className="rounded-full flex-shrink-0"
                 style={{ width: 7, height: 7, background: filterStatus === f.value ? "#ffffff" : f.color }} />
               {f.label}
@@ -314,6 +391,9 @@ export default function RoadmapPage() {
               )}
             </button>
           ))}
+          <span className="ml-auto text-zinc-400" style={{ fontSize: 12 }}>
+            노드 {graph.nodes.length} · 엣지 {graph.edges.length} · 레이어 {Object.keys(graph.layer_labels).length}
+          </span>
         </div>
       </header>
 
@@ -330,123 +410,171 @@ export default function RoadmapPage() {
             onMouseEnter={() => { sidebarHovered.current = true }}
             onMouseLeave={() => { sidebarHovered.current = false }}
           >
-            {/* Health Score */}
-            <section className="mb-4">
-              <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-2" style={{ fontSize: 13 }}>Health Score</p>
-              <div className="flex items-end gap-2">
-                <span className="font-bold text-zinc-900" style={{ fontSize: 32 }}>{health.health_score.toFixed(1)}</span>
-                <span className="text-zinc-400 mb-1" style={{ fontSize: 13 }}>/ 100</span>
+            {/* ── 1. Health Score ── */}
+            <section className="mb-5">
+              <SectionLabel right={
+                <span className="inline-flex items-center gap-1 text-zinc-400" style={{ fontSize: 10 }}>
+                  <Activity className="h-3 w-3" style={{ color: pulseRefreshing ? "#10b981" : "#cbd5e1" }} />
+                  {fmtTime(pulseAt)}
+                </span>
+              }>종합 건강도</SectionLabel>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center rounded-2xl flex-shrink-0"
+                  style={{ width: 56, height: 56, background: gradeHex(grade) + "18", border: `2px solid ${gradeHex(grade)}55` }}>
+                  <span className="font-extrabold" style={{ fontSize: 28, color: gradeHex(grade) }}>{grade}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-end gap-1.5">
+                    <span className="font-bold text-zinc-900" style={{ fontSize: 30 }}>{health.health_score.toFixed(1)}</span>
+                    <span className="text-zinc-400 mb-1" style={{ fontSize: 12 }}>/ 100</span>
+                  </div>
+                  <div className="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${health.health_score}%`, background: scoreHex(health.health_score) }} />
+                  </div>
+                  <p className="text-zinc-400 mt-1" style={{ fontSize: 10 }}>
+                    임팩트 가중 · 실측 데이터 기반
+                  </p>
+                </div>
               </div>
-              <HealthBar score={health.health_score} />
-              <p className="text-zinc-400 mt-1.5" style={{ fontSize: 12 }}>{health.last_updated}</p>
-              <div className="mt-3 space-y-2">
+              {/* 상태 분포 (작게) */}
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {Object.entries(health.by_status).map(([s, cnt]) => (
-                  <div key={s} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full flex-shrink-0"
-                        style={{ width: 7, height: 7, background: STATUS_DOT[s] ?? "#d4d4d8" }} />
-                      <span className={`inline-block px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`}
-                        style={{ fontSize: 13 }}>{s}</span>
+                  <span key={s} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${STATUS_COLORS[s] ?? STATUS_COLORS.unknown}`} style={{ fontSize: 11 }}>
+                    <span className="rounded-full" style={{ width: 6, height: 6, background: STATUS_DOT[s] ?? "#d4d4d8" }} />
+                    {s} {cnt}
+                  </span>
+                ))}
+              </div>
+            </section>
+
+            {/* ── 2. 성숙도 단계 ── */}
+            <section className="mb-5">
+              <SectionLabel>성숙도 단계</SectionLabel>
+              <div className="flex gap-1">
+                {MATURITY_STAGES.map((st, i) => (
+                  <div key={st} className="flex-1 text-center">
+                    <div className="h-1.5 rounded-full" style={{ background: i <= stageIdx ? scoreHex(health.health_score) : "#e4e4e7" }} />
+                    <span className={`mt-1 block ${i === stageIdx ? "font-bold text-zinc-800" : "text-zinc-400"}`} style={{ fontSize: 10 }}>{st}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex gap-1.5 text-zinc-500" style={{ fontSize: 10 }}>
+                <span className="text-emerald-600">prod {levels.prod ?? 0}</span>·
+                <span className="text-lime-600">beta {levels.beta ?? 0}</span>·
+                <span className="text-amber-600">mvp {levels.mvp ?? 0}</span>·
+                <span className="text-red-500">미달 {levels.below ?? 0}</span>
+              </div>
+            </section>
+
+            {/* ── 3. 파이프라인 맥박 (실측 볼륨) ── */}
+            <section className="mb-5">
+              <SectionLabel>파이프라인 맥박</SectionLabel>
+              <div className="grid grid-cols-2 gap-1.5">
+                {pulseMetrics.map(mtr => (
+                  <div key={mtr.key} className="rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-1.5"
+                    style={{ borderLeft: `3px solid ${GROUP_COLOR[mtr.group] ?? "#cbd5e1"}` }}>
+                    <p className="text-zinc-400 truncate" style={{ fontSize: 10 }}>{mtr.label}</p>
+                    <p className="font-bold leading-tight" style={{ fontSize: 15, color: metricValueHex(mtr.key, mtr.value, mtr.invert) }}>
+                      {mtr.value.toLocaleString()}<span className="font-medium text-zinc-400 ml-0.5" style={{ fontSize: 10 }}>{mtr.unit}</span>
+                    </p>
+                  </div>
+                ))}
+                {pulseMetrics.length === 0 && (
+                  <p className="col-span-2 text-zinc-400 text-center py-3" style={{ fontSize: 12 }}>맥박 데이터 로딩 중…</p>
+                )}
+              </div>
+            </section>
+
+            {/* ── 4. 레이어별 건강도 ── */}
+            <section className="mb-5">
+              <SectionLabel>레이어별 건강도</SectionLabel>
+              <div className="space-y-1.5">
+                {layerHealth.map(l => (
+                  <div key={l.layer}>
+                    <div className="flex items-center justify-between" style={{ fontSize: 11 }}>
+                      <span className="text-zinc-600">{l.label} <span className="text-zinc-300">·{l.count}</span></span>
+                      <span className="font-semibold" style={{ color: scoreHex(l.health) }}>{l.health.toFixed(0)}</span>
                     </div>
-                    <span className="font-semibold text-zinc-700" style={{ fontSize: 13 }}>{cnt}</span>
+                    <div className="mt-0.5 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${l.health}%`, background: scoreHex(l.health) }} />
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
 
-            {/* System Diagnostic Panel — LLM 감사 결과 기반 */}
-            <div className="border-t border-zinc-200 pt-4">
-              <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-3" style={{ fontSize: 13 }}>
-                시스템 종합 진단
-              </p>
-              <div>
-                {/* 종합 판정 */}
-                {diagnosis.system_verdict && (
-                  <DiagSection icon="✅" title="종합 판정">
-                    <p>{diagnosis.system_verdict}</p>
-                  </DiagSection>
-                )}
+            {/* ── 5. 즉시 조치: critical/high gap ── */}
+            <section className="mb-5">
+              <SectionLabel>즉시 조치 필요</SectionLabel>
+              {criticalIssues.length === 0 ? (
+                <p className="text-zinc-400" style={{ fontSize: 12 }}>critical/high 갭 없음 — 안정적입니다.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {criticalIssues.map((it, i) => (
+                    <li key={it.node_id}>
+                      <button onClick={() => it.node && setSelected(it.node)}
+                        className="w-full text-left rounded-lg border border-zinc-100 bg-zinc-50 px-2.5 py-2 hover:border-zinc-300 transition">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-zinc-400" style={{ fontSize: 11 }}>{i + 1}</span>
+                          <span className="rounded-full px-1.5 py-0.5 text-white font-medium" style={{ fontSize: 9, background: SEVERITY_COLOR[it.severity] ?? "#a1a1aa" }}>{it.severity}</span>
+                          <span className="font-semibold text-zinc-800 truncate" style={{ fontSize: 12 }}>{it.label}</span>
+                          <span className="ml-auto text-zinc-400" style={{ fontSize: 10 }}>i{it.impact}</span>
+                        </div>
+                        {it.gap && <p className="text-zinc-500 mt-1" style={{ fontSize: 11, lineHeight: 1.45 }}>{it.gap}</p>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-                {/* 즉시 조치 — critical_bottlenecks */}
-                <DiagSection icon="🔴" title="즉시 조치 필요">
-                  {diagnosis.critical_bottlenecks.length === 0 ? (
-                    <p>장애 노드 없음.</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {diagnosis.critical_bottlenecks.map(b => (
-                        <li key={b.node_id} className="flex items-start gap-1.5">
-                          <span className="font-bold text-zinc-400 flex-shrink-0">{b.rank}.</span>
-                          <span><strong className="text-red-600">[{b.node_id}]</strong> {b.impact}</span>
-                        </li>
-                      ))}
-                    </ul>
+            {/* ── 6. 심층 감사 (LLM) 종합 판정 — collapsible ── */}
+            <section className="border-t border-zinc-200 pt-3">
+              <button onClick={() => setVerdictOpen(o => !o)} className="w-full flex items-center justify-between">
+                <p className="font-semibold uppercase tracking-widest text-zinc-400" style={{ fontSize: 11 }}>심층 감사 (LLM)</p>
+                <span className="text-zinc-400" style={{ fontSize: 11 }}>{verdictOpen ? "접기 ▲" : "펼치기 ▼"}</span>
+              </button>
+              {verdictOpen && (
+                <div className="mt-2">
+                  {diagnosis.system_verdict && (
+                    <DiagSection icon="✅" title="종합 판정"><p>{diagnosis.system_verdict}</p></DiagSection>
                   )}
-                </DiagSection>
-
-                {/* 파이프라인 리스크 */}
-                {diagnosis.pipeline_risk && (
-                  <DiagSection icon="⚠️" title="파이프라인 리스크">
-                    <p>{diagnosis.pipeline_risk}</p>
-                  </DiagSection>
-                )}
-
-                {/* 확장 우선순위 */}
-                <DiagSection icon="📈" title="확장 우선순위">
-                  {topImpact.length === 0 ? <p>데이터 없음</p> : (
-                    <ul className="space-y-1">
-                      {topImpact.map(n => (
-                        <li key={n.node_id} className="flex items-start gap-1.5">
-                          <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#93c5fd", display: "inline-block" }} />
-                          <span><strong>{n.label}</strong> (impact {n.user_impact_score}/10)</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </DiagSection>
-
-                {/* 아키텍처 인사이트 */}
-                <DiagSection icon="🧠" title="아키텍처 인사이트">
-                  {spofList.length === 0 ? (
-                    <p>단일 장애점 후보 없음.</p>
-                  ) : (
-                    <>
-                      <p className="mb-1">연결 수 多 — <strong>SPOF 위험</strong>:</p>
-                      <ul className="space-y-1">
-                        {spofList.map(n => (
-                          <li key={n.node_id} className="flex items-start gap-1.5">
-                            <span className="mt-2 rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: "#fbbf24", display: "inline-block" }} />
-                            <span><strong>{n.label}</strong> — 연결 {edgeCnt[n.node_id]}개</span>
+                  <DiagSection icon="🔴" title="치명적 병목">
+                    {diagnosis.critical_bottlenecks.length === 0 ? (
+                      <p>심층 감사를 실행하면 LLM이 병목을 진단합니다.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {diagnosis.critical_bottlenecks.map(b => (
+                          <li key={b.node_id} className="flex items-start gap-1.5">
+                            <span className="font-bold text-zinc-400 flex-shrink-0">{b.rank}.</span>
+                            <span><strong className="text-red-600">[{b.node_id}]</strong> {b.impact}</span>
                           </li>
                         ))}
                       </ul>
-                    </>
+                    )}
+                  </DiagSection>
+                  {diagnosis.pipeline_risk && (
+                    <DiagSection icon="⚠️" title="파이프라인 리스크"><p>{diagnosis.pipeline_risk}</p></DiagSection>
                   )}
-                </DiagSection>
-
-                {/* 다음 개발 액션 */}
-                <DiagSection icon="💡" title="다음 개발 액션">
-                  {nextActions.length === 0 ? (
-                    <p>전체 정상. 신규 데이터소스 확장을 검토하세요.</p>
-                  ) : (
-                    <ol className="space-y-1 list-none">
-                      {nextActions.map((a, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span className="font-bold text-zinc-400 flex-shrink-0">{i + 1}.</span>
-                          {a}
-                        </li>
-                      ))}
-                    </ol>
+                  {diagnosis.immediate_actions.length > 0 && (
+                    <DiagSection icon="💡" title="권장 액션">
+                      <ol className="space-y-1 list-none">
+                        {diagnosis.immediate_actions.map((a, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="font-bold text-zinc-400 flex-shrink-0">{i + 1}.</span>{a}
+                          </li>
+                        ))}
+                      </ol>
+                    </DiagSection>
                   )}
-                </DiagSection>
-              </div>
-
-              {/* 마지막 감사 시각 */}
+                </div>
+              )}
               {graph.last_audited_at && (
-                <p className="text-zinc-400 mt-3 pt-3 border-t border-zinc-100" style={{ fontSize: 11 }}>
-                  마지막 감사: {fmtDate(graph.last_audited_at)}
+                <p className="text-zinc-400 mt-2" style={{ fontSize: 10 }}>
+                  마지막 심층 감사: {fmtDate(graph.last_audited_at)}
                 </p>
               )}
-            </div>
+            </section>
           </div>
 
           {/* Drag handle */}
@@ -473,6 +601,7 @@ export default function RoadmapPage() {
             selectedId={selected?.node_id ?? null}
             onSelect={showDetail}
             onDeselect={deselect}
+            nodeScores={nodeScores}
           />
         )}
 
@@ -492,7 +621,6 @@ export default function RoadmapPage() {
                   style={{ fontSize: 14 }}>✕</button>
               </div>
 
-              {/* Summary card */}
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 mb-4">
                 <div className="flex gap-1.5 flex-wrap mb-3">
                   <span className="bg-white border border-zinc-200 text-zinc-500 px-2 py-0.5 rounded-full" style={{ fontSize: 11 }}>
@@ -514,30 +642,38 @@ export default function RoadmapPage() {
                 </div>
               </div>
 
-              {/* 감사 점수 게이지 */}
-              {nodeAudit && nodeAudit.audit_score !== null ? (
-                <div className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+              {/* 실시간 데이터 충족도 (pulse) */}
+              {liveScore && liveScore.score !== null && (
+                <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-zinc-600" style={{ fontSize: 13 }}>감사 점수</p>
+                    <p className="font-semibold text-zinc-600 inline-flex items-center gap-1.5" style={{ fontSize: 13 }}>
+                      <Activity className="h-3.5 w-3.5 text-emerald-500" /> 실시간 충족도
+                    </p>
                     <div className="flex items-center gap-2">
-                      {nodeAudit.gap_severity && (
-                        <span className="px-2 py-0.5 rounded-full font-medium text-white" style={{ fontSize: 11, background: SEVERITY_COLOR[nodeAudit.gap_severity] ?? "#a1a1aa" }}>
-                          {nodeAudit.gap_severity}
+                      {liveScore.gap_severity && (
+                        <span className="px-2 py-0.5 rounded-full font-medium text-white" style={{ fontSize: 11, background: SEVERITY_COLOR[liveScore.gap_severity] ?? "#a1a1aa" }}>
+                          {liveScore.gap_severity}
                         </span>
                       )}
-                      <span className="font-bold text-zinc-900" style={{ fontSize: 18 }}>{nodeAudit.audit_score.toFixed(0)}</span>
+                      <span className="font-bold text-zinc-900" style={{ fontSize: 18 }}>{Math.round(liveScore.score)}</span>
                       <span className="text-zinc-400" style={{ fontSize: 12 }}>/100</span>
                     </div>
                   </div>
-                  <AuditScoreBar score={nodeAudit.audit_score} severity={nodeAudit.gap_severity ?? "medium"} />
-                </div>
-              ) : nodeAudit === null ? null : (
-                <div className="mb-4 rounded-xl border border-zinc-100 bg-zinc-50 p-3 text-center text-zinc-400" style={{ fontSize: 13 }}>
-                  🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
+                  <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${liveScore.score}%`, background: scoreHex(liveScore.score) }} />
+                  </div>
+                  {liveScore.gaps.length > 0 && (
+                    <ul className="mt-2.5 space-y-1">
+                      {liveScore.gaps.map((g, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-zinc-600" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                          <span className="text-amber-500 flex-shrink-0">›</span>{g}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
 
-              {/* Detail items */}
               {selected.detail && selected.detail.length > 0 && (
                 <div className="mb-4">
                   <p className="font-semibold uppercase tracking-widest text-zinc-400 mb-2" style={{ fontSize: 13 }}>세부 항목</p>
@@ -550,45 +686,34 @@ export default function RoadmapPage() {
                 </div>
               )}
 
-              {/* Section A: 문제점 / 개선점 (LLM 감사 결과) */}
+              {/* LLM 심층 감사 결과 */}
               <div className="mt-4 pt-4 border-t border-zinc-200">
-                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>🔧 문제점 / 개선점</p>
+                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>🔧 문제점 / 개선점 (LLM)</p>
                 <div className="rounded-xl px-4 py-3" style={{ background: "#f4f4f5" }}>
                   {nodeAudit?.issues ? (
                     <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{nodeAudit.issues}</p>
                   ) : (
-                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>
-                      🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
-                    </p>
+                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>🧠 심층 감사를 실행하면 LLM 분석이 표시됩니다.</p>
                   )}
                 </div>
               </div>
 
-              {/* Section B: 확장 가능성 (LLM 감사 결과) */}
               <div className="mt-3 pt-4 border-t border-zinc-200">
-                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>📈 확장 가능성</p>
+                <p className="font-semibold text-zinc-500 mb-2" style={{ fontSize: 13 }}>📈 확장 가능성 (LLM)</p>
                 <div className="bg-zinc-50 rounded-xl px-4 py-3">
                   {nodeAudit?.opportunities ? (
                     <p className="text-zinc-600" style={{ fontSize: 13, lineHeight: 1.6 }}>{nodeAudit.opportunities}</p>
                   ) : (
-                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>
-                      🔄 시스템 감사를 실행하면 분석 결과가 표시됩니다.
-                    </p>
+                    <p className="text-zinc-400 italic" style={{ fontSize: 13 }}>🧠 심층 감사를 실행하면 LLM 분석이 표시됩니다.</p>
                   )}
                 </div>
               </div>
 
-              {/* 감사 타임스탬프 */}
               {nodeAudit?.audited_at && (
-                <p className="text-zinc-400 mt-3" style={{ fontSize: 11 }}>
-                  마지막 분석: {fmtDate(nodeAudit.audited_at)}
-                </p>
+                <p className="text-zinc-400 mt-3" style={{ fontSize: 11 }}>마지막 LLM 분석: {fmtDate(nodeAudit.audited_at)}</p>
               )}
-
               {selected.updated_at && (
-                <p className="text-zinc-400 mt-2" style={{ fontSize: 12 }}>
-                  업데이트: {new Date(selected.updated_at).toLocaleString("ko-KR")}
-                </p>
+                <p className="text-zinc-400 mt-2" style={{ fontSize: 12 }}>업데이트: {new Date(selected.updated_at).toLocaleString("ko-KR")}</p>
               )}
             </div>
           </aside>
