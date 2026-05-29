@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 
 type TaskGroup = {
   id: string
@@ -50,6 +50,7 @@ type ScheduleState = {
   groups: TaskGroup[]
   tasks: Task[]
   weekAgendas: WeekAgenda[]
+  totalDays: number
 }
 
 type TaskRow = {
@@ -60,10 +61,9 @@ type TaskRow = {
 }
 
 const STORAGE_KEY = 'buildmore_schedule_editor_v1'
-const TOTAL_DAYS = 21
+const INITIAL_TOTAL_DAYS = 21
 const DAY_WIDTH = 84
 const MIN_DURATION = 1
-const TIMELINE_WIDTH = TOTAL_DAYS * DAY_WIDTH
 const HEADER_HEIGHT = 112
 const GROUP_ROW_HEIGHT = 36
 const TASK_ROW_HEIGHT = 40
@@ -114,6 +114,7 @@ const DEFAULT_SCHEDULE_STATE: ScheduleState = {
   groups: DEFAULT_GROUPS,
   tasks: DEFAULT_TASKS,
   weekAgendas: DEFAULT_WEEK_AGENDAS,
+  totalDays: INITIAL_TOTAL_DAYS,
 }
 
 let initialScheduleCache: ScheduleState | null | undefined
@@ -140,6 +141,7 @@ function getInitialScheduleState(): ScheduleState {
       groups: Array.isArray(parsed.groups) ? parsed.groups : DEFAULT_GROUPS,
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks : DEFAULT_TASKS,
       weekAgendas: Array.isArray(parsed.weekAgendas) ? parsed.weekAgendas : DEFAULT_WEEK_AGENDAS,
+      totalDays: typeof parsed.totalDays === 'number' ? Math.max(INITIAL_TOTAL_DAYS, parsed.totalDays) : INITIAL_TOTAL_DAYS,
     }
     return initialScheduleCache
   } catch {
@@ -272,11 +274,23 @@ export default function SchedulePage() {
   const [groups, setGroups] = useState<TaskGroup[]>(() => getInitialScheduleState().groups)
   const [tasks, setTasks] = useState<Task[]>(() => getInitialScheduleState().tasks)
   const [weekAgendas, setWeekAgendas] = useState<WeekAgenda[]>(() => getInitialScheduleState().weekAgendas)
+  const [totalDays, setTotalDays] = useState(() => getInitialScheduleState().totalDays)
   const [hoverInsert, setHoverInsert] = useState<string | null>(null)
   const [selectedTaskUid, setSelectedTaskUid] = useState<string | null>(null)
   const dragRef = useRef<DragState | null>(null)
 
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups])
+  const weekCount = Math.ceil(totalDays / 7)
+  const timelineWidth = totalDays * DAY_WIDTH
+  const visibleWeekAgendas = useMemo(
+    () =>
+      Array.from({ length: weekCount }, (_, index) => ({
+        id: weekAgendas[index]?.id ?? `w${index + 1}`,
+        label: weekAgendas[index]?.label ?? `Week ${index + 1}`,
+        span: Math.min(7, totalDays - index * 7),
+      })),
+    [totalDays, weekAgendas, weekCount],
+  )
   const taskRows = useMemo(() => {
     let top = 0
     const rows: TaskRow[] = []
@@ -309,8 +323,8 @@ export default function SchedulePage() {
   }, [taskRows])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ groups, tasks, weekAgendas }))
-  }, [groups, tasks, weekAgendas])
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ groups, tasks, weekAgendas, totalDays }))
+  }, [groups, tasks, weekAgendas, totalDays])
 
   useEffect(() => {
     const onMove = (event: PointerEvent) => {
@@ -326,7 +340,7 @@ export default function SchedulePage() {
         setTasks((prev) => {
           const moving = prev.find((task) => task.uid === drag.taskUid)
           if (!moving) return prev
-          const nextStart = clamp(drag.originStart + dayDelta, 0, TOTAL_DAYS - moving.duration)
+          const nextStart = clamp(drag.originStart + dayDelta, 0, totalDays - moving.duration)
           return moveTaskToNearestRow(prev, drag.taskUid, targetRow.taskUid, nextStart)
         })
         return
@@ -342,7 +356,7 @@ export default function SchedulePage() {
             return { ...task, start: nextStart, duration: nextEnd - nextStart }
           }
           const originEnd = drag.originStart + drag.originDuration
-          const nextEnd = clamp(originEnd + dayDelta, drag.originStart + MIN_DURATION, TOTAL_DAYS)
+          const nextEnd = clamp(originEnd + dayDelta, drag.originStart + MIN_DURATION, totalDays)
           return { ...task, duration: nextEnd - drag.originStart }
         }),
       )
@@ -360,7 +374,7 @@ export default function SchedulePage() {
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
     }
-  }, [])
+  }, [totalDays])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -419,6 +433,21 @@ export default function SchedulePage() {
     })
   }
 
+  const addDayColumn = () => {
+    const nextTotalDays = totalDays + 1
+    const nextWeekCount = Math.ceil(nextTotalDays / 7)
+
+    setTotalDays(nextTotalDays)
+    setWeekAgendas((prev) => {
+      if (prev.length >= nextWeekCount) return prev
+      const next = [...prev]
+      for (let index = next.length; index < nextWeekCount; index += 1) {
+        next.push({ id: `w${index + 1}`, label: `Week ${index + 1}` })
+      }
+      return next
+    })
+  }
+
   const startResize = (event: React.PointerEvent, task: Task, edge: 'start' | 'end') => {
     event.preventDefault()
     event.stopPropagation()
@@ -456,7 +485,7 @@ export default function SchedulePage() {
 
   return (
     <main className="min-h-screen bg-white font-sans text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white px-6 py-5">
+      <header className="border-b border-zinc-200 bg-zinc-50 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-400">BuildMore</p>
@@ -467,9 +496,10 @@ export default function SchedulePage() {
           </div>
           <Link
             href="/admin"
-            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition hover:border-emerald-500/70 hover:text-zinc-950"
+            aria-label="Admin으로 돌아가기"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
           >
-            Admin
+            <ArrowLeft className="h-4 w-4" />
           </Link>
         </div>
 
@@ -488,7 +518,7 @@ export default function SchedulePage() {
       </header>
 
       <div className="flex min-h-[calc(100vh-132px)]">
-        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-white px-4 pb-20">
+        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-zinc-50 px-4 pb-20">
           <section className="flex flex-col justify-center border-b border-zinc-100" style={{ height: HEADER_HEIGHT }}>
             <p className="mb-2 text-[13px] font-semibold uppercase tracking-widest text-zinc-400">Schedule Index</p>
             <p className="text-[13px] leading-6 text-zinc-600">
@@ -552,37 +582,54 @@ export default function SchedulePage() {
         </aside>
 
         <section className="min-w-0 flex-1 overflow-auto">
-          <div className="px-6 pb-24" style={{ width: TIMELINE_WIDTH + 48 }}>
+          <div className="px-6 pb-24" style={{ width: timelineWidth + 48 }}>
             <div
               className="grid items-end border-b border-zinc-100 pt-6"
-              style={{ gridTemplateColumns: `repeat(${TOTAL_DAYS}, ${DAY_WIDTH}px)`, height: HEADER_HEIGHT }}
+              style={{ gridTemplateColumns: `repeat(${totalDays}, ${DAY_WIDTH}px)`, height: HEADER_HEIGHT }}
             >
-              {weekAgendas.map((week) => (
+              {visibleWeekAgendas.map((week, index) => (
                 <div
                   key={week.id}
-                  className="border-b border-zinc-200 pb-2 text-center text-[12px] font-medium text-zinc-600"
-                  style={{ gridColumn: `span 7` }}
+                  className="border-b border-zinc-200 pb-2 text-center"
+                  style={{ gridColumn: `span ${week.span}` }}
                 >
                   <EditableText
                     value={week.label}
                     onChange={(label) =>
-                      setWeekAgendas((prev) => prev.map((item) => (item.id === week.id ? { ...item, label } : item)))
+                      setWeekAgendas((prev) => {
+                        const next = [...prev]
+                        next[index] = { id: week.id, label }
+                        return next
+                      })
                     }
-                    className="rounded px-2 py-1 hover:bg-zinc-50"
-                    inputClassName="h-7 w-44 rounded border border-emerald-300 px-2 text-center text-[12px] outline-none"
+                    className="rounded px-2 py-1 text-[13px] font-semibold text-zinc-800 hover:bg-zinc-50"
+                    inputClassName="h-8 w-44 rounded border border-emerald-300 px-2 text-center text-[13px] font-semibold outline-none"
                   />
                 </div>
               ))}
 
-              {Array.from({ length: TOTAL_DAYS }, (_, index) => (
+              {Array.from({ length: totalDays }, (_, index) => (
                 <div
                   key={index}
+                  data-day-index={index}
                   className={[
-                    'py-3 text-center text-[11px] text-zinc-400',
-                    index % 7 >= 5 ? 'opacity-45' : '',
+                    'relative py-3 text-center text-[11px]',
+                    index === totalDays - 1 ? 'group' : '',
+                    index % 7 >= 5 ? 'text-zinc-300' : 'text-zinc-400',
                   ].join(' ')}
                 >
                   {DAY_LABELS[index % 7]}
+                  {index === totalDays - 1 && (
+                    <button
+                      type="button"
+                      data-add-day-button="true"
+                      aria-label="열 추가"
+                      onClick={addDayColumn}
+                      className="pointer-events-none absolute left-2 top-1/2 z-30 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-emerald-300 bg-white text-emerald-600 opacity-0 shadow-sm transition group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-emerald-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -590,9 +637,9 @@ export default function SchedulePage() {
             <div className="relative">
               <div
                 className="pointer-events-none absolute left-0 top-0 h-full"
-                style={{ width: TIMELINE_WIDTH }}
+                style={{ width: timelineWidth }}
               >
-                {Array.from({ length: TOTAL_DAYS + 1 }, (_, index) => (
+                {Array.from({ length: totalDays + 1 }, (_, index) => (
                   <div
                     key={index}
                     className={index % 7 === 0 ? 'absolute top-0 h-full border-l border-zinc-200' : 'absolute top-0 h-full border-l border-zinc-100'}

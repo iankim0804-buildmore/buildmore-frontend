@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect, useCallback, useRef } from "react"
+import { ArrowLeft } from "lucide-react"
 import RoadmapMap from "@/components/RoadmapMap"
 import type { RoadmapGraph, RoadmapNode, NodeStatus, SystemDiagnosis } from "@/types/roadmap"
 
@@ -265,9 +266,10 @@ export default function RoadmapPage() {
             {/* 🔍 시스템 감사 버튼 */}
             <Link
               href="/admin"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:border-emerald-500/70 hover:text-zinc-950"
+              aria-label="Admin으로 돌아가기"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-950"
             >
-              Admin
+              <ArrowLeft className="h-4 w-4" />
             </Link>
             <button
               onClick={triggerAudit}
