@@ -67,6 +67,7 @@ const TIMELINE_WIDTH = TOTAL_DAYS * DAY_WIDTH
 const HEADER_HEIGHT = 112
 const GROUP_ROW_HEIGHT = 36
 const TASK_ROW_HEIGHT = 40
+const BOTTOM_SPACER_HEIGHT = 220
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -547,6 +548,7 @@ export default function SchedulePage() {
               )
             })}
           </div>
+          <div aria-hidden="true" style={{ height: BOTTOM_SPACER_HEIGHT }} />
         </aside>
 
         <section className="min-w-0 flex-1 overflow-auto">
@@ -646,6 +648,7 @@ export default function SchedulePage() {
                   </section>
                 )
               })}
+              <div aria-hidden="true" style={{ height: BOTTOM_SPACER_HEIGHT }} />
             </div>
           </div>
         </section>
