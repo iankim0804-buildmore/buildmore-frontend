@@ -28,11 +28,21 @@ type WeekAgenda = {
 }
 
 type DragState = {
+  mode: 'resize'
   taskUid: string
   edge: 'start' | 'end'
   originX: number
   originStart: number
   originDuration: number
+  cellWidth: number
+} | {
+  mode: 'move'
+  taskUid: string
+  originX: number
+  originY: number
+  originStart: number
+  originDuration: number
+  originRowCenter: number
   cellWidth: number
 }
 
@@ -40,6 +50,13 @@ type ScheduleState = {
   groups: TaskGroup[]
   tasks: Task[]
   weekAgendas: WeekAgenda[]
+}
+
+type TaskRow = {
+  taskUid: string
+  groupId: string
+  top: number
+  center: number
 }
 
 const STORAGE_KEY = 'buildmore_schedule_editor_v1'
@@ -135,6 +152,51 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function nearestTaskRow(rows: TaskRow[], center: number) {
+  return rows.reduce<TaskRow | null>((nearest, row) => {
+    if (!nearest) return row
+    return Math.abs(row.center - center) < Math.abs(nearest.center - center) ? row : nearest
+  }, null)
+}
+
+function normalizeGroupTaskIds(tasks: Task[], groupIds: Set<string>) {
+  const counters = new Map<string, number>()
+  return tasks.map((task) => {
+    if (!groupIds.has(task.groupId)) return task
+    const nextNumber = (counters.get(task.groupId) ?? 0) + 1
+    counters.set(task.groupId, nextNumber)
+    return { ...task, id: `${task.groupId}${nextNumber}` }
+  })
+}
+
+function moveTaskToNearestRow(
+  tasks: Task[],
+  taskUid: string,
+  targetUid: string,
+  start: number,
+) {
+  const moving = tasks.find((task) => task.uid === taskUid)
+  const target = tasks.find((task) => task.uid === targetUid)
+  if (!moving || !target) return tasks
+
+  if (moving.uid === target.uid) {
+    return tasks.map((task) => (task.uid === taskUid ? { ...task, start } : task))
+  }
+
+  const withoutMoving = tasks.filter((task) => task.uid !== taskUid)
+  const targetIndex = withoutMoving.findIndex((task) => task.uid === target.uid)
+  if (targetIndex < 0) return tasks
+
+  const nextTask = { ...moving, groupId: target.groupId, start }
+  const nextTasks = [
+    ...withoutMoving.slice(0, targetIndex),
+    nextTask,
+    ...withoutMoving.slice(targetIndex),
+  ]
+
+  return normalizeGroupTaskIds(nextTasks, new Set([moving.groupId, target.groupId]))
+}
+
 function EditableText({
   value,
   onChange,
@@ -210,9 +272,40 @@ export default function SchedulePage() {
   const [tasks, setTasks] = useState<Task[]>(() => getInitialScheduleState().tasks)
   const [weekAgendas, setWeekAgendas] = useState<WeekAgenda[]>(() => getInitialScheduleState().weekAgendas)
   const [hoverInsert, setHoverInsert] = useState<string | null>(null)
+  const [selectedTaskUid, setSelectedTaskUid] = useState<string | null>(null)
   const dragRef = useRef<DragState | null>(null)
 
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups])
+  const taskRows = useMemo(() => {
+    let top = 0
+    const rows: TaskRow[] = []
+
+    groups.forEach((group) => {
+      top += GROUP_ROW_HEIGHT
+      tasks
+        .filter((task) => task.groupId === group.id)
+        .forEach((task) => {
+          rows.push({
+            taskUid: task.uid,
+            groupId: task.groupId,
+            top,
+            center: top + TASK_ROW_HEIGHT / 2,
+          })
+          top += TASK_ROW_HEIGHT
+        })
+    })
+
+    return rows
+  }, [groups, tasks])
+  const taskRowsByUid = useMemo(
+    () => new Map(taskRows.map((row) => [row.taskUid, row])),
+    [taskRows],
+  )
+  const taskRowsRef = useRef(taskRows)
+
+  useEffect(() => {
+    taskRowsRef.current = taskRows
+  }, [taskRows])
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ groups, tasks, weekAgendas }))
@@ -223,6 +316,21 @@ export default function SchedulePage() {
       const drag = dragRef.current
       if (!drag) return
       const dayDelta = Math.round((event.clientX - drag.originX) / drag.cellWidth)
+
+      if (drag.mode === 'move') {
+        const targetCenter = drag.originRowCenter + event.clientY - drag.originY
+        const targetRow = nearestTaskRow(taskRowsRef.current, targetCenter)
+        if (!targetRow) return
+
+        setTasks((prev) => {
+          const moving = prev.find((task) => task.uid === drag.taskUid)
+          if (!moving) return prev
+          const nextStart = clamp(drag.originStart + dayDelta, 0, TOTAL_DAYS - moving.duration)
+          return moveTaskToNearestRow(prev, drag.taskUid, targetRow.taskUid, nextStart)
+        })
+        return
+      }
+
       setTasks((prev) =>
         prev.map((task) => {
           if (task.uid !== drag.taskUid) return task
@@ -252,6 +360,34 @@ export default function SchedulePage() {
       window.removeEventListener('pointercancel', onUp)
     }
   }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' || !selectedTaskUid) return
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      setTasks((prev) => {
+        const selected = prev.find((task) => task.uid === selectedTaskUid)
+        if (!selected) return prev
+        return normalizeGroupTaskIds(
+          prev.filter((task) => task.uid !== selectedTaskUid),
+          new Set([selected.groupId]),
+        )
+      })
+      setSelectedTaskUid(null)
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectedTaskUid])
 
   const updateTask = (uid: string, patch: Partial<Task>) => {
     setTasks((prev) => prev.map((task) => (task.uid === uid ? { ...task, ...patch } : task)))
@@ -285,12 +421,33 @@ export default function SchedulePage() {
   const startResize = (event: React.PointerEvent, task: Task, edge: 'start' | 'end') => {
     event.preventDefault()
     event.stopPropagation()
+    setSelectedTaskUid(task.uid)
     dragRef.current = {
+      mode: 'resize',
       taskUid: task.uid,
       edge,
       originX: event.clientX,
       originStart: task.start,
       originDuration: task.duration,
+      cellWidth: DAY_WIDTH,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const startMove = (event: React.PointerEvent, task: Task) => {
+    const row = taskRowsByUid.get(task.uid)
+    if (!row) return
+
+    event.preventDefault()
+    setSelectedTaskUid(task.uid)
+    dragRef.current = {
+      mode: 'move',
+      taskUid: task.uid,
+      originX: event.clientX,
+      originY: event.clientY,
+      originStart: task.start,
+      originDuration: task.duration,
+      originRowCenter: row.center,
       cellWidth: DAY_WIDTH,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -330,7 +487,7 @@ export default function SchedulePage() {
       </header>
 
       <div className="flex min-h-[calc(100vh-132px)]">
-        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-white px-4">
+        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-white px-4 pb-20">
           <section className="flex flex-col justify-center border-b border-zinc-100" style={{ height: HEADER_HEIGHT }}>
             <p className="mb-2 text-[13px] font-semibold uppercase tracking-widest text-zinc-400">Schedule Index</p>
             <p className="text-[13px] leading-6 text-zinc-600">
@@ -393,7 +550,7 @@ export default function SchedulePage() {
         </aside>
 
         <section className="min-w-0 flex-1 overflow-auto">
-          <div className="px-6" style={{ width: TIMELINE_WIDTH + 48 }}>
+          <div className="px-6 pb-24" style={{ width: TIMELINE_WIDTH + 48 }}>
             <div
               className="grid items-end border-b border-zinc-100 pt-6"
               style={{ gridTemplateColumns: `repeat(${TOTAL_DAYS}, ${DAY_WIDTH}px)`, height: HEADER_HEIGHT }}
@@ -452,7 +609,16 @@ export default function SchedulePage() {
                       return (
                         <div key={task.uid} className="relative" style={{ height: TASK_ROW_HEIGHT }}>
                           <div
-                            className="group absolute top-2 flex h-6 items-center rounded px-2 text-[11px] font-semibold shadow-sm"
+                            role="button"
+                            tabIndex={0}
+                            data-task-uid={task.uid}
+                            aria-pressed={selectedTaskUid === task.uid}
+                            onPointerDown={(event) => startMove(event, task)}
+                            onClick={() => setSelectedTaskUid(task.uid)}
+                            className={[
+                              'group absolute top-2 flex h-6 cursor-grab items-center rounded px-2 text-[11px] font-semibold shadow-sm transition hover:brightness-105 hover:ring-2 hover:ring-zinc-900/20 active:cursor-grabbing',
+                              selectedTaskUid === task.uid ? 'ring-2 ring-zinc-900/40 ring-offset-2' : '',
+                            ].join(' ')}
                             style={{
                               left: task.start * DAY_WIDTH + 2,
                               width: task.duration * DAY_WIDTH - 4,
