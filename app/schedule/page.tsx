@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 
@@ -43,9 +44,12 @@ type ScheduleState = {
 
 const STORAGE_KEY = 'buildmore_schedule_editor_v1'
 const TOTAL_DAYS = 21
-const LEFT_WIDTH = 280
 const DAY_WIDTH = 84
 const MIN_DURATION = 1
+const TIMELINE_WIDTH = TOTAL_DAYS * DAY_WIDTH
+const HEADER_HEIGHT = 112
+const GROUP_ROW_HEIGHT = 36
+const TASK_ROW_HEIGHT = 40
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -137,12 +141,14 @@ function EditableText({
   className,
   inputClassName,
   multiline = false,
+  style,
 }: {
   value: string
   onChange: (next: string) => void
   className?: string
   inputClassName?: string
   multiline?: boolean
+  style?: CSSProperties
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -193,7 +199,7 @@ function EditableText({
   }
 
   return (
-    <button type="button" onClick={beginEdit} className={className}>
+    <button type="button" onClick={beginEdit} className={className} style={style}>
       {value}
     </button>
   )
@@ -207,7 +213,6 @@ export default function SchedulePage() {
   const dragRef = useRef<DragState | null>(null)
 
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups])
-  const gridWidth = LEFT_WIDTH + TOTAL_DAYS * DAY_WIDTH
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ groups, tasks, weekAgendas }))
@@ -325,15 +330,15 @@ export default function SchedulePage() {
       </header>
 
       <div className="flex min-h-[calc(100vh-132px)]">
-        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-white p-4">
-          <section className="mb-5">
+        <aside className="w-[280px] flex-shrink-0 border-r border-zinc-200 bg-white px-4">
+          <section className="flex flex-col justify-center border-b border-zinc-100" style={{ height: HEADER_HEIGHT }}>
             <p className="mb-2 text-[13px] font-semibold uppercase tracking-widest text-zinc-400">Schedule Index</p>
             <p className="text-[13px] leading-6 text-zinc-600">
-              좌측 항목과 주차 아젠다는 클릭해 수정할 수 있습니다. 행 사이에 마우스를 올리면 새 일정을 같은 기간으로 추가합니다.
+              항목과 주차 아젠다는 클릭해 수정할 수 있습니다. 행 사이에 마우스를 올리면 새 일정을 추가합니다.
             </p>
           </section>
 
-          <div className="space-y-4">
+          <div>
             {groups.map((group) => {
               const groupTasks = tasks.filter((task) => task.groupId === group.id)
               return (
@@ -341,18 +346,20 @@ export default function SchedulePage() {
                   <EditableText
                     value={group.title}
                     onChange={(title) => updateGroup(group.id, { title })}
-                    className="mb-2 block w-full rounded-md px-1 py-1 text-left text-[13px] font-semibold text-zinc-700 hover:bg-zinc-50"
-                    inputClassName="mb-2 h-8 w-full rounded-md border border-emerald-300 px-2 text-[13px] font-semibold outline-none"
+                    className="flex w-full items-center rounded-md px-1 text-left text-[13px] font-semibold text-zinc-800 hover:bg-zinc-50"
+                    inputClassName="h-8 w-full rounded-md border border-emerald-300 px-2 text-[13px] font-semibold outline-none"
+                    style={{ height: GROUP_ROW_HEIGHT }}
                   />
-                  <div className="space-y-1">
+                  <div>
                     {groupTasks.map((task) => (
                       <div
                         key={task.uid}
                         className="relative"
+                        style={{ height: TASK_ROW_HEIGHT }}
                         onMouseEnter={() => setHoverInsert(task.uid)}
                         onMouseLeave={() => setHoverInsert((current) => (current === task.uid ? null : current))}
                       >
-                        <div className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-zinc-50">
+                        <div className="flex h-full items-center gap-2 rounded-md px-1 hover:bg-zinc-50">
                           <span
                             className="min-w-8 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold"
                             style={{ background: `${group.color}22`, color: group.color }}
@@ -386,9 +393,11 @@ export default function SchedulePage() {
         </aside>
 
         <section className="min-w-0 flex-1 overflow-auto">
-          <div className="p-6" style={{ width: gridWidth }}>
-            <div className="grid" style={{ gridTemplateColumns: `${LEFT_WIDTH}px repeat(${TOTAL_DAYS}, ${DAY_WIDTH}px)` }}>
-              <div />
+          <div className="px-6" style={{ width: TIMELINE_WIDTH + 48 }}>
+            <div
+              className="grid items-end border-b border-zinc-100 pt-6"
+              style={{ gridTemplateColumns: `repeat(${TOTAL_DAYS}, ${DAY_WIDTH}px)`, height: HEADER_HEIGHT }}
+            >
               {weekAgendas.map((week) => (
                 <div
                   key={week.id}
@@ -406,7 +415,6 @@ export default function SchedulePage() {
                 </div>
               ))}
 
-              <div />
               {Array.from({ length: TOTAL_DAYS }, (_, index) => (
                 <div
                   key={index}
@@ -422,8 +430,8 @@ export default function SchedulePage() {
 
             <div className="relative">
               <div
-                className="pointer-events-none absolute left-[280px] top-0 h-full"
-                style={{ width: TOTAL_DAYS * DAY_WIDTH }}
+                className="pointer-events-none absolute left-0 top-0 h-full"
+                style={{ width: TIMELINE_WIDTH }}
               >
                 {Array.from({ length: TOTAL_DAYS + 1 }, (_, index) => (
                   <div
@@ -434,49 +442,42 @@ export default function SchedulePage() {
                 ))}
               </div>
 
-              {tasks.map((task) => {
-                const group = groupMap.get(task.groupId) ?? groups[0]
+              {groups.map((group) => {
+                const groupTasks = tasks.filter((task) => task.groupId === group.id)
                 return (
-                  <div
-                    key={task.uid}
-                    className="grid min-h-10 items-center rounded-md hover:bg-zinc-50"
-                    style={{ gridTemplateColumns: `${LEFT_WIDTH}px repeat(${TOTAL_DAYS}, ${DAY_WIDTH}px)` }}
-                  >
-                    <div className="flex items-center gap-2 pr-3 text-[13px] text-zinc-600">
-                      <span
-                        className="min-w-8 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold"
-                        style={{ background: `${group.color}22`, color: group.color }}
-                      >
-                        {task.id}
-                      </span>
-                      <span className="truncate">{task.label}</span>
-                    </div>
-                    <div className="relative h-10" style={{ gridColumn: `2 / span ${TOTAL_DAYS}` }}>
-                      <div
-                        className="group absolute top-2 flex h-6 items-center rounded px-2 text-[11px] font-semibold shadow-sm"
-                        style={{
-                          left: task.start * DAY_WIDTH + 2,
-                          width: task.duration * DAY_WIDTH - 4,
-                          background: group.color,
-                          color: group.textColor,
-                        }}
-                      >
-                        <button
-                          type="button"
-                          aria-label="시작일 조정"
-                          onPointerDown={(event) => startResize(event, task, 'start')}
-                          className="absolute -left-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-white bg-zinc-900 shadow group-hover:block"
-                        />
-                        <span className="truncate">{task.id}</span>
-                        <button
-                          type="button"
-                          aria-label="종료일 조정"
-                          onPointerDown={(event) => startResize(event, task, 'end')}
-                          className="absolute -right-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-white bg-zinc-900 shadow group-hover:block"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <section key={group.id}>
+                    <div style={{ height: GROUP_ROW_HEIGHT }} />
+                    {groupTasks.map((task) => {
+                      const taskGroup = groupMap.get(task.groupId) ?? group
+                      return (
+                        <div key={task.uid} className="relative" style={{ height: TASK_ROW_HEIGHT }}>
+                          <div
+                            className="group absolute top-2 flex h-6 items-center rounded px-2 text-[11px] font-semibold shadow-sm"
+                            style={{
+                              left: task.start * DAY_WIDTH + 2,
+                              width: task.duration * DAY_WIDTH - 4,
+                              background: taskGroup.color,
+                              color: taskGroup.textColor,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              aria-label="시작일 조정"
+                              onPointerDown={(event) => startResize(event, task, 'start')}
+                              className="absolute -left-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-white bg-zinc-900 shadow group-hover:block"
+                            />
+                            <span className="truncate">{task.id}</span>
+                            <button
+                              type="button"
+                              aria-label="종료일 조정"
+                              onPointerDown={(event) => startResize(event, task, 'end')}
+                              className="absolute -right-2 top-1/2 hidden h-4 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border border-white bg-zinc-900 shadow group-hover:block"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </section>
                 )
               })}
             </div>
