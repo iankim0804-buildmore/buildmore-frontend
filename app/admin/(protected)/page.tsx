@@ -133,7 +133,19 @@ export default function AdminDashboardPage() {
       />
 
       <main className="mx-auto max-w-7xl space-y-8 px-4 pt-6 sm:px-6 lg:px-8">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-3">
+          <Link
+            href="/schedule"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground hover:border-emerald-500/60"
+          >
+            MVP 일정표
+          </Link>
+          <Link
+            href="/roadmap"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground hover:border-emerald-500/60"
+          >
+            DB 처리흐름
+          </Link>
           <Link
             href="/admin/wiki-graph"
             className="inline-flex h-9 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent px-3 text-sm font-medium text-sidebar-foreground hover:border-emerald-500/60"

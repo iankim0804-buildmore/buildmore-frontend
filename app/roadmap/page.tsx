@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState, useEffect, useCallback, useRef } from "react"
 import RoadmapMap from "@/components/RoadmapMap"
 import type { RoadmapGraph, RoadmapNode, NodeStatus, SystemDiagnosis } from "@/types/roadmap"
@@ -262,6 +263,12 @@ export default function RoadmapPage() {
               <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">{error}</span>
             )}
             {/* 🔍 시스템 감사 버튼 */}
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:border-emerald-500/70 hover:text-zinc-950"
+            >
+              Admin
+            </Link>
             <button
               onClick={triggerAudit}
               disabled={auditLoading}
