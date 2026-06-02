@@ -780,19 +780,33 @@ async function fetchJson<T>(url: string): Promise<T> {
   return await res.json() as T
 }
 
+async function fetchOptionalJson<T>(url: string, timeoutMs = 3000): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      fetchJson<T>(url),
+      new Promise<null>((resolve) => {
+        timeoutId = setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
+  } catch {
+    return null
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 async function fetchCoveragePayload(): Promise<CoveragePayload> {
-  const [catalogResult, discoveriesResult, collectors] = await Promise.allSettled([
-    fetchJson<MetricCatalogResponse>('/api/admin/metric-catalog'),
-    fetchJson<SourceFieldDiscoveryResponse>('/api/admin/source-field-discoveries?limit=12'),
+  const [collectors, catalog, discoveries] = await Promise.all([
     fetchJson<SourceCollectorStatusResponse>('/api/admin/source-collector-status'),
+    fetchOptionalJson<MetricCatalogResponse>('/api/admin/metric-catalog'),
+    fetchOptionalJson<SourceFieldDiscoveryResponse>('/api/admin/source-field-discoveries?limit=12'),
   ])
 
-  if (collectors.status === 'rejected') throw collectors.reason
-
   return {
-    catalog: catalogResult.status === 'fulfilled' ? catalogResult.value : null,
-    discoveries: discoveriesResult.status === 'fulfilled' ? discoveriesResult.value : null,
-    collectors: collectors.value,
+    catalog,
+    discoveries,
+    collectors,
   }
 }
 
