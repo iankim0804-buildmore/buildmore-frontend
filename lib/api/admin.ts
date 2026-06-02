@@ -71,6 +71,22 @@ export interface AdminWikiNoteVersion {
   created_at: string
 }
 
+export interface AdminWikiNoteSource {
+  id: number
+  document_id: number
+  title: string
+  source_name: string | null
+  source_type: string | null
+  doc_type: string | null
+  url: string | null
+  original_url: string | null
+  summary: string | null
+  body: string | null
+  relevance: number | null
+  published_at: string | null
+  created_at: string | null
+}
+
 export interface AdminWikiNoteSummary {
   id: number
   title: string
@@ -91,6 +107,12 @@ export interface AdminWikiNoteSummary {
 export interface AdminWikiNoteDetail extends AdminWikiNoteSummary {
   content: string
   versions: AdminWikiNoteVersion[]
+  sources: AdminWikiNoteSource[]
+}
+
+export interface AdminWikiBulkReviewResponse {
+  updated_count: number
+  notes: AdminWikiNoteSummary[]
 }
 
 export interface AdminWikiGraphNode {
@@ -326,6 +348,19 @@ export async function reviewWikiNote(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ review_status: reviewStatus, review_note: reviewNote || null }),
+  })
+  return result.data
+}
+
+export async function reviewWikiNotesBulk(
+  noteIds: number[],
+  reviewStatus: AdminWikiNoteSummary['review_status'],
+  reviewNote?: string,
+): Promise<AdminWikiBulkReviewResponse | null> {
+  const result = await fetchAdmin<AdminWikiBulkReviewResponse>('/wiki/notes/review-bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note_ids: noteIds, review_status: reviewStatus, review_note: reviewNote || null }),
   })
   return result.data
 }

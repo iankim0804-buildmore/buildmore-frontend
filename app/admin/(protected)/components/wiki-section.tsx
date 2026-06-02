@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import type { KeyboardEvent, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import type {
   AdminCardNewsCandidateSummary,
@@ -17,6 +18,7 @@ import {
   fetchWikiNoteDetail,
   fetchWikiNotes,
   fetchWikiTickerItems,
+  reviewWikiNotesBulk,
   reviewWikiNote,
 } from '@/lib/api/admin'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +31,7 @@ import {
   CheckCircle2,
   Clock,
   Database,
+  ExternalLink,
   FileClock,
   FileText,
   Lightbulb,
@@ -102,9 +105,13 @@ export function WikiSection({
   const [cardCandidates, setCardCandidates] = useState<AdminCardNewsCandidateSummary[]>([])
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null)
   const [selectedNote, setSelectedNote] = useState<AdminWikiNoteDetail | null>(null)
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<number>>(() => new Set())
+  const [lastSelectedNoteIndex, setLastSelectedNoteIndex] = useState<number | null>(null)
+  const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null)
   const [isNotesLoading, setIsNotesLoading] = useState(false)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [reviewingStatus, setReviewingStatus] = useState<AdminWikiNoteSummary['review_status'] | null>(null)
+  const [bulkReviewingStatus, setBulkReviewingStatus] = useState<AdminWikiNoteSummary['review_status'] | null>(null)
   const [notesError, setNotesError] = useState<string | null>(null)
 
   const progressPercent = processingQueue.total > 0
@@ -125,12 +132,19 @@ export function WikiSection({
     hold: notes.filter((note) => note.review_status === 'hold').length,
   }), [notes])
 
+  const selectedSource = useMemo(
+    () => selectedNote?.sources?.find((source) => source.id === selectedSourceId) ?? selectedNote?.sources?.[0] ?? null,
+    [selectedNote, selectedSourceId],
+  )
+
   const loadNotes = async () => {
     setIsNotesLoading(true)
     setNotesError(null)
     try {
       const nextNotes = await fetchWikiNotes(500)
       setNotes(nextNotes)
+      setSelectedNoteIds(new Set())
+      setLastSelectedNoteIndex(null)
       const [nextTickerItems, nextCardCandidates] = await Promise.all([
         fetchWikiTickerItems(20),
         fetchCardNewsCandidates(20),
@@ -205,6 +219,66 @@ export function WikiSection({
       setNotesError(error instanceof Error ? error.message : 'Wiki 검수 상태를 저장하지 못했습니다.')
     } finally {
       setReviewingStatus(null)
+    }
+  }
+
+  const handleNoteCardKeyDown = (noteId: number, event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    setSelectedNoteId(noteId)
+  }
+
+  const handleNoteCheckboxClick = (
+    noteId: number,
+    noteIndex: number,
+    event: MouseEvent<HTMLInputElement>,
+  ) => {
+    event.stopPropagation()
+    const shouldSelect = !selectedNoteIds.has(noteId)
+    setSelectedNoteIds((current) => {
+      const next = new Set(current)
+      if (event.shiftKey && lastSelectedNoteIndex !== null) {
+        const start = Math.min(lastSelectedNoteIndex, noteIndex)
+        const end = Math.max(lastSelectedNoteIndex, noteIndex)
+        notes.slice(start, end + 1).forEach((note) => {
+          if (shouldSelect) {
+            next.add(note.id)
+          } else {
+            next.delete(note.id)
+          }
+        })
+      } else if (shouldSelect) {
+        next.add(noteId)
+      } else {
+        next.delete(noteId)
+      }
+      return next
+    })
+    setLastSelectedNoteIndex(noteIndex)
+  }
+
+  const handleBulkReview = async (reviewStatus: AdminWikiNoteSummary['review_status']) => {
+    const noteIds = Array.from(selectedNoteIds)
+    if (noteIds.length === 0) return
+
+    setBulkReviewingStatus(reviewStatus)
+    setNotesError(null)
+    try {
+      const result = await reviewWikiNotesBulk(noteIds, reviewStatus)
+      if (!result) throw new Error('Wiki bulk review update failed')
+      const updatedNotes = new Map(result.notes.map((note) => [note.id, note]))
+      setNotes((current) => current.map((note) => updatedNotes.get(note.id) ?? note))
+      setSelectedNote((current) => {
+        if (!current) return current
+        const updated = updatedNotes.get(current.id)
+        return updated ? { ...current, ...updated } : current
+      })
+      setSelectedNoteIds(new Set())
+      setLastSelectedNoteIndex(null)
+    } catch (error) {
+      setNotesError(error instanceof Error ? error.message : 'Wiki 문서 일괄 검수 상태를 저장하지 못했습니다.')
+    } finally {
+      setBulkReviewingStatus(null)
     }
   }
 
@@ -495,6 +569,24 @@ export function WikiSection({
               <p className="mt-1 text-xs text-muted-foreground">
                 전체 {formatCount(notes.length)}건 · 미검수 {formatCount(reviewCounts.pending)}건 · 삭제 {formatCount(reviewCounts.delete)}건
               </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  선택 {formatCount(selectedNoteIds.size)}건
+                </span>
+                {(['keep', 'delete', 'hold'] as const).map((status) => (
+                  <Button
+                    key={status}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={selectedNoteIds.size === 0 || bulkReviewingStatus !== null}
+                    onClick={() => handleBulkReview(status)}
+                  >
+                    {bulkReviewingStatus === status && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                    {reviewStatusLabel(status)}
+                  </Button>
+                ))}
+              </div>
             </div>
             <Button
               type="button"
@@ -515,11 +607,13 @@ export function WikiSection({
             )}
             <ScrollArea className="h-[520px] pr-3">
               <div className="space-y-2">
-                {notes.map((note) => (
-                  <button
+                {notes.map((note, noteIndex) => (
+                  <div
                     key={note.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedNoteId(note.id)}
+                    onKeyDown={(event) => handleNoteCardKeyDown(note.id, event)}
                     className={`w-full rounded border px-3 py-3 text-left transition-colors ${
                       selectedNoteId === note.id
                         ? 'border-emerald-500/70 bg-emerald-500/10'
@@ -527,7 +621,15 @@ export function WikiSection({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedNoteIds.has(note.id)}
+                        onChange={() => undefined}
+                        onClick={(event) => handleNoteCheckboxClick(note.id, noteIndex, event)}
+                        aria-label={`${note.title} 선택`}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-sidebar-border bg-sidebar text-emerald-500 accent-emerald-500"
+                      />
+                      <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium text-sidebar-foreground">
                           {note.title}
                         </div>
@@ -549,7 +651,7 @@ export function WikiSection({
                         {note.latest_change_summary}
                       </div>
                     )}
-                  </button>
+                  </div>
                 ))}
                 {!isNotesLoading && notes.length === 0 && (
                   <div className="rounded bg-sidebar px-3 py-8 text-center text-sm text-muted-foreground">
@@ -611,6 +713,78 @@ export function WikiSection({
                   <article className="prose prose-invert max-w-none text-sm leading-7 text-sidebar-foreground prose-headings:text-sidebar-foreground prose-strong:text-sidebar-foreground prose-li:marker:text-muted-foreground">
                     <ReactMarkdown>{selectedNote.content}</ReactMarkdown>
                   </article>
+
+                  <div className="border-t border-sidebar-border pt-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-sidebar-foreground">
+                      <FileText className="h-4 w-4" />
+                      참조 원문
+                    </div>
+                    {(selectedNote.sources ?? []).length > 0 ? (
+                      <div className="grid gap-3 xl:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+                        <div className="space-y-2">
+                          {(selectedNote.sources ?? []).map((source) => (
+                            <button
+                              key={source.id}
+                              type="button"
+                              onClick={() => setSelectedSourceId(source.id)}
+                              className={`w-full rounded border px-3 py-2 text-left text-xs transition-colors ${
+                                selectedSource?.id === source.id
+                                  ? 'border-emerald-500/70 bg-emerald-500/10'
+                                  : 'border-sidebar-border bg-sidebar hover:bg-sidebar/80'
+                              }`}
+                            >
+                              <div className="line-clamp-2 font-medium text-sidebar-foreground">
+                                {source.title}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1.5 text-muted-foreground">
+                                {source.source_name && <span>{source.source_name}</span>}
+                                {source.source_type && <span>{source.source_type}</span>}
+                                {source.relevance != null && <span>관련도 {source.relevance}</span>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="rounded border border-sidebar-border bg-sidebar px-3 py-3">
+                          {selectedSource ? (
+                            <div className="space-y-3">
+                              <div>
+                                <div className="text-sm font-medium text-sidebar-foreground">
+                                  {selectedSource.title}
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  {selectedSource.published_at && <span>발행 {formatDate(selectedSource.published_at)}</span>}
+                                  {selectedSource.created_at && <span>수집 {formatDate(selectedSource.created_at)}</span>}
+                                  {selectedSource.doc_type && <span>{selectedSource.doc_type}</span>}
+                                </div>
+                              </div>
+                              {(selectedSource.url || selectedSource.original_url) && (
+                                <a
+                                  href={selectedSource.original_url ?? selectedSource.url ?? undefined}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-emerald-500 hover:underline"
+                                >
+                                  원문 URL 열기
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                              <div className="max-h-[280px] overflow-auto whitespace-pre-wrap rounded bg-sidebar-accent px-3 py-3 text-xs leading-6 text-sidebar-foreground">
+                                {selectedSource.body || selectedSource.summary || '저장된 원문 본문이 없습니다.'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded bg-sidebar-accent px-3 py-8 text-center text-xs text-muted-foreground">
+                              왼쪽 목록에서 원문을 선택하세요.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded bg-sidebar px-3 py-3 text-xs text-muted-foreground">
+                        연결된 참조 원문이 없습니다.
+                      </div>
+                    )}
+                  </div>
 
                   <div className="border-t border-sidebar-border pt-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-medium text-sidebar-foreground">
