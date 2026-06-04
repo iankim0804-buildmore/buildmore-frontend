@@ -634,7 +634,7 @@ export function WikiSection({
                           {note.title}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <span>갱신 {formatDate(note.updated_at)}</span>
+                          <span>생성 {formatDate(note.created_at)}</span>
                           <span>버전 {note.version_count}</span>
                           <span>출처 {note.source_count}</span>
                         </div>
@@ -678,7 +678,7 @@ export function WikiSection({
                       {reviewStatusLabel(selectedNote.review_status)}
                     </Badge>
                     <span>last_compiled {formatDate(selectedNote.last_compiled_at)}</span>
-                    <span>updated {formatDate(selectedNote.updated_at)}</span>
+                    <span>created {formatDate(selectedNote.created_at)}</span>
                   </div>
                 )}
               </div>
