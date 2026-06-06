@@ -47,6 +47,8 @@ export function StatusBar({ systemStatus, lastRefresh }: StatusBarProps) {
 
   const pipelineInfo = getPipelineStatus()
   const PipelineIcon = pipelineInfo.icon
+  const hasSchedulerJobs = systemStatus.scheduler.total > 0
+  const allSchedulerJobsActive = hasSchedulerJobs && systemStatus.scheduler.active === systemStatus.scheduler.total
 
   return (
     <div className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -74,17 +76,21 @@ export function StatusBar({ systemStatus, lastRefresh }: StatusBarProps) {
           <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5 text-card-foreground shadow-sm">
             <Activity className="h-4 w-4 text-muted-foreground" />
             <div className="flex flex-1 items-center gap-2">
-              {systemStatus.scheduler.active === systemStatus.scheduler.total ? (
+              {allSchedulerJobsActive ? (
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               ) : (
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
               )}
               <span className="text-sm font-medium">
-                스케줄러 {systemStatus.scheduler.active}/{systemStatus.scheduler.total}
+                {hasSchedulerJobs
+                  ? `스케줄러 ${systemStatus.scheduler.active}/${systemStatus.scheduler.total}`
+                  : '스케줄러 역할 확인'}
               </span>
             </div>
             <span className="text-xs text-muted-foreground">
-              {systemStatus.scheduler.active === systemStatus.scheduler.total
+              {!hasSchedulerJobs
+                ? 'web role 기준 잡 없음'
+                : allSchedulerJobsActive
                 ? '모든 잡 가동 중'
                 : `${systemStatus.scheduler.total - systemStatus.scheduler.active}개 중단`}
             </span>

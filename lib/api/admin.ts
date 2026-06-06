@@ -420,6 +420,7 @@ export interface FrontendSchedulerJob {
   name: string
   trigger: string
   lastRun: string | null
+  nextRunAt: string | null
   nextRun: string
   lastStatus: 'success' | 'failed' | 'pending'
   successCount: number
@@ -658,6 +659,7 @@ export function transformToFrontendData(data: AdminData): AdminDashboardData {
       name: job.name || '이름 없음',
       trigger: job.interval_description || job.trigger_type || '-',
       lastRun: job.last_run_time ? formatKST(new Date(job.last_run_time)) : null,
+      nextRunAt: job.next_run_time,
       nextRun: job.next_run_time ? formatKST(new Date(job.next_run_time)) : '-',
       lastStatus: job.last_status === 'success'
         ? 'success'
