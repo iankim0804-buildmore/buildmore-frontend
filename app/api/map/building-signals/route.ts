@@ -31,6 +31,11 @@ const mockBuildingSignals = [
   },
 ]
 
+const rawBackendUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || ""
+const BACKEND_URL = rawBackendUrl && !rawBackendUrl.includes("ssmrdesign")
+  ? rawBackendUrl.replace(/\/+$/, "")
+  : "https://api.buildmore.co.kr"
+
 function parseBbox(rawBbox: string | null) {
   if (!rawBbox) return null
 
@@ -50,6 +55,28 @@ export async function GET(request: Request) {
 
   if (!bbox) {
     return Response.json({ error: "bbox must be minLng,minLat,maxLng,maxLat" }, { status: 400 })
+  }
+
+  const params = new URLSearchParams({
+    bbox: [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat].join(","),
+    level: String(Number.isFinite(level) ? level : 4),
+  })
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/map/building-signals?${params.toString()}`, {
+      cache: "no-store",
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      return Response.json(data, {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      })
+    }
+  } catch {
+    // Keep /map usable while backend map APIs are unavailable.
   }
 
   const buildings = mockBuildingSignals.filter(

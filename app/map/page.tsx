@@ -36,6 +36,11 @@ import { cn } from "@/lib/utils"
 
 type DataStatus = "ready" | "partial" | "queued"
 
+type MapGeometry = {
+  type: string
+  coordinates: unknown
+}
+
 type MapFeature = {
   id: string
   featureId: string
@@ -62,6 +67,7 @@ type MapFeature = {
   confidence: string
   sourceUpdatedAt: string
   status: DataStatus
+  geometry?: MapGeometry
   risks: string[]
   nextActions: string[]
   scenarios: string[]
@@ -274,10 +280,10 @@ function createParcelCoordinates(feature: MapFeature): [number, number][][] {
   ]]
 }
 
-function mockParcelsGeojson() {
+function mockParcelsGeojson(features: MapFeature[] = mockFeatures) {
   return {
     type: "FeatureCollection",
-    features: mockFeatures.map((feature) => ({
+    features: features.map((feature) => ({
       type: "Feature",
       properties: {
         buildingId: feature.id,
@@ -287,7 +293,7 @@ function mockParcelsGeojson() {
         buildmore_class: feature.use,
         confidence: feature.confidence,
       },
-      geometry: {
+      geometry: feature.geometry ?? {
         type: "Polygon",
         coordinates: createParcelCoordinates(feature),
       },
@@ -295,10 +301,10 @@ function mockParcelsGeojson() {
   }
 }
 
-function mockBuildingsGeojson() {
+function mockBuildingsGeojson(features: MapFeature[] = mockFeatures) {
   return {
     type: "FeatureCollection",
-    features: mockFeatures.map((feature) => ({
+    features: features.map((feature) => ({
       type: "Feature",
       properties: {
         buildingId: feature.id,
@@ -344,7 +350,7 @@ function selectedFeatureGeojson(selected: MapFeature) {
           feature_id: selected.featureId,
           pnu: selected.pnu,
         },
-        geometry: {
+        geometry: selected.geometry ?? {
           type: "Polygon",
           coordinates: createParcelCoordinates(selected),
         },
@@ -385,6 +391,7 @@ function mockLlmAnswer(selected: MapFeature, prompt: PromptKey) {
 function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
   const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id) ?? mockFeatures[0]
   const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
+  const geometry = payload.geometry as MapGeometry | undefined
 
   return {
     ...fallback,
@@ -407,6 +414,7 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
     confidence: String(payload.confidence ?? payload.source_confidence ?? fallback.confidence),
     sourceUpdatedAt: String(payload.source_updated_at ?? fallback.sourceUpdatedAt),
     status: (payload.status as DataStatus) ?? "partial",
+    geometry: geometry?.type && geometry.coordinates ? geometry : fallback.geometry,
   }
 }
 
@@ -419,6 +427,7 @@ export default function MapPage() {
   const [selectedScenario, setSelectedScenario] = useState(mockFeatures[0].scenarios[0])
   const [savedIds, setSavedIds] = useState<string[]>([mockFeatures[0].id])
   const [viewedFeatureIds, setViewedFeatureIds] = useState<string[]>(mockFeatures.map((feature) => feature.id))
+  const [mapFeatures, setMapFeatures] = useState<MapFeature[]>(mockFeatures)
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
   const [bboxApi, setBboxApi] = useState<BboxApiState>({
     status: "idle",
@@ -439,9 +448,9 @@ export default function MapPage() {
   const viewedFeatures = useMemo(
     () =>
       viewedFeatureIds
-        .map((id) => (id === selected.id ? selected : mockFeatures.find((feature) => feature.id === id)))
+        .map((id) => (id === selected.id ? selected : mapFeatures.find((feature) => feature.id === id) ?? mockFeatures.find((feature) => feature.id === id)))
         .filter((feature): feature is MapFeature => Boolean(feature)),
-    [selected, viewedFeatureIds]
+    [mapFeatures, selected, viewedFeatureIds]
   )
 
   const toggleLayer = (key: LayerKey) => {
@@ -458,9 +467,11 @@ export default function MapPage() {
   }, [])
 
   const selectFeatureById = useCallback((id: string) => {
-    const next = mockFeatures.find((feature) => feature.id === id || feature.featureId === id)
+    const next =
+      mapFeatures.find((feature) => feature.id === id || feature.featureId === id) ??
+      mockFeatures.find((feature) => feature.id === id || feature.featureId === id)
     if (next) applySelected(next)
-  }, [applySelected])
+  }, [applySelected, mapFeatures])
 
   const loadFeatureSummary = useCallback(async (featureId: string, properties?: Record<string, unknown>) => {
     const fallback = featureFromSummary(featureId, properties ?? {})
@@ -515,11 +526,25 @@ export default function MapPage() {
         })
 
         if (!response.ok) throw new Error("bbox API failed")
-        const data = (await response.json()) as { count?: number; bbox?: string; source?: string }
+        const data = (await response.json()) as {
+          count?: number
+          bbox?: string
+          source?: string
+          buildings?: Array<Record<string, unknown>>
+          features?: Array<Record<string, unknown>>
+        }
+        const livePayloads = data.buildings ?? data.features ?? []
+        const liveFeatures = livePayloads.map((item, index) =>
+          featureFromSummary(String(item.feature_id ?? item.pnu ?? item.id ?? `bbox-${index}`), item)
+        )
+
+        if (liveFeatures.length) {
+          setMapFeatures(liveFeatures)
+        }
 
         setBboxApi({
           status: "ready",
-          count: data.count ?? mockFeatures.length,
+          count: data.count ?? (liveFeatures.length || mockFeatures.length),
           bboxLabel: data.bbox ?? mapViewport.bboxParam,
           source: data.source ?? "maplibre-local",
         })
@@ -596,6 +621,7 @@ export default function MapPage() {
         <MapSurface
           activeLayers={activeLayers}
           selected={selected}
+          features={mapFeatures}
           selectedScenario={selectedScenario}
           capsuleOpen={capsuleOpen}
           savedIds={savedIds}
@@ -746,6 +772,7 @@ export default function MapPage() {
 function MapSurface({
   activeLayers,
   selected,
+  features,
   selectedScenario,
   capsuleOpen,
   savedIds,
@@ -758,6 +785,7 @@ function MapSurface({
 }: {
   activeLayers: Record<LayerKey, boolean>
   selected: MapFeature
+  features: MapFeature[]
   selectedScenario: string
   capsuleOpen: boolean
   savedIds: string[]
@@ -776,10 +804,15 @@ function MapSurface({
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
   const selectedRef = useRef(selected)
+  const featuresRef = useRef(features)
 
   useEffect(() => {
     selectedRef.current = selected
   }, [selected])
+
+  useEffect(() => {
+    featuresRef.current = features
+  }, [features])
 
   const publishViewport = useCallback((map: MapLibreMap) => {
     const bounds = map.getBounds()
@@ -883,10 +916,10 @@ function MapSurface({
 
       map.on("load", () => {
         if (!map.getSource("bm-mock-parcels")) {
-          map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson() })
+          map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
         }
         if (!map.getSource("bm-mock-buildings")) {
-          map.addSource("bm-mock-buildings", { type: "geojson", data: mockBuildingsGeojson() })
+          map.addSource("bm-mock-buildings", { type: "geojson", data: mockBuildingsGeojson(featuresRef.current) })
         }
         if (!map.getSource("bm-mock-transactions")) {
           map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
@@ -1039,6 +1072,15 @@ function MapSurface({
     source?.setData(selectedFeatureGeojson(selected) as never)
     updateSelectedPosition(map, selected)
   }, [selected, updateSelectedPosition])
+
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map?.isStyleLoaded()) return
+    const parcelsSource = map.getSource("bm-mock-parcels") as maplibregl.GeoJSONSource | undefined
+    const buildingsSource = map.getSource("bm-mock-buildings") as maplibregl.GeoJSONSource | undefined
+    parcelsSource?.setData(mockParcelsGeojson(features) as never)
+    buildingsSource?.setData(mockBuildingsGeojson(features) as never)
+  }, [features])
 
   useEffect(() => {
     const map = mapInstanceRef.current
