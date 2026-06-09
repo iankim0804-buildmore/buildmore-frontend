@@ -1,7 +1,9 @@
 export async function GET() {
-  const fallbackTilesBaseUrl = "https://tiles.buildmore.co.kr"
-  const tilesBaseUrl =
-    process.env.NEXT_PUBLIC_MAP_TILES_BASE_URL?.replace(/\/+$/, "") || fallbackTilesBaseUrl
+  const fallbackTilesBaseUrl = "https://pub-637cdf3d7c8b4f34a9fa470b10a9c34c.r2.dev"
+  const configuredTilesBaseUrl = process.env.NEXT_PUBLIC_MAP_TILES_BASE_URL?.replace(/\/+$/, "")
+  const tilesBaseUrl = configuredTilesBaseUrl === "https://tiles.buildmore.co.kr"
+    ? fallbackTilesBaseUrl
+    : configuredTilesBaseUrl || fallbackTilesBaseUrl
   const styleUrl =
     process.env.NEXT_PUBLIC_MAP_STYLE_URL ||
     (tilesBaseUrl ? `${tilesBaseUrl}/styles/buildmore-map-v1.json` : "")
