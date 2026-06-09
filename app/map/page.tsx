@@ -1163,7 +1163,11 @@ function MapSurface({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
-      <div ref={mapRef} className="absolute inset-0" />
+      <div
+        ref={mapRef}
+        className="absolute inset-0"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      />
 
       <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
         <span className="inline-flex items-center gap-2">
