@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const VWORLD_WMTS_BASE = "https://api.vworld.kr/req/wmts/1.0.0"
+const OSM_TILE_BASE = "https://tile.openstreetmap.org"
 const DEFAULT_REFERER = "https://buildmore.co.kr"
 const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ax2n1sAAAAASUVORK5CYII=",
@@ -40,11 +41,11 @@ export async function GET(
   if (tileY === null || tileX === null) return tileResponse(TRANSPARENT_PNG, 400)
 
   const apiKey = process.env.VWORLD_API_KEY?.trim()
-  if (!apiKey) return tileResponse(TRANSPARENT_PNG, 503)
-
   const domain = process.env.VWORLD_DOMAIN?.trim() || DEFAULT_REFERER
   const referer = domain.startsWith("http") ? domain : `https://${domain}`
-  const upstreamUrl = `${VWORLD_WMTS_BASE}/${encodeURIComponent(apiKey)}/Base/${zoom}/${tileY}/${tileX}.png`
+  const upstreamUrl = apiKey
+    ? `${VWORLD_WMTS_BASE}/${encodeURIComponent(apiKey)}/Base/${zoom}/${tileY}/${tileX}.png`
+    : `${OSM_TILE_BASE}/${zoom}/${tileX}/${tileY}.png`
 
   try {
     const response = await fetch(upstreamUrl, {
