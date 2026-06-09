@@ -838,6 +838,10 @@ function MapSurface({
   const draggedRef = useRef(false)
   const selectedRef = useRef(selected)
   const featuresRef = useRef(features)
+  const onSelectRef = useRef(onSelect)
+  const onExternalFeatureRef = useRef(onExternalFeature)
+  const onCloseBuildingPanelsRef = useRef(onCloseBuildingPanels)
+  const onViewportChangeRef = useRef(onViewportChange)
 
   useEffect(() => {
     selectedRef.current = selected
@@ -847,12 +851,19 @@ function MapSurface({
     featuresRef.current = features
   }, [features])
 
+  useEffect(() => {
+    onSelectRef.current = onSelect
+    onExternalFeatureRef.current = onExternalFeature
+    onCloseBuildingPanelsRef.current = onCloseBuildingPanels
+    onViewportChangeRef.current = onViewportChange
+  }, [onCloseBuildingPanels, onExternalFeature, onSelect, onViewportChange])
+
   const publishViewport = useCallback((map: MapLibreMap) => {
     const bounds = map.getBounds()
     const sw = bounds.getSouthWest()
     const ne = bounds.getNorthEast()
     const bboxParam = [sw.lng, sw.lat, ne.lng, ne.lat].map((value) => value.toFixed(6)).join(",")
-    onViewportChange({
+    onViewportChangeRef.current({
       swLat: sw.lat,
       swLng: sw.lng,
       neLat: ne.lat,
@@ -860,7 +871,7 @@ function MapSurface({
       zoom: map.getZoom(),
       bboxParam,
     })
-  }, [onViewportChange])
+  }, [])
 
   const updateSelectedPosition = useCallback((map: MapLibreMap, feature: MapFeature) => {
     const point = map.project([feature.coordinates.lng, feature.coordinates.lat])
@@ -1070,7 +1081,7 @@ function MapSurface({
         const feature = features[0]
 
         if (!feature) {
-          onCloseBuildingPanels()
+          onCloseBuildingPanelsRef.current()
           return
         }
 
@@ -1079,11 +1090,11 @@ function MapSurface({
         const featureId = String(props.feature_id ?? props.pnu ?? buildingId)
 
         if (buildingId) {
-          onSelect(buildingId)
+          onSelectRef.current(buildingId)
           return
         }
         if (featureId) {
-          onExternalFeature(featureId, props)
+          onExternalFeatureRef.current(featureId, props)
         }
       })
     }
@@ -1096,7 +1107,7 @@ function MapSurface({
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
     }
-  }, [config, onCloseBuildingPanels, onExternalFeature, onSelect, publishViewport, updateSelectedPosition])
+  }, [config, publishViewport, updateSelectedPosition])
 
   useEffect(() => {
     const map = mapInstanceRef.current
