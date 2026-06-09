@@ -540,6 +540,9 @@ export default function MapPage() {
 
         if (liveFeatures.length) {
           setMapFeatures(liveFeatures)
+          if (selected.featureId.startsWith("parcel-mapo-")) {
+            applySelected(liveFeatures[0])
+          }
         }
 
         setBboxApi({
@@ -556,7 +559,7 @@ export default function MapPage() {
 
     loadBboxSignals()
     return () => controller.abort()
-  }, [mapViewport])
+  }, [applySelected, mapViewport, selected.featureId])
 
   return (
     <main className="min-h-screen bg-[#e7ece4] text-zinc-950">
