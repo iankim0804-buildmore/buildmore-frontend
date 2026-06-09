@@ -1,21 +1,23 @@
 "use client"
 
+import "maplibre-gl/dist/maplibre-gl.css"
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { MouseEvent, PointerEvent } from "react"
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent } from "react"
 import Link from "next/link"
+import maplibregl from "maplibre-gl"
+import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl"
+import { Protocol } from "pmtiles"
 import {
   Activity,
-  ArrowDown,
-  ArrowUp,
   BarChart3,
   Building2,
   ChevronRight,
   CircleDollarSign,
   Database,
   FileText,
-  MapPin,
+  Layers,
   MessageSquareText,
-  RefreshCw,
   Save,
   Search,
   Send,
@@ -34,13 +36,14 @@ import { cn } from "@/lib/utils"
 
 type DataStatus = "ready" | "partial" | "queued"
 
-type BuildingSignal = {
+type MapFeature = {
   id: string
+  featureId: string
+  pnu: string
   address: string
   district: string
   use: string
   coordinates: { lat: number; lng: number }
-  position: { left: string; top: string }
   price: string
   area: string
   approvalYear: number
@@ -53,30 +56,39 @@ type BuildingSignal = {
   equity: string
   interest: string
   maxPurchasePrice: string
-  redevelopment: string
-  redevelopmentSignal: "strong" | "medium" | "watch"
+  locationSignal: string
+  signalStrength: "strong" | "medium" | "watch"
   hiddenYield: string
   confidence: string
+  sourceUpdatedAt: string
   status: DataStatus
-  lastChecked: string
   risks: string[]
   nextActions: string[]
   scenarios: string[]
 }
 
-type LayerKey = "redevelopment" | "transactions" | "vitality" | "saved"
-
-type MockPromptKey = "bankability" | "price" | "redevelopment" | "risk"
-
-type KakaoLoadStatus = "loading" | "ready" | "fallback"
+type LayerKey = "parcels" | "useClass" | "transactions" | "regulations" | "anchorPoi"
+type PromptKey = "bankability" | "price" | "location" | "risk"
 
 type MapViewport = {
   swLat: number
   swLng: number
   neLat: number
   neLng: number
-  level: number
+  zoom: number
   bboxParam: string
+}
+
+type MapConfig = {
+  engine: string
+  tilesBaseUrl: string
+  styleUrl: string
+  tilesetVersion: string
+  defaultCenter: [number, number]
+  defaultZoom: number
+  minZoom: number
+  maxZoom: number
+  status: string
 }
 
 type BboxApiState = {
@@ -86,122 +98,43 @@ type BboxApiState = {
   source: string
 }
 
-type KakaoLatLng = {
-  getLat: () => number
-  getLng: () => number
-}
-
-type KakaoBounds = {
-  getSouthWest: () => KakaoLatLng
-  getNorthEast: () => KakaoLatLng
-}
-
-type KakaoMapInstance = {
-  getBounds: () => KakaoBounds
-  getLevel: () => number
-}
-
-type KakaoCustomOverlayInstance = {
-  setMap: (map: KakaoMapInstance | null) => void
-}
-
-type KakaoPolygonInstance = {
-  setMap: (map: KakaoMapInstance | null) => void
-}
-
-type KakaoMapsApi = {
-  load: (callback: () => void) => void
-  LatLng: new (lat: number, lng: number) => KakaoLatLng
-  Map: new (container: HTMLElement, options: Record<string, unknown>) => KakaoMapInstance
-  CustomOverlay: new (options: Record<string, unknown>) => KakaoCustomOverlayInstance
-  Polygon: new (options: Record<string, unknown>) => KakaoPolygonInstance
-  event?: {
-    addListener: (target: KakaoMapInstance, eventName: string, callback: () => void) => void
-  }
-}
-
-function getKakaoMaps() {
-  return window.kakao?.maps ? (window.kakao.maps as unknown as KakaoMapsApi) : null
-}
-
-const KAKAO_SCRIPT_ID = "buildmore-map-kakao-sdk"
 const mapCenter = { lat: 37.5523, lng: 126.9139 }
+const selectedSourceId = "bm-selected-feature"
 
-function createFallbackViewport(): MapViewport {
-  const swLat = mapCenter.lat - 0.012
-  const swLng = mapCenter.lng - 0.018
-  const neLat = mapCenter.lat + 0.012
-  const neLng = mapCenter.lng + 0.018
-
-  return {
-    swLat,
-    swLng,
-    neLat,
-    neLng,
-    level: 4,
-    bboxParam: [swLng, swLat, neLng, neLat].map((value) => value.toFixed(6)).join(","),
-  }
-}
-
-function getBuildingViewportPosition(building: BuildingSignal, viewport: MapViewport | null) {
-  if (!viewport) return building.position
-
-  const lngSpan = viewport.neLng - viewport.swLng
-  const latSpan = viewport.neLat - viewport.swLat
-  if (lngSpan <= 0 || latSpan <= 0) return building.position
-
-  const left = ((building.coordinates.lng - viewport.swLng) / lngSpan) * 100
-  const top = ((viewport.neLat - building.coordinates.lat) / latSpan) * 100
-
-  return {
-    left: `${left}%`,
-    top: `${top}%`,
-  }
-}
-
-function createMockParcelPath(building: BuildingSignal) {
-  const lat = building.coordinates.lat
-  const lng = building.coordinates.lng
-  const latDelta = 0.000085
-  const lngDelta = 0.00011
-
-  return [
-    { lat: lat + latDelta, lng: lng - lngDelta },
-    { lat: lat + latDelta, lng: lng + lngDelta },
-    { lat: lat - latDelta, lng: lng + lngDelta },
-    { lat: lat - latDelta, lng: lng - lngDelta },
-  ]
-}
+let pmtilesProtocolRegistered = false
 
 const layerLabels: Record<LayerKey, string> = {
-  redevelopment: "정비사업",
+  parcels: "필지 경계",
+  useClass: "용도/입지색",
   transactions: "실거래",
-  vitality: "상권",
-  saved: "저장 후보",
+  regulations: "규제/정비",
+  anchorPoi: "앵커 POI",
 }
 
-const promptLabels: Record<MockPromptKey, string> = {
-  bankability: "은행 제출 가능성",
-  price: "매입가 낮춰야 할까",
-  redevelopment: "정비사업 영향",
-  risk: "리스크 먼저 보기",
+const promptLabels: Record<PromptKey, string> = {
+  bankability: "은행 대출 가능성",
+  price: "매입가 협상 여지",
+  location: "상업축/배후세대",
+  risk: "먼저 봐야 할 리스크",
 }
 
 const layerColors: Record<LayerKey, string> = {
-  redevelopment: "bg-amber-500",
+  parcels: "bg-zinc-700",
+  useClass: "bg-emerald-500",
   transactions: "bg-sky-500",
-  vitality: "bg-emerald-500",
-  saved: "bg-violet-500",
+  regulations: "bg-amber-500",
+  anchorPoi: "bg-rose-500",
 }
 
-const buildings: BuildingSignal[] = [
+const mockFeatures: MapFeature[] = [
   {
     id: "bm-map-001",
+    featureId: "parcel-mapo-001",
+    pnu: "1144012400104140016",
     address: "서울 마포구 합정동 414-16",
     district: "합정역 6번 출구권",
     use: "근린생활시설",
     coordinates: { lat: 37.5496, lng: 126.9142 },
-    position: { left: "58%", top: "43%" },
     price: "52.8억",
     area: "대지 142㎡",
     approvalYear: 1998,
@@ -214,23 +147,24 @@ const buildings: BuildingSignal[] = [
     equity: "22.1억",
     interest: "1,920만/월",
     maxPurchasePrice: "49.6억",
-    redevelopment: "가로주택정비 180m",
-    redevelopmentSignal: "strong",
+    locationSignal: "가로주택정비 180m",
+    signalStrength: "strong",
     hiddenYield: "검토 가능",
     confidence: "중상",
+    sourceUpdatedAt: "2026.06.09",
     status: "ready",
-    lastChecked: "2026.06.06 05:42",
-    risks: ["임대료 표본 6건", "노후도 보수 반영 필요"],
-    nextActions: ["임대차 명세 확인", "인근 거래 12개월 비교", "은행 제출 메모 초안"],
+    risks: ["임대료 표본 6건", "인허가 보수 반영 필요"],
+    nextActions: ["임대차 명세 확인", "최근 거래 12개월 비교", "은행 제출 메모 초안"],
     scenarios: ["리모델링", "증축"],
   },
   {
     id: "bm-map-002",
+    featureId: "parcel-mapo-002",
+    pnu: "1144012000103570001",
     address: "서울 마포구 서교동 357-1",
     district: "홍대입구 배후상권",
-    use: "상업업무용",
+    use: "상업/업무",
     coordinates: { lat: 37.5562, lng: 126.9235 },
-    position: { left: "42%", top: "31%" },
     price: "64.5억",
     area: "대지 171㎡",
     approvalYear: 2004,
@@ -243,23 +177,24 @@ const buildings: BuildingSignal[] = [
     equity: "31.0억",
     interest: "2,460만/월",
     maxPurchasePrice: "57.2억",
-    redevelopment: "신속통합기획 520m",
-    redevelopmentSignal: "medium",
-    hiddenYield: "검토 필요",
+    locationSignal: "역세권 통합기획 520m",
+    signalStrength: "medium",
+    hiddenYield: "검증 필요",
     confidence: "중간",
+    sourceUpdatedAt: "2026.06.09",
     status: "partial",
-    lastChecked: "2026.06.06 05:38",
     risks: ["공실률 보정 필요", "최근 고가 거래 영향"],
     nextActions: ["공실 임대료 재산정", "대출한도 보수 시나리오", "매입가 하향 기준 산출"],
     scenarios: ["유지보수", "리모델링"],
   },
   {
     id: "bm-map-003",
+    featureId: "parcel-mapo-003",
+    pnu: "1144012300103990004",
     address: "서울 마포구 망원동 399-4",
     district: "망리단길 생활상권",
     use: "제2종근린생활시설",
     coordinates: { lat: 37.5551, lng: 126.9064 },
-    position: { left: "31%", top: "60%" },
     price: "41.8억",
     area: "대지 132㎡",
     approvalYear: 1992,
@@ -272,12 +207,12 @@ const buildings: BuildingSignal[] = [
     equity: "18.5억",
     interest: "1,410만/월",
     maxPurchasePrice: "40.9억",
-    redevelopment: "재정비촉진 310m",
-    redevelopmentSignal: "watch",
+    locationSignal: "모아타운 후보지 310m",
+    signalStrength: "watch",
     hiddenYield: "근거 부족",
     confidence: "보강 필요",
+    sourceUpdatedAt: "분석 대기",
     status: "queued",
-    lastChecked: "분석 대기",
     risks: ["좌표 보강 대기", "상권 매출 최신성 낮음"],
     nextActions: ["PNU 보강", "상권 반경 재조회", "현장 확인 후보 등록"],
     scenarios: ["리모델링", "신축"],
@@ -285,29 +220,138 @@ const buildings: BuildingSignal[] = [
 ]
 
 const transactions = [
-  { label: "2026.06", value: "58.2억", tone: "bg-sky-500" },
-  { label: "2026.05", value: "50.1억", tone: "bg-cyan-500" },
-  { label: "2026.04", value: "62.0억", tone: "bg-blue-500" },
-  { label: "2026.03", value: "45.6억", tone: "bg-indigo-500" },
+  { label: "2026.06", value: "58.2억", coordinates: [126.9168, 37.552] },
+  { label: "2026.05", value: "50.1억", coordinates: [126.9108, 37.5486] },
+  { label: "2026.04", value: "62.0억", coordinates: [126.9216, 37.5576] },
+  { label: "2026.03", value: "45.6억", coordinates: [126.9068, 37.5535] },
 ]
 
-const zones = [
-  {
-    id: "zone-1",
-    label: "가로주택정비",
-    className: "left-[49%] top-[24%] h-[25%] w-[31%] rotate-[-10deg] bg-amber-400/28 border-amber-500/60",
-  },
-  {
-    id: "zone-2",
-    label: "신속통합기획",
-    className: "left-[20%] top-[50%] h-[22%] w-[28%] rotate-[8deg] bg-rose-400/22 border-rose-500/50",
-  },
-  {
-    id: "zone-3",
-    label: "재정비촉진",
-    className: "left-[64%] top-[58%] h-[19%] w-[23%] rotate-[4deg] bg-emerald-400/20 border-emerald-500/50",
-  },
-]
+function registerPmtilesProtocol() {
+  if (pmtilesProtocolRegistered || typeof window === "undefined") return
+  const protocol = new Protocol()
+  maplibregl.addProtocol("pmtiles", protocol.tile)
+  pmtilesProtocolRegistered = true
+}
+
+function fallbackStyle(): StyleSpecification {
+  return {
+    version: 8,
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    sources: {
+      "osm-raster": {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "OpenStreetMap",
+      },
+    },
+    layers: [
+      {
+        id: "osm-raster",
+        type: "raster",
+        source: "osm-raster",
+        paint: {
+          "raster-saturation": -0.45,
+          "raster-contrast": -0.1,
+          "raster-opacity": 0.84,
+        },
+      },
+    ],
+  }
+}
+
+function createParcelCoordinates(feature: MapFeature): [number, number][][] {
+  const { lat, lng } = feature.coordinates
+  const latDelta = 0.0001
+  const lngDelta = 0.00013
+
+  return [[
+    [lng - lngDelta, lat + latDelta],
+    [lng + lngDelta, lat + latDelta],
+    [lng + lngDelta, lat - latDelta],
+    [lng - lngDelta, lat - latDelta],
+    [lng - lngDelta, lat + latDelta],
+  ]]
+}
+
+function mockParcelsGeojson() {
+  return {
+    type: "FeatureCollection",
+    features: mockFeatures.map((feature) => ({
+      type: "Feature",
+      properties: {
+        buildingId: feature.id,
+        feature_id: feature.featureId,
+        pnu: feature.pnu,
+        address: feature.address,
+        buildmore_class: feature.use,
+        confidence: feature.confidence,
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: createParcelCoordinates(feature),
+      },
+    })),
+  }
+}
+
+function mockBuildingsGeojson() {
+  return {
+    type: "FeatureCollection",
+    features: mockFeatures.map((feature) => ({
+      type: "Feature",
+      properties: {
+        buildingId: feature.id,
+        feature_id: feature.featureId,
+        pnu: feature.pnu,
+        address: feature.address,
+        bankability: feature.bankability,
+        readiness: feature.readiness,
+        buildmore_class: feature.use,
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [feature.coordinates.lng, feature.coordinates.lat],
+      },
+    })),
+  }
+}
+
+function mockTransactionsGeojson() {
+  return {
+    type: "FeatureCollection",
+    features: transactions.map((item) => ({
+      type: "Feature",
+      properties: {
+        label: item.label,
+        value: item.value,
+      },
+      geometry: {
+        type: "Point",
+        coordinates: item.coordinates,
+      },
+    })),
+  }
+}
+
+function selectedFeatureGeojson(selected: MapFeature) {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          feature_id: selected.featureId,
+          pnu: selected.pnu,
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: createParcelCoordinates(selected),
+        },
+      },
+    ],
+  }
+}
 
 function statusBadge(status: DataStatus) {
   if (status === "ready") {
@@ -319,78 +363,122 @@ function statusBadge(status: DataStatus) {
   return { label: "queued", className: "border-violet-200 bg-violet-50 text-violet-700" }
 }
 
-function signalTone(signal: BuildingSignal["redevelopmentSignal"]) {
+function signalTone(signal: MapFeature["signalStrength"]) {
   if (signal === "strong") return "border-amber-300 bg-amber-50 text-amber-800"
   if (signal === "medium") return "border-sky-300 bg-sky-50 text-sky-800"
   return "border-violet-300 bg-violet-50 text-violet-800"
 }
 
-function mockLlmAnswer(selected: BuildingSignal, prompt: MockPromptKey) {
+function mockLlmAnswer(selected: MapFeature, prompt: PromptKey) {
   if (prompt === "price") {
-    return `희망가 ${selected.price}는 역산 적정가 ${selected.maxPurchasePrice} 대비 높게 보입니다. 협상 기준은 DSCR ${selected.dscr} 유지와 월 이자 ${selected.interest} 부담을 동시에 맞추는 선으로 잡는 것이 좋습니다.`
+    return `희망가 ${selected.price}는 보수 산정가 ${selected.maxPurchasePrice} 대비 높게 보입니다. DSCR ${selected.dscr}, 월 이자 ${selected.interest}를 맞추려면 매입가 조정 또는 자기자본 확대가 먼저 필요합니다.`
   }
-  if (prompt === "redevelopment") {
-    return `${selected.redevelopment} 신호는 ${selected.hiddenYield} 단계입니다. 지금은 프리미엄 확정값이 아니라 거리, 단계, 표본 수, 좌표 정확도를 묶은 검토 신호로 표시하는 것이 안전합니다.`
+  if (prompt === "location") {
+    return `${selected.district}은 ${selected.locationSignal} 신호가 있고, ${selected.hiddenYield} 단계입니다. 현재 지도에서는 상호명보다 필지, 상업축, 배후 주거, 최근 거래 밀도를 우선 읽는 구조로 전환했습니다.`
   }
   if (prompt === "risk") {
-    return `우선 리스크는 ${selected.risks.join(", ")}입니다. 은행 제출 전에는 임대차 명세, 최근 거래 비교, 보수적 대출한도 시나리오를 먼저 확인해야 합니다.`
+    return `우선 리스크는 ${selected.risks.join(", ")}입니다. 은행 제출 전에는 임대차 명세, 최근 실거래 비교, 좌표/PNU confidence를 보강해야 합니다.`
   }
-  return `${selected.district} 후보는 Bankability ${selected.bankability}점입니다. 핵심은 DSCR ${selected.dscr}, LTV ${selected.ltv}, NOI ${selected.noi}이고, 추천 시나리오는 ${selected.scenarios.join(" / ")}입니다.`
+  return `${selected.address}의 Bankability는 ${selected.bankability}점입니다. 핵심 근거는 DSCR ${selected.dscr}, LTV ${selected.ltv}, NOI ${selected.noi}, cap rate ${selected.capRate}이며 추천 시나리오는 ${selected.scenarios.join(" / ")}입니다.`
+}
+
+function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
+  const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id) ?? mockFeatures[0]
+  const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
+
+  return {
+    ...fallback,
+    id: String(payload.id ?? payload.building_id ?? id),
+    featureId: String(payload.feature_id ?? id),
+    pnu: String(payload.pnu ?? fallback.pnu),
+    address: String(payload.address ?? fallback.address),
+    district: String(payload.district ?? payload.location_label ?? fallback.district),
+    use: String(payload.use ?? payload.main_use ?? fallback.use),
+    coordinates: {
+      lat: Number(coordinates?.lat ?? payload.lat ?? fallback.coordinates.lat),
+      lng: Number(coordinates?.lng ?? payload.lng ?? fallback.coordinates.lng),
+    },
+    bankability: Number(payload.bankability ?? payload.bankability_score ?? fallback.bankability),
+    readiness: Number(payload.readiness ?? payload.deal_readiness_score ?? fallback.readiness),
+    capRate: String(payload.cap_rate ?? fallback.capRate),
+    dscr: String(payload.dscr ?? fallback.dscr),
+    ltv: String(payload.ltv ?? fallback.ltv),
+    noi: String(payload.noi ?? fallback.noi),
+    confidence: String(payload.confidence ?? payload.source_confidence ?? fallback.confidence),
+    sourceUpdatedAt: String(payload.source_updated_at ?? fallback.sourceUpdatedAt),
+    status: (payload.status as DataStatus) ?? "partial",
+  }
 }
 
 export default function MapPage() {
-  const [selectedId, setSelectedId] = useState(buildings[0].id)
+  const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
   const [statusOpen, setStatusOpen] = useState(false)
   const [capsuleOpen, setCapsuleOpen] = useState(true)
   const [filterOpen, setFilterOpen] = useState(false)
-  const [activePrompt, setActivePrompt] = useState<MockPromptKey>("bankability")
-  const [selectedScenario, setSelectedScenario] = useState(buildings[0].scenarios[0])
-  const [savedIds, setSavedIds] = useState<string[]>([buildings[0].id])
-  const [viewedBuildingIds, setViewedBuildingIds] = useState<string[]>(buildings.slice(0, 3).map((building) => building.id))
-  const [isKakaoReady, setIsKakaoReady] = useState(false)
+  const [activePrompt, setActivePrompt] = useState<PromptKey>("bankability")
+  const [selectedScenario, setSelectedScenario] = useState(mockFeatures[0].scenarios[0])
+  const [savedIds, setSavedIds] = useState<string[]>([mockFeatures[0].id])
+  const [viewedFeatureIds, setViewedFeatureIds] = useState<string[]>(mockFeatures.map((feature) => feature.id))
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
   const [bboxApi, setBboxApi] = useState<BboxApiState>({
     status: "idle",
-    count: buildings.length,
-    bboxLabel: "mock bbox 대기",
-    source: "local-mock",
+    count: mockFeatures.length,
+    bboxLabel: "bbox 대기",
+    source: "maplibre-local",
   })
   const [activeLayers, setActiveLayers] = useState<Record<LayerKey, boolean>>({
-    redevelopment: true,
+    parcels: true,
+    useClass: true,
     transactions: true,
-    vitality: true,
-    saved: true,
+    regulations: true,
+    anchorPoi: true,
   })
-
-  const selected = useMemo(
-    () => buildings.find((building) => building.id === selectedId) ?? buildings[0],
-    [selectedId]
-  )
 
   const selectedStatus = statusBadge(selected.status)
   const isSaved = savedIds.includes(selected.id)
-  const viewedBuildings = useMemo(
+  const viewedFeatures = useMemo(
     () =>
-      viewedBuildingIds
-        .map((id) => buildings.find((building) => building.id === id))
-        .filter((building): building is BuildingSignal => Boolean(building)),
-    [viewedBuildingIds]
+      viewedFeatureIds
+        .map((id) => (id === selected.id ? selected : mockFeatures.find((feature) => feature.id === id)))
+        .filter((feature): feature is MapFeature => Boolean(feature)),
+    [selected, viewedFeatureIds]
   )
 
   const toggleLayer = (key: LayerKey) => {
     setActiveLayers((current) => ({ ...current, [key]: !current[key] }))
   }
 
-  const selectBuilding = useCallback((id: string) => {
-    const next = buildings.find((building) => building.id === id)
-    if (!next) return
-    setSelectedId(id)
-    setViewedBuildingIds((current) => [id, ...current.filter((currentId) => currentId !== id)].slice(0, 3))
-    setSelectedScenario(next.scenarios[0] ?? "")
+  const applySelected = useCallback((feature: MapFeature) => {
+    setSelected(feature)
+    setViewedFeatureIds((current) => [feature.id, ...current.filter((currentId) => currentId !== feature.id)].slice(0, 3))
+    setSelectedScenario(feature.scenarios[0] ?? "")
     setActivePrompt("bankability")
     setStatusOpen(true)
     setCapsuleOpen(true)
   }, [])
+
+  const selectFeatureById = useCallback((id: string) => {
+    const next = mockFeatures.find((feature) => feature.id === id || feature.featureId === id)
+    if (next) applySelected(next)
+  }, [applySelected])
+
+  const loadFeatureSummary = useCallback(async (featureId: string, properties?: Record<string, unknown>) => {
+    const fallback = featureFromSummary(featureId, properties ?? {})
+    applySelected(fallback)
+
+    try {
+      const response = await fetch(`/api/map/features/${encodeURIComponent(featureId)}/summary`, { cache: "no-store" })
+      if (!response.ok) return
+      const payload = await response.json()
+      applySelected(featureFromSummary(featureId, payload))
+    } catch {
+      applySelected({
+        ...fallback,
+        status: "partial",
+        risks: ["Feature summary API 연결 대기", ...fallback.risks.slice(0, 1)],
+      })
+    }
+  }, [applySelected])
 
   const toggleSaved = () => {
     setSavedIds((current) =>
@@ -399,11 +487,6 @@ export default function MapPage() {
         : [...current, selected.id]
     )
   }
-
-  const closeCapsule = useCallback(() => {
-    setCapsuleOpen(false)
-    setStatusOpen(false)
-  }, [])
 
   const closeBuildingPanels = useCallback(() => {
     setCapsuleOpen(false)
@@ -421,48 +504,32 @@ export default function MapPage() {
 
     const loadBboxSignals = async () => {
       try {
-        setBboxApi((current) => ({
-          ...current,
-          status: "loading",
-          bboxLabel: mapViewport.bboxParam,
-        }))
+        setBboxApi((current) => ({ ...current, status: "loading", bboxLabel: mapViewport.bboxParam }))
 
         const params = new URLSearchParams({
           bbox: mapViewport.bboxParam,
-          level: String(mapViewport.level),
+          level: String(Math.round(mapViewport.zoom)),
         })
         const response = await fetch(`/api/map/building-signals?${params.toString()}`, {
           signal: controller.signal,
         })
 
-        if (!response.ok) {
-          throw new Error("bbox API failed")
-        }
-
-        const data = (await response.json()) as {
-          count?: number
-          bbox?: string
-          source?: string
-        }
+        if (!response.ok) throw new Error("bbox API failed")
+        const data = (await response.json()) as { count?: number; bbox?: string; source?: string }
 
         setBboxApi({
           status: "ready",
-          count: data.count ?? buildings.length,
+          count: data.count ?? mockFeatures.length,
           bboxLabel: data.bbox ?? mapViewport.bboxParam,
-          source: data.source ?? "local-mock",
+          source: data.source ?? "maplibre-local",
         })
       } catch {
         if (controller.signal.aborted) return
-        setBboxApi((current) => ({
-          ...current,
-          status: "error",
-          source: "local-mock",
-        }))
+        setBboxApi((current) => ({ ...current, status: "error", source: "maplibre-local" }))
       }
     }
 
     loadBboxSignals()
-
     return () => controller.abort()
   }, [mapViewport])
 
@@ -480,7 +547,7 @@ export default function MapPage() {
             </Link>
             <div>
               <p className="text-xs font-medium text-zinc-500">BuildMore Map</p>
-              <h1 className="text-lg font-semibold leading-tight text-zinc-950">서울 딜 레이더</h1>
+              <h1 className="text-lg font-semibold leading-tight text-zinc-950">필지 기반 금융 실행 지도</h1>
             </div>
           </div>
 
@@ -497,14 +564,11 @@ export default function MapPage() {
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                className={cn(
-                  "h-10 rounded-lg border-zinc-200 bg-white",
-                  filterOpen && "border-zinc-900 bg-zinc-100"
-                )}
+                className={cn("h-10 rounded-lg border-zinc-200 bg-white", filterOpen && "border-zinc-900 bg-zinc-100")}
                 onClick={() => setFilterOpen((open) => !open)}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                필터
+                레이어
               </Button>
               <Button
                 variant="outline"
@@ -519,8 +583,8 @@ export default function MapPage() {
               </Button>
               <Button asChild className="h-10 rounded-lg bg-zinc-950 text-white hover:bg-zinc-800">
                 <Link href="/analysis">
-                <Activity className="h-4 w-4" />
-                분석 실행
+                  <Activity className="h-4 w-4" />
+                  분석 실행
                 </Link>
               </Button>
             </div>
@@ -531,23 +595,21 @@ export default function MapPage() {
       <section className="relative h-[calc(100vh-65px)] min-h-[720px] overflow-hidden bg-[#dfe7dc]">
         <MapSurface
           activeLayers={activeLayers}
-          isKakaoReady={isKakaoReady}
-          mapViewport={mapViewport}
-          savedIds={savedIds}
           selected={selected}
           selectedScenario={selectedScenario}
           capsuleOpen={capsuleOpen}
+          savedIds={savedIds}
           onScenarioChange={setSelectedScenario}
-          onSelect={selectBuilding}
-          onCloseCapsule={closeCapsule}
+          onSelect={selectFeatureById}
+          onExternalFeature={loadFeatureSummary}
+          onCloseCapsule={closeBuildingPanels}
           onCloseBuildingPanels={closeBuildingPanels}
-          onKakaoReadyChange={setIsKakaoReady}
           onViewportChange={handleViewportChange}
         />
 
         <div
           className={cn(
-            "absolute left-4 top-4 z-30 flex w-[calc(100%-2rem)] max-w-[380px] flex-col rounded-lg border border-white/80 bg-white/70 shadow-2xl backdrop-blur-md transition-[bottom] duration-300 md:left-5 md:top-5",
+            "absolute left-4 top-4 z-30 flex w-[calc(100%-2rem)] max-w-[400px] flex-col rounded-lg border border-white/80 bg-white/78 shadow-2xl backdrop-blur-md transition-[bottom] duration-300 md:left-5 md:top-5",
             statusOpen ? "bottom-[calc(33vh+1.25rem)]" : "bottom-5"
           )}
         >
@@ -556,7 +618,7 @@ export default function MapPage() {
               <MessageSquareText className="h-4 w-4 text-zinc-700" />
               <div>
                 <p className="text-sm font-semibold">BuildMore LLM</p>
-                <p className="text-[11px] text-zinc-500">선택 건물 근거와 다음 액션</p>
+                <p className="text-[11px] text-zinc-500">선택 필지의 대출 가능성과 실행 근거</p>
               </div>
             </div>
             <Badge className={cn("rounded-md border px-2 py-1 text-xs", selectedStatus.className)}>
@@ -566,42 +628,36 @@ export default function MapPage() {
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-zinc-500">후보 quick switch</p>
+              <p className="text-[11px] font-semibold text-zinc-500">최근 클릭 필지</p>
               <div className="grid gap-2">
-                {viewedBuildings.map((building) => (
+                {viewedFeatures.map((feature) => (
                   <button
-                    key={building.id}
+                    key={feature.id}
                     type="button"
-                    onClick={() => selectBuilding(building.id)}
+                    onClick={() => applySelected(feature)}
                     className={cn(
                       "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition",
-                      selected.id === building.id
+                      selected.id === feature.id
                         ? "border-zinc-900 bg-zinc-950 text-white"
-                        : "border-zinc-200 bg-white/90 text-zinc-800 hover:border-zinc-300 hover:bg-white"
+                        : "border-zinc-200 bg-white/90 text-zinc-800 hover:bg-zinc-50"
                     )}
                   >
                     <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold">{building.district}</span>
-                      <span className={cn("block text-[11px]", selected.id === building.id ? "text-zinc-300" : "text-zinc-500")}>
-                        {building.price} · {building.scenarios.join(" / ")}
+                      <span className="block truncate text-xs font-semibold">{feature.district}</span>
+                      <span className={cn("block truncate text-[11px]", selected.id === feature.id ? "text-zinc-300" : "text-zinc-500")}>
+                        {feature.price} · {feature.use}
                       </span>
                     </span>
-                    <span className={cn("rounded border px-1.5 py-0.5 text-[10px]", statusBadge(building.status).className)}>
-                      {statusBadge(building.status).label}
+                    <span className={cn("rounded-md px-2 py-1 text-[10px]", selected.id === feature.id ? "bg-white/12 text-white" : "bg-zinc-100 text-zinc-600")}>
+                      {feature.bankability}
                     </span>
                   </button>
                 ))}
               </div>
             </div>
-            <div className="rounded-lg bg-zinc-950/95 px-3 py-2.5 text-sm leading-6 text-white shadow-sm">
-              {mockLlmAnswer(selected, activePrompt)}
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-white/90 px-3 py-2.5 text-sm leading-6 text-zinc-700 shadow-sm">
-              숨은 수익률은 확정값보다 <span className="font-semibold text-zinc-950">신호/근거/신뢰도</span>로
-              봐야 합니다. 하단 상태창에서 표본, 리스크, 다음 액션을 함께 확인하세요.
-            </div>
+
             <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(promptLabels) as MockPromptKey[]).map((key) => (
+              {(Object.keys(promptLabels) as PromptKey[]).map((key) => (
                 <PromptChip
                   key={key}
                   label={promptLabels[key]}
@@ -610,17 +666,15 @@ export default function MapPage() {
                 />
               ))}
             </div>
-          </div>
 
-          <div className="border-t border-white/60 p-3">
-            <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white/90 px-3 py-2 shadow-sm">
-              <Input
-                readOnly
-                value={promptLabels[activePrompt]}
-                className="h-8 border-0 px-0 text-sm shadow-none focus-visible:ring-0"
-                aria-label="LLM 질문"
-              />
-              <Button size="icon" className="h-8 w-8 shrink-0 rounded-md bg-zinc-950 text-white">
+            <div className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-normal text-zinc-500">Answer</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-800">{mockLlmAnswer(selected, activePrompt)}</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Input value={`${selected.address} 기준으로 은행 제출 메모 초안`} readOnly className="h-10 rounded-lg bg-white text-xs" />
+              <Button size="icon" className="h-10 w-10 rounded-lg bg-zinc-950">
                 <Send className="h-4 w-4" />
               </Button>
             </div>
@@ -628,83 +682,55 @@ export default function MapPage() {
         </div>
 
         {filterOpen && (
-          <div className="absolute right-4 top-4 z-40 w-[calc(100%-2rem)] max-w-sm rounded-lg border border-white/80 bg-white/95 p-4 shadow-2xl backdrop-blur md:right-5 md:top-20">
-            <div className="flex items-center justify-between gap-3">
+          <div className="absolute right-4 top-4 z-30 w-[calc(100%-2rem)] max-w-sm rounded-lg border border-white/80 bg-white/85 p-4 shadow-2xl backdrop-blur-md md:right-5 md:top-5">
+            <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">지도 필터 mock</p>
-                <p className="text-xs text-zinc-500">실제 bbox API 연결 전 화면 상태를 먼저 검증합니다.</p>
+                <p className="text-sm font-semibold">MapLibre layers</p>
+                <p className="text-[11px] text-zinc-500">R2 PMTiles 우선, fallback layer 보조</p>
               </div>
-              <Button variant="outline" size="sm" className="h-8 rounded-md" onClick={() => setFilterOpen(false)}>
-                닫기
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setFilterOpen(false)}>
+                <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="mt-4 space-y-4">
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500">레이어</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(layerLabels) as LayerKey[]).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleLayer(key)}
-                      className={cn(
-                        "flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition",
-                        activeLayers[key]
-                          ? "border-zinc-300 bg-white text-zinc-900 shadow-sm"
-                          : "border-zinc-200 bg-zinc-100 text-zinc-400"
-                      )}
-                    >
-                      <span className={cn("h-2.5 w-2.5 rounded-full", layerColors[key])} />
-                      {layerLabels[key]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500">금융 조건</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <FilterChip label="Bank 70+" active />
-                  <FilterChip label="DSCR 1.2+" active />
-                  <FilterChip label="LTV 60↓" />
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-semibold text-zinc-500">개발 시나리오</p>
-                <div className="grid grid-cols-4 gap-2">
-                  {["유지보수", "리모델링", "증축", "신축"].map((scenario) => (
-                    <FilterChip key={scenario} label={scenario} active={selected.scenarios.includes(scenario)} />
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs leading-5 text-zinc-600">
-                bbox API: {bboxApi.status} · 줌 {mapViewport?.level ?? "-"} · 후보 {bboxApi.count}건 · 저장{" "}
-                {savedIds.length}건
-                <span className="mt-1 block truncate text-[11px] text-zinc-500">
-                  {bboxApi.source} · {bboxApi.bboxLabel}
-                </span>
-              </div>
+            <div className="space-y-2">
+              {(Object.keys(layerLabels) as LayerKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleLayer(key)}
+                  className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className={cn("h-2.5 w-2.5 rounded-full", layerColors[key])} />
+                    {layerLabels[key]}
+                  </span>
+                  <span className={cn("text-xs font-semibold", activeLayers[key] ? "text-emerald-700" : "text-zinc-400")}>
+                    {activeLayers[key] ? "ON" : "OFF"}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setStatusOpen((open) => !open)}
-          className={cn(
-            "absolute left-1/2 z-40 flex h-11 w-16 -translate-x-1/2 items-center justify-center rounded-t-lg border border-zinc-200 bg-white text-zinc-900 shadow-lg transition",
-            statusOpen ? "bottom-[33vh]" : "bottom-0"
-          )}
-          aria-label={statusOpen ? "건물 상태창 닫기" : "건물 상태창 열기"}
-        >
-          {statusOpen ? <ArrowDown className="h-5 w-5" /> : <ArrowUp className="h-5 w-5" />}
-        </button>
+        <div className="absolute bottom-3 left-3 z-20 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
+          bbox API: {bboxApi.status} · 줌 {mapViewport?.zoom.toFixed(1) ?? "-"} · 후보 {bboxApi.count}건 · {bboxApi.source}
+        </div>
 
         <div
           className={cn(
-            "absolute inset-x-0 bottom-0 z-30 h-[33vh] min-h-[250px] max-h-[380px] border-t border-zinc-200 bg-white/70 shadow-2xl backdrop-blur-md transition-transform duration-300",
-            statusOpen ? "translate-y-0" : "translate-y-full"
+            "absolute inset-x-0 bottom-0 z-30 h-[33vh] min-h-[250px] translate-y-[calc(100%-46px)] rounded-t-xl border-t border-white/80 bg-white/88 shadow-2xl backdrop-blur-md transition-transform duration-300",
+            statusOpen && "translate-y-0"
           )}
         >
+          <button
+            type="button"
+            onClick={() => setStatusOpen((open) => !open)}
+            className="mx-auto flex h-11 w-full max-w-7xl items-center justify-center gap-2 px-5 text-xs font-semibold text-zinc-600"
+          >
+            <span className="h-1.5 w-12 rounded-full bg-zinc-300" />
+            선택 필지 상태창
+          </button>
           <StatusDrawer
             selected={selected}
             selectedScenario={selectedScenario}
@@ -719,599 +745,426 @@ export default function MapPage() {
 
 function MapSurface({
   activeLayers,
-  isKakaoReady,
-  mapViewport,
-  savedIds,
   selected,
   selectedScenario,
   capsuleOpen,
+  savedIds,
   onScenarioChange,
   onSelect,
+  onExternalFeature,
   onCloseCapsule,
   onCloseBuildingPanels,
-  onKakaoReadyChange,
   onViewportChange,
 }: {
   activeLayers: Record<LayerKey, boolean>
-  isKakaoReady: boolean
-  mapViewport: MapViewport | null
-  savedIds: string[]
-  selected: BuildingSignal
+  selected: MapFeature
   selectedScenario: string
   capsuleOpen: boolean
+  savedIds: string[]
   onScenarioChange: (scenario: string) => void
   onSelect: (id: string) => void
+  onExternalFeature: (featureId: string, properties?: Record<string, unknown>) => void
   onCloseCapsule: () => void
   onCloseBuildingPanels: () => void
-  onKakaoReadyChange: (ready: boolean) => void
-  onViewportChange: (viewport: MapViewport) => void
-}) {
-  const pointerStartRef = useRef<{ x: number; y: number; dragged: boolean } | null>(null)
-
-  const handleMapPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    pointerStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      dragged: false,
-    }
-  }
-
-  const handleMapPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const start = pointerStartRef.current
-    if (!start) return
-
-    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y)
-    if (distance > 6) {
-      start.dragged = true
-    }
-  }
-
-  const handleMapClick = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement
-    if (target.closest("[data-native-card]")) {
-      pointerStartRef.current = null
-      return
-    }
-
-    const start = pointerStartRef.current
-    pointerStartRef.current = null
-
-    if (start?.dragged) return
-    onCloseBuildingPanels()
-  }
-
-  return (
-    <div
-      className="absolute inset-0"
-      onClick={handleMapClick}
-      onPointerDown={handleMapPointerDown}
-      onPointerMove={handleMapPointerMove}
-    >
-      <KakaoMapCanvas
-        capsuleOpen={capsuleOpen}
-        savedIds={savedIds}
-        selected={selected}
-        selectedScenario={selectedScenario}
-        selectedId={selected.id}
-        onKakaoReadyChange={onKakaoReadyChange}
-        onCloseCapsule={onCloseCapsule}
-        onScenarioChange={onScenarioChange}
-        onSelect={onSelect}
-        onViewportChange={onViewportChange}
-      />
-      {!isKakaoReady && (
-        <>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(63,63,70,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(63,63,70,0.08)_1px,transparent_1px)] bg-[size:44px_44px] opacity-55" />
-
-      {activeLayers.redevelopment && (
-        <div className="absolute inset-0">
-          {zones.map((zone) => (
-            <div
-              key={zone.id}
-              className={cn("absolute rounded-lg border-2", zone.className)}
-              style={{ clipPath: "polygon(12% 0, 100% 12%, 86% 100%, 0 72%)" }}
-            >
-              <span className="absolute left-3 top-3 rounded-md bg-white/85 px-2 py-1 text-xs font-semibold text-zinc-800 shadow-sm">
-                {zone.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeLayers.transactions && (
-        <div className="absolute bottom-5 left-5 z-10 hidden rounded-lg border border-white/70 bg-white/90 p-3 shadow-sm backdrop-blur md:block">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <FileText className="h-4 w-4" />
-            주변 실거래
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {transactions.map((item) => (
-              <div key={item.label} className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className={cn("h-2 w-2 rounded-full", item.tone)} />
-                  <span className="text-xs text-zinc-500">{item.label}</span>
-                </div>
-                <p className="mt-1 text-sm font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-        </>
-      )}
-
-      {!isKakaoReady && buildings.map((building) => {
-        const isSelected = building.id === selected.id
-        const badge = statusBadge(building.status)
-        const screenPosition = getBuildingViewportPosition(building, mapViewport)
-
-        return (
-          <button
-            key={building.id}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onSelect(building.id)
-            }}
-            className={cn(
-              "absolute z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-lg border bg-white px-3 py-2 text-left shadow-lg transition hover:-translate-y-[54%] hover:shadow-xl",
-              isSelected ? "border-zinc-950" : "border-white/80",
-              savedIds.includes(building.id) && "ring-2 ring-emerald-400/70"
-            )}
-            style={screenPosition}
-          >
-            <span
-              className={cn(
-                "h-3 w-3 rounded-full",
-                building.redevelopmentSignal === "strong"
-                  ? "bg-amber-500"
-                  : building.redevelopmentSignal === "medium"
-                    ? "bg-sky-500"
-                    : "bg-violet-500"
-              )}
-            />
-            <span className="min-w-0">
-              <span className="block max-w-32 truncate text-xs font-semibold">{building.district}</span>
-              <span className="block text-[11px] text-zinc-500">{building.price}</span>
-            </span>
-            <span className={cn("rounded border px-1.5 py-0.5 text-[10px]", badge.className)}>{badge.label}</span>
-          </button>
-        )
-      })}
-
-      {capsuleOpen && !isKakaoReady && (
-        <div
-          className="absolute z-50 w-[310px] -translate-x-1/2 -translate-y-[118%] rounded-lg border border-white/80 bg-white/70 p-3 shadow-2xl backdrop-blur-md"
-          style={getBuildingViewportPosition(selected, mapViewport)}
-          onPointerDown={(event) => {
-            event.stopPropagation()
-            if ((event.target as HTMLElement).closest("[data-close-capsule]")) {
-              onCloseCapsule()
-            }
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-        <div className="rounded-lg border border-zinc-200 bg-white/90 p-2.5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium text-zinc-500">{selected.district}</p>
-              <h3 className="mt-1 text-sm font-semibold leading-snug">{selected.address}</h3>
-            </div>
-            <button
-              type="button"
-              onPointerDown={(event) => {
-                event.stopPropagation()
-                onCloseCapsule()
-              }}
-              onClick={(event) => {
-                event.stopPropagation()
-                onCloseCapsule()
-              }}
-              data-close-capsule
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900"
-              aria-label="선택 건물 정보창 닫기"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Metric label="Bank" value={`${selected.bankability}`} small />
-          <Metric label="DSCR" value={selected.dscr} small />
-          <Metric label="Cap" value={selected.capRate} small />
-        </div>
-        <div className="mt-2 rounded-lg bg-zinc-950/95 px-3 py-2 text-xs text-white shadow-sm">
-          {selected.redevelopment} · 숨은 수익률 {selected.hiddenYield}
-        </div>
-        <div className="mt-2 rounded-lg border border-zinc-200 bg-white/90 p-2 shadow-sm">
-          <p className="mb-2 text-[11px] font-semibold text-zinc-500">추천 매각/개발 시나리오</p>
-          <div className="flex flex-wrap gap-1.5">
-            {selected.scenarios.map((scenario) => (
-              <button
-                key={scenario}
-                type="button"
-                onClick={() => onScenarioChange(scenario)}
-                className={cn(
-                  "rounded-md border px-2 py-1 text-[11px] font-semibold transition",
-                  selectedScenario === scenario
-                    ? "border-zinc-900 bg-zinc-950 text-white"
-                    : "border-amber-200 bg-amber-50/95 text-amber-800 hover:border-amber-300"
-                )}
-              >
-                {scenario}
-              </button>
-            ))}
-          </div>
-          <Link
-            href="/analysis"
-            className="mt-2 flex h-8 items-center justify-center rounded-md bg-zinc-950 px-3 text-xs font-semibold text-white transition hover:bg-zinc-800"
-          >
-            개발 시나리오 분석
-          </Link>
-        </div>
-      </div>
-      )}
-      <div className="absolute bottom-5 right-5 z-20 flex gap-2" onClick={(event) => event.stopPropagation()}>
-        <Button variant="outline" className="h-10 rounded-lg border-white/80 bg-white/92">
-          <RefreshCw className="h-4 w-4" />
-          새로고침
-        </Button>
-        <Button className="h-10 rounded-lg bg-zinc-950 text-white hover:bg-zinc-800">
-          <MapPin className="h-4 w-4" />
-          선택 분석
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function KakaoMapCanvas({
-  capsuleOpen,
-  savedIds,
-  selected,
-  selectedScenario,
-  selectedId,
-  onKakaoReadyChange,
-  onCloseCapsule,
-  onScenarioChange,
-  onSelect,
-  onViewportChange,
-}: {
-  capsuleOpen: boolean
-  savedIds: string[]
-  selected: BuildingSignal
-  selectedScenario: string
-  selectedId: string
-  onKakaoReadyChange: (ready: boolean) => void
-  onCloseCapsule: () => void
-  onScenarioChange: (scenario: string) => void
-  onSelect: (id: string) => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null)
-  const mapInstanceRef = useRef<KakaoMapInstance | null>(null)
-  const [status, setStatus] = useState<KakaoLoadStatus>("loading")
-  const [message, setMessage] = useState("카카오맵을 불러오는 중")
+  const mapInstanceRef = useRef<MapLibreMap | null>(null)
+  const [message, setMessage] = useState("MapLibre 준비 중")
+  const [config, setConfig] = useState<MapConfig | null>(null)
+  const [selectedScreen, setSelectedScreen] = useState<{ left: number; top: number } | null>(null)
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const draggedRef = useRef(false)
+  const selectedRef = useRef(selected)
+
+  useEffect(() => {
+    selectedRef.current = selected
+  }, [selected])
+
+  const publishViewport = useCallback((map: MapLibreMap) => {
+    const bounds = map.getBounds()
+    const sw = bounds.getSouthWest()
+    const ne = bounds.getNorthEast()
+    const bboxParam = [sw.lng, sw.lat, ne.lng, ne.lat].map((value) => value.toFixed(6)).join(",")
+    onViewportChange({
+      swLat: sw.lat,
+      swLng: sw.lng,
+      neLat: ne.lat,
+      neLng: ne.lng,
+      zoom: map.getZoom(),
+      bboxParam,
+    })
+  }, [onViewportChange])
+
+  const updateSelectedPosition = useCallback((map: MapLibreMap, feature: MapFeature) => {
+    const point = map.project([feature.coordinates.lng, feature.coordinates.lat])
+    const width = map.getCanvas().clientWidth || 0
+    const height = map.getCanvas().clientHeight || 0
+    setSelectedScreen({
+      left: width ? Math.min(Math.max(point.x, 180), width - 180) : point.x,
+      top: height ? Math.min(Math.max(point.y, 300), height - 80) : point.y,
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
 
-    const activateFallback = (nextMessage: string) => {
-      if (cancelled) return
-      onKakaoReadyChange(false)
-      setStatus("fallback")
-      setMessage(nextMessage)
-      onViewportChange(createFallbackViewport())
-    }
-
-    const createMap = () => {
-      const kakaoMaps = getKakaoMaps()
-      if (cancelled || !mapRef.current || !kakaoMaps) return
-
+    const loadConfig = async () => {
       try {
-        kakaoMaps.load(() => {
-          const loadedKakaoMaps = getKakaoMaps()
-          if (cancelled || !mapRef.current || !loadedKakaoMaps) return
-
-          const center = new loadedKakaoMaps.LatLng(mapCenter.lat, mapCenter.lng)
-          const map = new loadedKakaoMaps.Map(mapRef.current, {
-            center,
-            level: 4,
+        const response = await fetch("/api/config/map-tiles", { cache: "no-store" })
+        const payload = (await response.json()) as MapConfig
+        if (!cancelled) setConfig(payload)
+      } catch {
+        if (!cancelled) {
+          setConfig({
+            engine: "maplibre",
+            tilesBaseUrl: "",
+            styleUrl: "",
+            tilesetVersion: "fallback",
+            defaultCenter: [mapCenter.lng, mapCenter.lat],
+            defaultZoom: 14,
+            minZoom: 9,
+            maxZoom: 19,
+            status: "fallback",
           })
-          mapInstanceRef.current = map
+        }
+      }
+    }
 
-          const publishViewport = () => {
-            const bounds = map.getBounds()
-            const southWest = bounds.getSouthWest()
-            const northEast = bounds.getNorthEast()
-            const swLat = southWest.getLat()
-            const swLng = southWest.getLng()
-            const neLat = northEast.getLat()
-            const neLng = northEast.getLng()
-            const bboxParam = [swLng, swLat, neLng, neLat].map((value) => value.toFixed(6)).join(",")
+    loadConfig()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-            onViewportChange({
-              swLat,
-              swLng,
-              neLat,
-              neLng,
-              level: map.getLevel(),
-              bboxParam,
-            })
+  useEffect(() => {
+    if (!config || !mapRef.current || mapInstanceRef.current) return
+
+    let cancelled = false
+    let handleWindowResize: (() => void) | null = null
+
+    const createMap = async () => {
+      registerPmtilesProtocol()
+
+      let style: string | StyleSpecification = fallbackStyle()
+      if (config.styleUrl) {
+        try {
+          const response = await fetch(config.styleUrl, { cache: "no-store" })
+          if (response.ok) {
+            style = (await response.json()) as StyleSpecification
+            setMessage(`R2 style 로드 · ${config.tilesetVersion}`)
+          } else {
+            setMessage(`R2 style ${response.status} · fallback style`)
           }
+        } catch {
+          setMessage("R2 style CORS/연결 대기 · fallback style")
+        }
+      } else {
+        setMessage("R2 style URL 없음 · fallback style")
+      }
 
-          publishViewport()
-          loadedKakaoMaps.event?.addListener(map, "idle", publishViewport)
-          loadedKakaoMaps.event?.addListener(map, "zoom_changed", publishViewport)
-          setStatus("ready")
-          onKakaoReadyChange(true)
-          setMessage("카카오맵 surface · bbox sync")
+      if (cancelled || !mapRef.current) return
+
+      const map = new maplibregl.Map({
+        container: mapRef.current,
+        style,
+        center: [selectedRef.current.coordinates.lng, selectedRef.current.coordinates.lat],
+        zoom: Math.max(config.defaultZoom || 14, 14),
+        minZoom: config.minZoom || 9,
+        maxZoom: config.maxZoom || 19,
+        attributionControl: false,
+      })
+
+      mapInstanceRef.current = map
+      requestAnimationFrame(() => map.resize())
+      window.setTimeout(() => map.resize(), 250)
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right")
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left")
+
+      map.on("load", () => {
+        if (!map.getSource("bm-mock-parcels")) {
+          map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson() })
+        }
+        if (!map.getSource("bm-mock-buildings")) {
+          map.addSource("bm-mock-buildings", { type: "geojson", data: mockBuildingsGeojson() })
+        }
+        if (!map.getSource("bm-mock-transactions")) {
+          map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
+        }
+        if (!map.getSource(selectedSourceId)) {
+          map.addSource(selectedSourceId, { type: "geojson", data: selectedFeatureGeojson(selectedRef.current) })
+        }
+
+        map.addLayer({
+          id: "bm-parcels-fill",
+          type: "fill",
+          source: "bm-mock-parcels",
+          paint: {
+            "fill-color": "#16a34a",
+            "fill-opacity": 0.16,
+          },
         })
-      } catch {
-        activateFallback("카카오맵 로딩 실패 · mock fallback · bbox mock")
+        map.addLayer({
+          id: "bm-parcels-outline",
+          type: "line",
+          source: "bm-mock-parcels",
+          paint: {
+            "line-color": "#14532d",
+            "line-width": 1.4,
+            "line-opacity": 0.8,
+          },
+        })
+        map.addLayer({
+          id: "bm-use-class-fill",
+          type: "fill",
+          source: "bm-mock-parcels",
+          minzoom: 12,
+          paint: {
+            "fill-color": ["match", ["get", "buildmore_class"], "상업/업무", "#38bdf8", "근린생활시설", "#34d399", "#f59e0b"],
+            "fill-opacity": 0.22,
+          },
+        })
+        map.addLayer({
+          id: "bm-transaction-circle",
+          type: "circle",
+          source: "bm-mock-transactions",
+          paint: {
+            "circle-color": "#0ea5e9",
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 9],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1.4,
+            "circle-opacity": 0.9,
+          },
+        })
+        map.addLayer({
+          id: "bm-buildings-circle",
+          type: "circle",
+          source: "bm-mock-buildings",
+          paint: {
+            "circle-color": ["case", [">=", ["get", "bankability"], 70], "#22c55e", [">=", ["get", "bankability"], 65], "#f59e0b", "#8b5cf6"],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 14],
+            "circle-stroke-color": "#18181b",
+            "circle-stroke-width": 1.2,
+            "circle-opacity": 0.94,
+          },
+        })
+        map.addLayer({
+          id: "bm-buildings-label",
+          type: "symbol",
+          source: "bm-mock-buildings",
+          minzoom: 14,
+          layout: {
+            "text-field": ["get", "bankability"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 11,
+          },
+          paint: {
+            "text-color": "#ffffff",
+          },
+        })
+        map.addLayer({
+          id: "bm-selected-feature-fill",
+          type: "fill",
+          source: selectedSourceId,
+          paint: {
+            "fill-color": "#ef4444",
+            "fill-opacity": 0.34,
+          },
+        })
+        map.addLayer({
+          id: "bm-selected-feature-line",
+          type: "line",
+          source: selectedSourceId,
+          paint: {
+            "line-color": "#dc2626",
+            "line-width": 3,
+            "line-opacity": 0.95,
+          },
+        })
+
+        publishViewport(map)
+        map.resize()
+        updateSelectedPosition(map, selectedRef.current)
+        setMessage((current) => current.includes("fallback") ? current : `MapLibre · PMTiles protocol · ${config.tilesetVersion}`)
+      })
+
+      map.on("moveend", () => publishViewport(map))
+      map.on("move", () => updateSelectedPosition(map, selectedRef.current))
+      map.on("zoom", () => updateSelectedPosition(map, selectedRef.current))
+
+      handleWindowResize = () => {
+        map.resize()
+        updateSelectedPosition(map, selectedRef.current)
       }
+      window.addEventListener("resize", handleWindowResize)
+
+      map.on("click", (event) => {
+        const layers = ["bm-buildings-circle", "bm-parcels-fill", "bm-use-class-fill"].filter((layerId) => map.getLayer(layerId))
+        const features = map.queryRenderedFeatures(event.point, { layers })
+        const feature = features[0]
+
+        if (!feature) {
+          onCloseBuildingPanels()
+          return
+        }
+
+        const props = feature.properties as Record<string, unknown>
+        const buildingId = String(props.buildingId ?? "")
+        const featureId = String(props.feature_id ?? props.pnu ?? buildingId)
+
+        if (buildingId) {
+          onSelect(buildingId)
+          return
+        }
+        if (featureId) {
+          onExternalFeature(featureId, props)
+        }
+      })
     }
 
-    const loadMap = async () => {
-      try {
-        const response = await fetch("/api/config/kakao-map-key")
-        if (!response.ok) {
-          activateFallback("카카오맵 키 없음 · mock fallback · bbox mock")
-          return
-        }
-
-        const data = (await response.json()) as { kakaoMapKey?: string }
-        if (!data.kakaoMapKey) {
-          activateFallback("카카오맵 키 없음 · mock fallback · bbox mock")
-          return
-        }
-
-        const existingScript = document.getElementById(KAKAO_SCRIPT_ID)
-        if (existingScript) {
-          if (getKakaoMaps()) {
-            createMap()
-            return
-          }
-          existingScript.addEventListener("load", createMap, { once: true })
-          existingScript.addEventListener(
-            "error",
-            () => {
-              activateFallback("카카오맵 스크립트 실패 · mock fallback · bbox mock")
-            },
-            { once: true }
-          )
-          return
-        }
-
-        const script = document.createElement("script")
-        script.id = KAKAO_SCRIPT_ID
-        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${data.kakaoMapKey}&autoload=false`
-        script.async = true
-        script.onload = createMap
-        script.onerror = () => {
-          activateFallback("카카오맵 도메인/스크립트 실패 · mock fallback · bbox mock")
-        }
-        document.head.appendChild(script)
-      } catch {
-        activateFallback("카카오맵 설정 API 실패 · mock fallback · bbox mock")
-      }
-    }
-
-    loadMap()
+    createMap()
 
     return () => {
       cancelled = true
+      if (handleWindowResize) window.removeEventListener("resize", handleWindowResize)
+      mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
-      onKakaoReadyChange(false)
     }
-  }, [onKakaoReadyChange, onViewportChange])
+  }, [config, onCloseBuildingPanels, onExternalFeature, onSelect, publishViewport, updateSelectedPosition])
 
   useEffect(() => {
     const map = mapInstanceRef.current
-    const kakaoMaps = getKakaoMaps()
-    if (status !== "ready" || !map || !kakaoMaps) return
+    if (!map?.isStyleLoaded()) return
+    const source = map.getSource(selectedSourceId) as maplibregl.GeoJSONSource | undefined
+    source?.setData(selectedFeatureGeojson(selected) as never)
+    updateSelectedPosition(map, selected)
+  }, [selected, updateSelectedPosition])
 
-    const overlays = buildings.map((building) => {
-      const isSelected = building.id === selectedId
-      const isSaved = savedIds.includes(building.id)
-      const tone =
-        building.redevelopmentSignal === "strong"
-          ? "#f59e0b"
-          : building.redevelopmentSignal === "medium"
-            ? "#0ea5e9"
-            : "#8b5cf6"
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map?.isStyleLoaded()) return
 
-      const content = document.createElement("div")
-      content.setAttribute("aria-label", `${building.district} ${building.price} ${building.status}`)
-      content.style.cssText = [
-        "position:relative",
-        "width:196px",
-        "padding-bottom:12px",
-        "font-family:inherit",
-      ].join(";")
-      content.innerHTML = `
-        <button type="button" data-native-card style="
-          display:flex;
-          align-items:center;
-          gap:8px;
-          width:196px;
-          padding:8px 10px;
-          border-radius:8px;
-          border:1px solid ${isSelected ? "#18181b" : "rgba(255,255,255,.85)"};
-          background:rgba(255,255,255,.96);
-          box-shadow:0 10px 22px rgba(15,23,42,.18);
-          font-family:inherit;
-          text-align:left;
-          cursor:pointer;
-          ${isSaved ? "outline:2px solid rgba(52,211,153,.72);" : "outline:none;"}
-        ">
-          <span style="width:12px;height:12px;border-radius:999px;background:${tone};flex:0 0 auto"></span>
-          <span style="min-width:0;flex:1">
-            <span style="display:block;max-width:128px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;color:#18181b">${building.district}</span>
-            <span style="display:block;font-size:11px;color:#71717a">${building.price}</span>
-          </span>
-          <span style="border:1px solid #e4e4e7;border-radius:4px;padding:2px 6px;font-size:10px;color:#3f3f46;background:#fafafa">${building.status}</span>
-        </button>
-        <span aria-hidden="true" style="
-          position:absolute;
-          left:22px;
-          bottom:0;
-          width:18px;
-          height:12px;
-          background:rgba(255,255,255,.96);
-          clip-path:polygon(0 0, 100% 0, 0 100%);
-          filter:drop-shadow(0 5px 4px rgba(15,23,42,.16));
-        "></span>
-      `
-      const stopNativeCardPropagation = (event: Event) => {
-        event.stopPropagation()
+    const visibilityByLayer: Array<[string, boolean]> = [
+      ["bm-parcels-fill", activeLayers.parcels],
+      ["bm-parcels-outline", activeLayers.parcels],
+      ["bm-use-class-fill", activeLayers.useClass],
+      ["bm-transaction-circle", activeLayers.transactions],
+      ["bm-buildings-circle", activeLayers.anchorPoi],
+      ["bm-buildings-label", activeLayers.anchorPoi],
+    ]
+
+    visibilityByLayer.forEach(([layerId, visible]) => {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none")
       }
-      content.addEventListener("pointerdown", stopNativeCardPropagation)
-      content.addEventListener("mousedown", stopNativeCardPropagation)
-      content.addEventListener("touchstart", stopNativeCardPropagation)
-      content.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        onSelect(building.id)
-      }, true)
-      const cardButton = content.querySelector("[data-native-card]")
-      cardButton?.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        onSelect(building.id)
-      })
-
-      const overlay = new kakaoMaps.CustomOverlay({
-        map,
-        position: new kakaoMaps.LatLng(building.coordinates.lat, building.coordinates.lng),
-        content,
-        xAnchor: 0.112,
-        yAnchor: 1,
-        zIndex: isSelected ? 40 : 30,
-        clickable: true,
-      })
-
-      return overlay
     })
+  }, [activeLayers])
 
-    if (capsuleOpen) {
-      overlays.push(
-        new kakaoMaps.Polygon({
-          map,
-          path: createMockParcelPath(selected).map(
-            (point) => new kakaoMaps.LatLng(point.lat, point.lng)
-          ),
-          strokeWeight: 2,
-          strokeColor: "#dc2626",
-          strokeOpacity: 0.85,
-          fillColor: "#ef4444",
-          fillOpacity: 0.5,
-          zIndex: 20,
-        })
-      )
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    dragStartRef.current = { x: event.clientX, y: event.clientY }
+    draggedRef.current = false
+  }
 
-      const capsule = document.createElement("div")
-      capsule.style.cssText = [
-        "width:310px",
-        "padding:12px",
-        "border-radius:8px",
-        "border:1px solid rgba(255,255,255,.8)",
-        "background:rgba(255,255,255,.72)",
-        "box-shadow:0 22px 44px rgba(15,23,42,.24)",
-        "backdrop-filter:blur(12px)",
-        "font-family:inherit",
-      ].join(";")
-      capsule.innerHTML = `
-        <div style="border:1px solid #e4e4e7;border-radius:8px;background:rgba(255,255,255,.92);padding:10px;box-shadow:0 1px 4px rgba(15,23,42,.06)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-            <div>
-              <p style="margin:0;font-size:12px;font-weight:500;color:#71717a">${selected.district}</p>
-              <h3 style="margin:4px 0 0;font-size:14px;line-height:1.35;font-weight:700;color:#18181b">${selected.address}</h3>
-            </div>
-            <button type="button" data-native-close style="display:flex;width:28px;height:28px;align-items:center;justify-content:center;border-radius:6px;border:1px solid #e4e4e7;background:white;color:#71717a;cursor:pointer">×</button>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px">
-          <div style="border:1px solid #e4e4e7;border-radius:8px;background:white;padding:8px"><p style="margin:0;font-size:11px;color:#71717a">Bank</p><p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#18181b">${selected.bankability}</p></div>
-          <div style="border:1px solid #e4e4e7;border-radius:8px;background:white;padding:8px"><p style="margin:0;font-size:11px;color:#71717a">DSCR</p><p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#18181b">${selected.dscr}</p></div>
-          <div style="border:1px solid #e4e4e7;border-radius:8px;background:white;padding:8px"><p style="margin:0;font-size:11px;color:#71717a">Cap</p><p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#18181b">${selected.capRate}</p></div>
-        </div>
-        <div style="margin-top:8px;border-radius:8px;background:rgba(24,24,27,.96);padding:8px 12px;font-size:12px;color:white">${selected.redevelopment} · 숨은 수익률 ${selected.hiddenYield}</div>
-        <div style="margin-top:8px;border:1px solid #e4e4e7;border-radius:8px;background:rgba(255,255,255,.92);padding:8px;box-shadow:0 1px 4px rgba(15,23,42,.06)">
-          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#71717a">추천 매각/개발 시나리오</p>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            ${selected.scenarios
-              .map(
-                (scenario) =>
-                  `<button type="button" data-native-scenario="${scenario}" style="border-radius:6px;border:1px solid ${
-                    selectedScenario === scenario ? "#18181b" : "#fde68a"
-                  };background:${selectedScenario === scenario ? "#18181b" : "#fffbeb"};color:${
-                    selectedScenario === scenario ? "white" : "#92400e"
-                  };padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">${scenario}</button>`
-              )
-              .join("")}
-          </div>
-          <a href="/analysis" style="display:flex;height:32px;align-items:center;justify-content:center;margin-top:8px;border-radius:6px;background:#18181b;color:white;text-decoration:none;font-size:12px;font-weight:700">개발 시나리오 분석</a>
-        </div>
-      `
-      capsule.addEventListener("click", (event) => {
-        event.stopPropagation()
-        const target = event.target as HTMLElement
-        if (target.closest("[data-native-close]")) {
-          onCloseCapsule()
-          return
-        }
-        const scenario = target.closest("[data-native-scenario]")?.getAttribute("data-native-scenario")
-        if (scenario) {
-          onScenarioChange(scenario)
-        }
-      })
-      const closeButton = capsule.querySelector("[data-native-close]")
-      closeButton?.addEventListener("pointerdown", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      })
-      closeButton?.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        onCloseCapsule()
-      })
-
-      overlays.push(
-        new kakaoMaps.CustomOverlay({
-          map,
-          position: new kakaoMaps.LatLng(selected.coordinates.lat, selected.coordinates.lng),
-          content: capsule,
-          xAnchor: 0.5,
-          yAnchor: 1.15,
-          zIndex: 60,
-          clickable: true,
-        })
-      )
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const start = dragStartRef.current
+    if (!start) return
+    if (Math.abs(event.clientX - start.x) > 8 || Math.abs(event.clientY - start.y) > 8) {
+      draggedRef.current = true
     }
+  }
 
-    return () => {
-      overlays.forEach((overlay) => overlay.setMap(null))
+  const handleSurfaceClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (draggedRef.current) {
+      draggedRef.current = false
+      return
     }
-  }, [capsuleOpen, onCloseCapsule, onScenarioChange, onSelect, savedIds, selected, selectedId, selectedScenario, status])
+    if ((event.target as HTMLElement).closest("[data-map-overlay]")) return
+  }
 
   return (
-    <div className="absolute inset-0 bg-[#dfe7dc]">
-      <div ref={mapRef} className={cn("absolute inset-0", status !== "ready" && "opacity-0")} />
-      {status !== "ready" && (
-        <div className="absolute inset-0 bg-[#dfe7dc]">
-          <div className="absolute left-[8%] top-[20%] h-4 w-[120%] rotate-[14deg] rounded-full bg-white/70 shadow-sm" />
-          <div className="absolute left-[-15%] top-[48%] h-5 w-[120%] rotate-[-8deg] rounded-full bg-white/80 shadow-sm" />
-          <div className="absolute left-[48%] top-[-5%] h-[120%] w-5 rotate-[5deg] rounded-full bg-white/75 shadow-sm" />
-          <div className="absolute left-[22%] top-[10%] h-[95%] w-3 rotate-[-18deg] rounded-full bg-white/55" />
-          <div className="absolute left-[76%] top-[12%] h-[80%] w-3 rotate-[20deg] rounded-full bg-white/55" />
+    <div
+      className="absolute inset-0 bg-[#dfe7dc]"
+      onClick={handleSurfaceClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+    >
+      <div ref={mapRef} className="absolute inset-0" />
+
+      <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
+        <span className="inline-flex items-center gap-2">
+          <Layers className="h-3.5 w-3.5" />
+          {message}
+        </span>
+      </div>
+
+      {capsuleOpen && selectedScreen && (
+        <div
+          data-map-overlay
+          className="absolute z-20 w-[320px] -translate-x-1/2 -translate-y-[calc(100%+20px)] rounded-lg border border-white/80 bg-white/76 p-3 shadow-2xl backdrop-blur-md"
+          style={{ left: selectedScreen.left, top: selectedScreen.top }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-500">{selected.district}</p>
+                <h3 className="mt-1 truncate text-sm font-semibold text-zinc-950">{selected.address}</h3>
+              </div>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white" onClick={onCloseCapsule}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <MiniMetric label="Bank" value={`${selected.bankability}`} />
+            <MiniMetric label="DSCR" value={selected.dscr} />
+            <MiniMetric label="Cap" value={selected.capRate} />
+          </div>
+
+          <div className="mt-2 rounded-lg bg-zinc-950 px-3 py-2 text-xs text-white">
+            {selected.locationSignal} · 신뢰도 {selected.confidence}
+          </div>
+
+          <div className="mt-2 rounded-lg border border-zinc-200 bg-white/92 p-2 shadow-sm">
+            <p className="mb-2 text-[11px] font-semibold text-zinc-500">추천 실행 시나리오</p>
+            <div className="flex flex-wrap gap-1.5">
+              {selected.scenarios.map((scenario) => (
+                <button
+                  key={scenario}
+                  type="button"
+                  onClick={() => onScenarioChange(scenario)}
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-[11px] font-semibold",
+                    selectedScenario === scenario
+                      ? "border-zinc-900 bg-zinc-950 text-white"
+                      : "border-amber-200 bg-amber-50 text-amber-800"
+                  )}
+                >
+                  {scenario}
+                </button>
+              ))}
+            </div>
+            <Button asChild className="mt-2 h-8 w-full rounded-md bg-zinc-950 text-xs text-white">
+              <Link href="/analysis">정밀 분석 실행</Link>
+            </Button>
+          </div>
         </div>
       )}
-      <div className="absolute bottom-5 left-5 z-10 rounded-lg border border-white/70 bg-white/88 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
-        {message}
-      </div>
+
+      {mockFeatures.map((feature) => {
+        if (!savedIds.includes(feature.id)) return null
+        return (
+          <div
+            key={feature.id}
+            data-map-overlay
+            className="pointer-events-none absolute right-5 top-[calc(76px+var(--offset))] z-10 rounded-lg border border-emerald-200 bg-white/82 px-3 py-2 text-[11px] font-semibold text-emerald-800 shadow-sm backdrop-blur"
+            style={{ "--offset": `${mockFeatures.findIndex((item) => item.id === feature.id) * 40}px` } as CSSProperties}
+          >
+            저장 후보 · {feature.district}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1322,7 +1175,7 @@ function StatusDrawer({
   isSaved,
   onScenarioChange,
 }: {
-  selected: BuildingSignal
+  selected: MapFeature
   selectedScenario: string
   isSaved: boolean
   onScenarioChange: (scenario: string) => void
@@ -1338,11 +1191,11 @@ function StatusDrawer({
           <h2 className="mt-0.5 text-base font-semibold leading-tight">{selected.address}</h2>
         </div>
         <Badge className={cn("rounded-md border px-2 py-1 text-xs", statusBadge(selected.status).className)}>
-          {statusBadge(selected.status).label} · {selected.lastChecked} · {isSaved ? "저장됨" : "미저장"}
+          {statusBadge(selected.status).label} · {selected.sourceUpdatedAt} · {isSaved ? "저장됨" : "미저장"}
         </Badge>
       </div>
 
-      <div className="grid flex-1 min-h-0 gap-2">
+      <div className="grid min-h-0 flex-1 gap-2">
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
           <CoreMetric icon={ShieldCheck} label="Bank" value={`${selected.bankability}`} />
           <CoreMetric icon={Activity} label="Ready" value={`${selected.readiness}`} />
@@ -1356,21 +1209,21 @@ function StatusDrawer({
           <div className="rounded-lg border border-zinc-200 bg-white/90 p-2.5">
             <div className="mb-2 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-amber-600" />
-              <h3 className="text-sm font-semibold">딜 판단 핵심</h3>
+              <h3 className="text-sm font-semibold">딜 스냅샷</h3>
             </div>
             <div className="grid grid-cols-3 gap-2 text-sm">
               <CompactFact label="희망가" value={selected.price} />
               <CompactFact label="적정가" value={selected.maxPurchasePrice} />
               <CompactFact label="월 이자" value={selected.interest} />
             </div>
-            <div className={cn("mt-2 rounded-lg border px-2.5 py-2", signalTone(selected.redevelopmentSignal))}>
+            <div className={cn("mt-2 rounded-lg border px-2.5 py-2", signalTone(selected.signalStrength))}>
               <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-semibold">{selected.redevelopment}</span>
+                <span className="font-semibold">{selected.locationSignal}</span>
                 <span>신뢰도 {selected.confidence}</span>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-2 text-xs">
-              <span className="mr-1 text-zinc-500">추천 진행안</span>
+              <span className="mr-1 text-zinc-500">추천 진행</span>
               {selected.scenarios.map((scenario) => (
                 <button
                   key={scenario}
@@ -1425,30 +1278,7 @@ function StatusDrawer({
   )
 }
 
-function FilterChip({ label, active = false }: { label: string; active?: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex h-8 items-center justify-center rounded-lg border px-2 text-center text-[11px] font-semibold",
-        active
-          ? "border-zinc-900 bg-zinc-950 text-white"
-          : "border-zinc-200 bg-white text-zinc-500"
-      )}
-    >
-      {label}
-    </span>
-  )
-}
-
-function PromptChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
+function PromptChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -1465,15 +1295,7 @@ function PromptChip({
   )
 }
 
-function CoreMetric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Activity
-  label: string
-  value: string
-}) {
+function CoreMetric({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5">
       <div className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
@@ -1485,28 +1307,20 @@ function CoreMetric({
   )
 }
 
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
+      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold text-zinc-950">{value}</p>
+    </div>
+  )
+}
+
 function CompactFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-zinc-200 bg-white/90 px-2 py-1.5">
       <p className="text-[10px] font-medium text-zinc-500">{label}</p>
       <p className="mt-0.5 truncate text-xs font-semibold text-zinc-950">{value}</p>
-    </div>
-  )
-}
-
-function Metric({
-  label,
-  value,
-  small = false,
-}: {
-  label: string
-  value: string
-  small?: boolean
-}) {
-  return (
-    <div className={cn("rounded-lg border border-zinc-200 bg-white", small ? "px-2 py-2" : "px-3 py-2")}>
-      <p className="text-[11px] font-medium text-zinc-500">{label}</p>
-      <p className={cn("mt-1 font-semibold text-zinc-950", small ? "text-sm" : "text-sm")}>{value}</p>
     </div>
   )
 }
