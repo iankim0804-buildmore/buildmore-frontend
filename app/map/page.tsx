@@ -388,6 +388,20 @@ function mockLlmAnswer(selected: MapFeature, prompt: PromptKey) {
   return `${selected.address}의 Bankability는 ${selected.bankability}점입니다. 핵심 근거는 DSCR ${selected.dscr}, LTV ${selected.ltv}, NOI ${selected.noi}, cap rate ${selected.capRate}이며 추천 시나리오는 ${selected.scenarios.join(" / ")}입니다.`
 }
 
+function stringList(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback
+  const items = value.map((item) => String(item)).filter(Boolean)
+  return items.length ? items : fallback
+}
+
+function dataStatus(value: unknown, fallback: DataStatus): DataStatus {
+  return value === "ready" || value === "partial" || value === "queued" ? value : fallback
+}
+
+function signalStrength(value: unknown, fallback: MapFeature["signalStrength"]): MapFeature["signalStrength"] {
+  return value === "strong" || value === "medium" || value === "watch" ? value : fallback
+}
+
 function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
   const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id) ?? mockFeatures[0]
   const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
@@ -405,16 +419,28 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
       lat: Number(coordinates?.lat ?? payload.lat ?? fallback.coordinates.lat),
       lng: Number(coordinates?.lng ?? payload.lng ?? fallback.coordinates.lng),
     },
+    price: String(payload.price ?? fallback.price),
+    area: String(payload.area ?? fallback.area),
+    approvalYear: Number(payload.approval_year ?? payload.approvalYear ?? fallback.approvalYear),
     bankability: Number(payload.bankability ?? payload.bankability_score ?? fallback.bankability),
     readiness: Number(payload.readiness ?? payload.deal_readiness_score ?? fallback.readiness),
     capRate: String(payload.cap_rate ?? fallback.capRate),
     dscr: String(payload.dscr ?? fallback.dscr),
     ltv: String(payload.ltv ?? fallback.ltv),
     noi: String(payload.noi ?? fallback.noi),
+    equity: String(payload.equity ?? fallback.equity),
+    interest: String(payload.interest ?? fallback.interest),
+    maxPurchasePrice: String(payload.max_purchase_price ?? payload.maxPurchasePrice ?? fallback.maxPurchasePrice),
+    locationSignal: String(payload.location_signal ?? payload.locationSignal ?? fallback.locationSignal),
+    signalStrength: signalStrength(payload.signal_strength ?? payload.signalStrength, fallback.signalStrength),
+    hiddenYield: String(payload.hidden_yield ?? payload.hiddenYield ?? fallback.hiddenYield),
     confidence: String(payload.confidence ?? payload.source_confidence ?? fallback.confidence),
     sourceUpdatedAt: String(payload.source_updated_at ?? fallback.sourceUpdatedAt),
-    status: (payload.status as DataStatus) ?? "partial",
+    status: dataStatus(payload.status, "partial"),
     geometry: geometry?.type && geometry.coordinates ? geometry : fallback.geometry,
+    risks: stringList(payload.risks, fallback.risks),
+    nextActions: stringList(payload.next_actions ?? payload.nextActions, fallback.nextActions),
+    scenarios: stringList(payload.scenarios, fallback.scenarios),
   }
 }
 
@@ -481,7 +507,11 @@ export default function MapPage() {
       const response = await fetch(`/api/map/features/${encodeURIComponent(featureId)}/summary`, { cache: "no-store" })
       if (!response.ok) return
       const payload = await response.json()
-      applySelected(featureFromSummary(featureId, payload))
+      const enriched = featureFromSummary(featureId, payload)
+      setMapFeatures((current) =>
+        current.map((feature) => (feature.id === enriched.id || feature.featureId === enriched.featureId ? enriched : feature))
+      )
+      applySelected(enriched)
     } catch {
       applySelected({
         ...fallback,
@@ -541,7 +571,7 @@ export default function MapPage() {
         if (liveFeatures.length) {
           setMapFeatures(liveFeatures)
           if (selected.featureId.startsWith("parcel-mapo-")) {
-            applySelected(liveFeatures[0])
+            void loadFeatureSummary(liveFeatures[0].featureId, livePayloads[0])
           }
         }
 
@@ -559,7 +589,7 @@ export default function MapPage() {
 
     loadBboxSignals()
     return () => controller.abort()
-  }, [applySelected, mapViewport, selected.featureId])
+  }, [loadFeatureSummary, mapViewport, selected.featureId])
 
   return (
     <main className="min-h-screen bg-[#e7ece4] text-zinc-950">
