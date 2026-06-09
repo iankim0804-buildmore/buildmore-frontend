@@ -51,6 +51,7 @@ type MapFeature = {
   coordinates: { lat: number; lng: number }
   price: string
   area: string
+  areaM2?: number
   approvalYear: number
   bankability: number
   readiness: number
@@ -114,7 +115,7 @@ const layerLabels: Record<LayerKey, string> = {
   useClass: "용도/입지색",
   transactions: "실거래",
   regulations: "규제/정비",
-  anchorPoi: "앵커 POI",
+  anchorPoi: "점수 음영",
 }
 
 const promptLabels: Record<PromptKey, string> = {
@@ -129,8 +130,14 @@ const layerColors: Record<LayerKey, string> = {
   useClass: "bg-emerald-500",
   transactions: "bg-sky-500",
   regulations: "bg-amber-500",
-  anchorPoi: "bg-rose-500",
+  anchorPoi: "bg-violet-500",
 }
+
+const scoreShadeLegend = [
+  { label: "70+ 대출 우호", color: "bg-emerald-500" },
+  { label: "65-69 검토", color: "bg-amber-500" },
+  { label: "64 이하 관찰", color: "bg-violet-500" },
+]
 
 const mockFeatures: MapFeature[] = [
   {
@@ -248,6 +255,7 @@ function fallbackStyle(): StyleSpecification {
         type: "raster",
         tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
         tileSize: 256,
+        maxzoom: 19,
         attribution: "OpenStreetMap",
       },
     },
@@ -260,9 +268,29 @@ function fallbackStyle(): StyleSpecification {
           "raster-saturation": -0.45,
           "raster-contrast": -0.1,
           "raster-opacity": 0.84,
+          "raster-resampling": "linear",
         },
       },
     ],
+  }
+}
+
+function normalizeBaseStyle(style: StyleSpecification): StyleSpecification {
+  return {
+    ...style,
+    layers: style.layers.map((layer) => {
+      if (layer.type !== "raster") return layer
+      return {
+        ...layer,
+        paint: {
+          ...(layer.paint ?? {}),
+          "raster-saturation": -0.48,
+          "raster-contrast": -0.14,
+          "raster-opacity": 0.8,
+          "raster-resampling": "linear",
+        },
+      }
+    }) as StyleSpecification["layers"],
   }
 }
 
@@ -291,33 +319,15 @@ function mockParcelsGeojson(features: MapFeature[] = mockFeatures) {
         pnu: feature.pnu,
         address: feature.address,
         buildmore_class: feature.use,
+        bankability: feature.bankability,
+        readiness: feature.readiness,
+        signal_strength: feature.signalStrength,
         confidence: feature.confidence,
+        shade_excluded: shouldExcludeScoreShade(feature),
       },
       geometry: feature.geometry ?? {
         type: "Polygon",
         coordinates: createParcelCoordinates(feature),
-      },
-    })),
-  }
-}
-
-function mockBuildingsGeojson(features: MapFeature[] = mockFeatures) {
-  return {
-    type: "FeatureCollection",
-    features: features.map((feature) => ({
-      type: "Feature",
-      properties: {
-        buildingId: feature.id,
-        feature_id: feature.featureId,
-        pnu: feature.pnu,
-        address: feature.address,
-        bankability: feature.bankability,
-        readiness: feature.readiness,
-        buildmore_class: feature.use,
-      },
-      geometry: {
-        type: "Point",
-        coordinates: [feature.coordinates.lng, feature.coordinates.lat],
       },
     })),
   }
@@ -402,6 +412,15 @@ function signalStrength(value: unknown, fallback: MapFeature["signalStrength"]):
   return value === "strong" || value === "medium" || value === "watch" ? value : fallback
 }
 
+function isRoadLikeFeature(feature: Pick<MapFeature, "use" | "address" | "district">) {
+  const text = `${feature.use} ${feature.address} ${feature.district}`
+  return /도로|구거|하천|제방|철도|road/i.test(text)
+}
+
+function shouldExcludeScoreShade(feature: Pick<MapFeature, "use" | "address" | "district" | "areaM2">) {
+  return isRoadLikeFeature(feature) || Boolean(feature.areaM2 && feature.areaM2 > 5000)
+}
+
 function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
   const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id) ?? mockFeatures[0]
   const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
@@ -414,13 +433,14 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
     pnu: String(payload.pnu ?? fallback.pnu),
     address: String(payload.address ?? fallback.address),
     district: String(payload.district ?? payload.location_label ?? fallback.district),
-    use: String(payload.use ?? payload.main_use ?? fallback.use),
+    use: String(payload.use ?? payload.main_use ?? payload.land_category ?? payload.jimok ?? fallback.use),
     coordinates: {
       lat: Number(coordinates?.lat ?? payload.lat ?? fallback.coordinates.lat),
       lng: Number(coordinates?.lng ?? payload.lng ?? fallback.coordinates.lng),
     },
     price: String(payload.price ?? fallback.price),
     area: String(payload.area ?? fallback.area),
+    areaM2: Number(payload.area_m2 ?? payload.areaM2 ?? fallback.areaM2 ?? 0) || undefined,
     approvalYear: Number(payload.approval_year ?? payload.approvalYear ?? fallback.approvalYear),
     bankability: Number(payload.bankability ?? payload.bankability_score ?? fallback.bankability),
     readiness: Number(payload.readiness ?? payload.deal_readiness_score ?? fallback.readiness),
@@ -571,7 +591,8 @@ export default function MapPage() {
         if (liveFeatures.length) {
           setMapFeatures(liveFeatures)
           if (selected.featureId.startsWith("parcel-mapo-")) {
-            void loadFeatureSummary(liveFeatures[0].featureId, livePayloads[0])
+            const defaultFeatureIndex = Math.max(0, liveFeatures.findIndex((feature) => !shouldExcludeScoreShade(feature)))
+            void loadFeatureSummary(liveFeatures[defaultFeatureIndex].featureId, livePayloads[defaultFeatureIndex])
           }
         }
 
@@ -736,7 +757,12 @@ export default function MapPage() {
         </div>
 
         {filterOpen && (
-          <div className="absolute right-4 top-4 z-30 w-[calc(100%-2rem)] max-w-sm rounded-lg border border-white/80 bg-white/85 p-4 shadow-2xl backdrop-blur-md md:right-5 md:top-5">
+          <div
+            className={cn(
+              "absolute right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-lg border border-white/80 bg-white/88 p-4 shadow-2xl backdrop-blur-md md:top-5",
+              statusOpen ? "md:right-[460px]" : "md:right-5"
+            )}
+          >
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">MapLibre layers</p>
@@ -763,6 +789,23 @@ export default function MapPage() {
                   </span>
                 </button>
               ))}
+            </div>
+            <div className="mt-3 rounded-lg border border-zinc-200 bg-white/90 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-zinc-800">점수 음영 범례</p>
+                <span className="text-[10px] font-medium text-zinc-500">비건물성 제외</span>
+              </div>
+              <div className="space-y-1.5">
+                {scoreShadeLegend.map((item) => (
+                  <div key={item.label} className="flex items-center gap-2 text-[11px] font-medium text-zinc-600">
+                    <span className={cn("h-3 w-6 rounded-sm opacity-55", item.color)} />
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                필지 polygon에 약한 음영으로 표시하며, 도로·구거·하천·철도성 지목과 대형 비건물성 polygon은 제외합니다.
+              </p>
             </div>
           </div>
         )}
@@ -922,12 +965,12 @@ function MapSurface({
     const createMap = async () => {
       registerPmtilesProtocol()
 
-      let style: string | StyleSpecification = fallbackStyle()
+      let style: string | StyleSpecification = normalizeBaseStyle(fallbackStyle())
       if (config.styleUrl) {
         try {
           const response = await fetch(config.styleUrl, { cache: "no-store" })
           if (response.ok) {
-            style = (await response.json()) as StyleSpecification
+            style = normalizeBaseStyle((await response.json()) as StyleSpecification)
             setMessage(`R2 style 로드 · ${config.tilesetVersion}`)
           } else {
             setMessage(`R2 style ${response.status} · fallback style`)
@@ -961,9 +1004,6 @@ function MapSurface({
         if (!map.getSource("bm-mock-parcels")) {
           map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
         }
-        if (!map.getSource("bm-mock-buildings")) {
-          map.addSource("bm-mock-buildings", { type: "geojson", data: mockBuildingsGeojson(featuresRef.current) })
-        }
         if (!map.getSource("bm-mock-transactions")) {
           map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
         }
@@ -975,19 +1015,21 @@ function MapSurface({
           id: "bm-parcels-fill",
           type: "fill",
           source: "bm-mock-parcels",
+          filter: ["!=", ["get", "shade_excluded"], true],
           paint: {
-            "fill-color": "#16a34a",
-            "fill-opacity": 0.16,
+            "fill-color": "#475569",
+            "fill-opacity": 0.05,
           },
         })
         map.addLayer({
           id: "bm-parcels-outline",
           type: "line",
           source: "bm-mock-parcels",
+          filter: ["!=", ["get", "shade_excluded"], true],
           paint: {
             "line-color": "#14532d",
-            "line-width": 1.4,
-            "line-opacity": 0.8,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.55, 17, 1.15, 19, 1.35],
+            "line-opacity": 0.62,
           },
         })
         map.addLayer({
@@ -995,9 +1037,31 @@ function MapSurface({
           type: "fill",
           source: "bm-mock-parcels",
           minzoom: 12,
+          filter: ["!=", ["get", "shade_excluded"], true],
           paint: {
             "fill-color": ["match", ["get", "buildmore_class"], "상업/업무", "#38bdf8", "근린생활시설", "#34d399", "#f59e0b"],
             "fill-opacity": 0.22,
+          },
+        })
+        map.addLayer({
+          id: "bm-score-shade-fill",
+          type: "fill",
+          source: "bm-mock-parcels",
+          filter: ["!=", ["get", "shade_excluded"], true],
+          paint: {
+            "fill-color": ["case", [">=", ["get", "bankability"], 70], "#22c55e", [">=", ["get", "bankability"], 65], "#f59e0b", "#8b5cf6"],
+            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 12, 0.08, 15, 0.14, 18, 0.2],
+          },
+        })
+        map.addLayer({
+          id: "bm-score-shade-line",
+          type: "line",
+          source: "bm-mock-parcels",
+          filter: ["!=", ["get", "shade_excluded"], true],
+          paint: {
+            "line-color": ["case", [">=", ["get", "bankability"], 70], "#16a34a", [">=", ["get", "bankability"], 65], "#d97706", "#7c3aed"],
+            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.35, 17, 0.8, 19, 1],
+            "line-opacity": 0.42,
           },
         })
         map.addLayer({
@@ -1006,36 +1070,10 @@ function MapSurface({
           source: "bm-mock-transactions",
           paint: {
             "circle-color": "#0ea5e9",
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 9],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 16, 6, 19, 6.5],
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 1.4,
-            "circle-opacity": 0.9,
-          },
-        })
-        map.addLayer({
-          id: "bm-buildings-circle",
-          type: "circle",
-          source: "bm-mock-buildings",
-          paint: {
-            "circle-color": ["case", [">=", ["get", "bankability"], 70], "#22c55e", [">=", ["get", "bankability"], 65], "#f59e0b", "#8b5cf6"],
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 14],
-            "circle-stroke-color": "#18181b",
-            "circle-stroke-width": 1.2,
-            "circle-opacity": 0.94,
-          },
-        })
-        map.addLayer({
-          id: "bm-buildings-label",
-          type: "symbol",
-          source: "bm-mock-buildings",
-          minzoom: 14,
-          layout: {
-            "text-field": ["get", "bankability"],
-            "text-font": ["Noto Sans Regular"],
-            "text-size": 11,
-          },
-          paint: {
-            "text-color": "#ffffff",
+            "circle-opacity": 0.72,
           },
         })
         map.addLayer({
@@ -1075,7 +1113,7 @@ function MapSurface({
       window.addEventListener("resize", handleWindowResize)
 
       map.on("click", (event) => {
-        const layers = ["bm-buildings-circle", "bm-parcels-fill", "bm-use-class-fill"].filter((layerId) => map.getLayer(layerId))
+        const layers = ["bm-score-shade-fill", "bm-parcels-fill", "bm-use-class-fill"].filter((layerId) => map.getLayer(layerId))
         const features = map.queryRenderedFeatures(event.point, { layers })
         const feature = features[0]
 
@@ -1120,9 +1158,7 @@ function MapSurface({
     const map = mapInstanceRef.current
     if (!map?.isStyleLoaded()) return
     const parcelsSource = map.getSource("bm-mock-parcels") as maplibregl.GeoJSONSource | undefined
-    const buildingsSource = map.getSource("bm-mock-buildings") as maplibregl.GeoJSONSource | undefined
     parcelsSource?.setData(mockParcelsGeojson(features) as never)
-    buildingsSource?.setData(mockBuildingsGeojson(features) as never)
   }, [features])
 
   useEffect(() => {
@@ -1134,8 +1170,8 @@ function MapSurface({
       ["bm-parcels-outline", activeLayers.parcels],
       ["bm-use-class-fill", activeLayers.useClass],
       ["bm-transaction-circle", activeLayers.transactions],
-      ["bm-buildings-circle", activeLayers.anchorPoi],
-      ["bm-buildings-label", activeLayers.anchorPoi],
+      ["bm-score-shade-fill", activeLayers.anchorPoi],
+      ["bm-score-shade-line", activeLayers.anchorPoi],
     ]
 
     visibilityByLayer.forEach(([layerId, visible]) => {
