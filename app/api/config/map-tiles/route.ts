@@ -1,5 +1,5 @@
 export async function GET() {
-  const fallbackTilesBaseUrl = "https://pub-637cdf3d7c8b4f34a9fa470b10a9c34c.r2.dev"
+  const fallbackTilesBaseUrl = "https://tiles.buildmore.co.kr"
   const tilesBaseUrl =
     process.env.NEXT_PUBLIC_MAP_TILES_BASE_URL?.replace(/\/+$/, "") || fallbackTilesBaseUrl
   const styleUrl =
@@ -10,7 +10,7 @@ export async function GET() {
     engine: process.env.NEXT_PUBLIC_MAP_ENGINE || "maplibre",
     tilesBaseUrl,
     styleUrl,
-    tilesetVersion: process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-dev",
+    tilesetVersion: process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-custom-domain",
     defaultCenter: [126.978, 37.5665],
     defaultZoom: 12,
     minZoom: 9,
