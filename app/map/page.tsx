@@ -656,7 +656,7 @@ export default function MapPage() {
           selected={selected}
           features={mapFeatures}
           selectedScenario={selectedScenario}
-          capsuleOpen={capsuleOpen}
+          capsuleOpen={capsuleOpen && !statusOpen}
           savedIds={savedIds}
           onScenarioChange={setSelectedScenario}
           onSelect={selectFeatureById}
@@ -666,12 +666,7 @@ export default function MapPage() {
           onViewportChange={handleViewportChange}
         />
 
-        <div
-          className={cn(
-            "absolute left-4 top-4 z-30 flex w-[calc(100%-2rem)] max-w-[400px] flex-col rounded-lg border border-white/80 bg-white/78 shadow-2xl backdrop-blur-md transition-[bottom] duration-300 md:left-5 md:top-5",
-            statusOpen ? "bottom-[calc(33vh+1.25rem)]" : "bottom-5"
-          )}
-        >
+        <div className="absolute bottom-5 left-4 top-4 z-30 flex w-[calc(100%-2rem)] max-w-[400px] flex-col rounded-lg border border-white/80 bg-white/78 shadow-2xl backdrop-blur-md md:left-5 md:top-5">
           <div className="flex items-center justify-between border-b border-white/60 px-4 py-3">
             <div className="flex items-center gap-2">
               <MessageSquareText className="h-4 w-4 text-zinc-700" />
@@ -776,25 +771,29 @@ export default function MapPage() {
           bbox API: {bboxApi.status} · 줌 {mapViewport?.zoom.toFixed(1) ?? "-"} · 후보 {bboxApi.count}건 · {bboxApi.source}
         </div>
 
-        <div
-          className={cn(
-            "absolute inset-x-0 bottom-0 z-30 h-[33vh] min-h-[250px] translate-y-[calc(100%-46px)] rounded-t-xl border-t border-white/80 bg-white/88 shadow-2xl backdrop-blur-md transition-transform duration-300",
-            statusOpen && "translate-y-0"
-          )}
-        >
+        {!statusOpen && (
           <button
             type="button"
-            onClick={() => setStatusOpen((open) => !open)}
-            className="mx-auto flex h-11 w-full max-w-7xl items-center justify-center gap-2 px-5 text-xs font-semibold text-zinc-600"
+            onClick={() => setStatusOpen(true)}
+            className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-xl backdrop-blur transition hover:bg-white"
           >
-            <span className="h-1.5 w-12 rounded-full bg-zinc-300" />
-            선택 필지 상태창
+            <Building2 className="h-3.5 w-3.5" />
+            상태창
           </button>
+        )}
+
+        <div
+          className={cn(
+            "absolute bottom-4 right-4 top-4 z-40 flex w-[calc(100%-2rem)] max-w-[430px] translate-x-[calc(100%+1.5rem)] flex-col rounded-xl border border-white/80 bg-white/90 shadow-2xl backdrop-blur-md transition-transform duration-300 md:bottom-5 md:right-5 md:top-5",
+            statusOpen ? "translate-x-0" : "pointer-events-none"
+          )}
+        >
           <StatusDrawer
             selected={selected}
             selectedScenario={selectedScenario}
             isSaved={isSaved}
             onScenarioChange={setSelectedScenario}
+            onClose={() => setStatusOpen(false)}
           />
         </div>
       </section>
@@ -1264,29 +1263,38 @@ function StatusDrawer({
   selectedScenario,
   isSaved,
   onScenarioChange,
+  onClose,
 }: {
   selected: MapFeature
   selectedScenario: string
   isSaved: boolean
   onScenarioChange: (scenario: string) => void
+  onClose: () => void
 }) {
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden px-3 py-3 lg:px-5">
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-zinc-200/80 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-zinc-500" />
-            <p className="text-xs font-medium text-zinc-500">{selected.district}</p>
+            <Building2 className="h-4 w-4 shrink-0 text-zinc-500" />
+            <p className="truncate text-xs font-medium text-zinc-500">{selected.district}</p>
           </div>
           <h2 className="mt-0.5 text-base font-semibold leading-tight">{selected.address}</h2>
         </div>
+        <div className="flex shrink-0 items-start gap-2">
         <Badge className={cn("rounded-md border px-2 py-1 text-xs", statusBadge(selected.status).className)}>
           {statusBadge(selected.status).label} · {selected.sourceUpdatedAt} · {isSaved ? "저장됨" : "미저장"}
         </Badge>
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+        </div>
+      </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-2">
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+        <div className="grid grid-cols-2 gap-2">
           <CoreMetric icon={ShieldCheck} label="Bank" value={`${selected.bankability}`} />
           <CoreMetric icon={Activity} label="Ready" value={`${selected.readiness}`} />
           <CoreMetric icon={BarChart3} label="NOI" value={selected.noi} />
@@ -1295,8 +1303,8 @@ function StatusDrawer({
           <CoreMetric icon={Database} label="DSCR/LTV" value={`${selected.dscr}/${selected.ltv}`} />
         </div>
 
-        <div className="grid min-h-0 gap-2 md:grid-cols-[1.2fr_1fr_1fr]">
-          <div className="rounded-lg border border-zinc-200 bg-white/90 p-2.5">
+        <div className="grid gap-3">
+          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
             <div className="mb-2 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-amber-600" />
               <h3 className="text-sm font-semibold">딜 스냅샷</h3>
@@ -1312,7 +1320,7 @@ function StatusDrawer({
                 <span>신뢰도 {selected.confidence}</span>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-2 text-xs">
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-2 text-xs">
               <span className="mr-1 text-zinc-500">추천 진행</span>
               {selected.scenarios.map((scenario) => (
                 <button
@@ -1332,7 +1340,7 @@ function StatusDrawer({
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-white/90 p-2.5">
+          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
             <div className="mb-2 flex items-center gap-2">
               <TriangleAlert className="h-4 w-4 text-rose-600" />
               <h3 className="text-sm font-semibold">리스크</h3>
@@ -1346,13 +1354,13 @@ function StatusDrawer({
             </div>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-white/90 p-2.5">
+          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
             <div className="mb-2 flex items-center gap-2">
               <FileText className="h-4 w-4 text-sky-600" />
               <h3 className="text-sm font-semibold">다음 액션</h3>
             </div>
             <div className="space-y-1.5 text-xs text-zinc-700">
-              {selected.nextActions.slice(0, 2).map((action, index) => (
+              {selected.nextActions.slice(0, 3).map((action, index) => (
                 <div key={action} className="flex items-center gap-2 rounded-md bg-zinc-50/90 px-2.5 py-1.5">
                   <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">
                     {index + 1}
