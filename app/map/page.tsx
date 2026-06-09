@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import "maplibre-gl/dist/maplibre-gl.css"
 
@@ -111,7 +111,7 @@ const selectedSourceId = "bm-selected-feature"
 let pmtilesProtocolRegistered = false
 
 const vworldTileProxyBaseUrl = (
-  process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "https://www.buildmore.co.kr/api/map/vworld/base"
+  process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "https://api.buildmore.co.kr/api/vworld/wmts/base"
 ).replace(/\/+$/, "")
 const vworldBaseTiles = [`${vworldTileProxyBaseUrl}/{z}/{y}/{x}.png`]
 
