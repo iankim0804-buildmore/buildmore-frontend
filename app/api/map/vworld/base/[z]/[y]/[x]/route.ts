@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const VWORLD_WMTS_BASE = "https://api.vworld.kr/req/wmts/1.0.0"
+const VWORLD_WMTS_BASE = "http://api.vworld.kr/req/wmts/1.0.0"
 const OSM_TILE_BASE = "https://tile.openstreetmap.org"
+const BACKEND_WMTS_PROXY_BASE = "https://api.buildmore.co.kr/api/vworld/wmts/base"
 const DEFAULT_REFERER = "https://buildmore.co.kr"
 const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ax2n1sAAAAASUVORK5CYII=",
@@ -27,6 +28,28 @@ function tileResponse(body: BodyInit, status: number, contentType = "image/png")
   })
 }
 
+async function fetchTile(upstreamUrl: string, referer: string) {
+  const response = await fetch(upstreamUrl, {
+    headers: {
+      Accept: "image/png,image/*,*/*",
+      Origin: referer,
+      Referer: referer,
+      "User-Agent": "BuildMore/1.0",
+    },
+    next: { revalidate: 86400 },
+  })
+
+  if (!response.ok) return null
+
+  const body = await response.arrayBuffer()
+  if (!body.byteLength) return null
+
+  return {
+    body,
+    contentType: response.headers.get("content-type") || "image/png",
+  }
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ z: string; y: string; x: string }> }
@@ -46,25 +69,21 @@ export async function GET(
   const upstreamUrl = apiKey
     ? `${VWORLD_WMTS_BASE}/${encodeURIComponent(apiKey)}/Base/${zoom}/${tileY}/${tileX}.png`
     : `${OSM_TILE_BASE}/${zoom}/${tileX}/${tileY}.png`
+  const backendProxyUrl = `${BACKEND_WMTS_PROXY_BASE}/${zoom}/${tileY}/${tileX}.png`
 
   try {
-    const response = await fetch(upstreamUrl, {
-      headers: {
-        Accept: "image/png,image/*,*/*",
-        Origin: referer,
-        Referer: referer,
-        "User-Agent": "BuildMore/1.0",
-      },
-      next: { revalidate: 86400 },
-    })
-
-    if (!response.ok) return tileResponse(TRANSPARENT_PNG, response.status)
-
-    const body = await response.arrayBuffer()
-    const contentType = response.headers.get("content-type") || "image/png"
-    return tileResponse(body, 200, contentType)
+    const directTile = await fetchTile(upstreamUrl, referer)
+    if (directTile) return tileResponse(directTile.body, 200, directTile.contentType)
   } catch (error) {
     console.error("[api/map/vworld/base] WMTS proxy error:", error)
-    return tileResponse(TRANSPARENT_PNG, 502)
   }
+
+  try {
+    const backendTile = await fetchTile(backendProxyUrl, referer)
+    if (backendTile) return tileResponse(backendTile.body, 200, backendTile.contentType)
+  } catch (error) {
+    console.error("[api/map/vworld/base] backend WMTS fallback error:", error)
+  }
+
+  return tileResponse(TRANSPARENT_PNG, 502)
 }

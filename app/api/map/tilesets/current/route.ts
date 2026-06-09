@@ -1,6 +1,7 @@
-const fallbackTilesBaseUrl = "https://pub-637cdf3d7c8b4f34a9fa470b10a9c34c.r2.dev"
-const tilesBaseUrl = process.env.NEXT_PUBLIC_MAP_TILES_BASE_URL?.replace(/\/+$/, "") || fallbackTilesBaseUrl
-const tilesetVersion = process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-dev"
+const tilesBaseUrl = (
+  process.env.NEXT_PUBLIC_MAP_TILES_BASE_URL || "https://tiles.buildmore.co.kr"
+).replace(/\/+$/, "")
+const tilesetVersion = process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-custom-domain"
 const styleUrl =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ||
   (tilesBaseUrl ? `${tilesBaseUrl}/styles/buildmore-map-v1.json` : "")

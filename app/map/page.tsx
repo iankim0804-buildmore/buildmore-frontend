@@ -111,7 +111,7 @@ const selectedSourceId = "bm-selected-feature"
 let pmtilesProtocolRegistered = false
 
 const vworldTileProxyBaseUrl = (
-  process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "https://api.buildmore.co.kr/api/vworld/wmts/base"
+  process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
 ).replace(/\/+$/, "")
 const vworldBaseTiles = [`${vworldTileProxyBaseUrl}/{z}/{y}/{x}.png`]
 
@@ -253,6 +253,13 @@ function fallbackStyle(): StyleSpecification {
         maxzoom: 19,
         attribution: "VWorld",
       },
+      "buildmore-parcels": {
+        type: "vector",
+        tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
+        minzoom: 13,
+        maxzoom: 17,
+        attribution: "BuildMore PostGIS/VWorld",
+      },
     },
     layers: [
       {
@@ -264,6 +271,18 @@ function fallbackStyle(): StyleSpecification {
           "raster-contrast": -0.05,
           "raster-opacity": 0.92,
           "raster-resampling": "linear",
+        },
+      },
+      {
+        id: "buildmore-parcels-line",
+        type: "line",
+        source: "buildmore-parcels",
+        "source-layer": "parcels",
+        minzoom: 13,
+        paint: {
+          "line-color": "#334155",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.25, 16, 0.45, 17, 0.7],
+          "line-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.22, 16, 0.34, 17, 0.46],
         },
       },
     ],
