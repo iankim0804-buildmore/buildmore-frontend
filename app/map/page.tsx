@@ -28,9 +28,9 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 type DataStatus = "ready" | "partial" | "queued"
-type LayerKey = "parcels" | "stores" | "storeZones" | "transactions" | "regulations"
+type LayerKey = "transactions" | "regulations"
 type ViewMode = "map" | "roadview"
-type PanelSection = "land" | "building" | "analysis"
+type PanelSection = "transactions" | "land" | "building" | "analysis"
 
 type MapGeometry = {
   type: string
@@ -124,11 +124,28 @@ type ApiState = {
   source: string
 }
 
-type StoreApiState = {
+type MapLayerApiState = {
   status: "idle" | "loading" | "ready" | "error"
-  storeCount: number
-  zoneCount: number
+  count: number
   source: string
+}
+
+type TransactionItem = {
+  id?: string | number | null
+  transaction_id?: string | number | null
+  pnu?: string | null
+  address?: string | null
+  building_name?: string | null
+  deal_date?: string | null
+  deal_date_label?: string | null
+  amount_10k?: number | null
+  amount_label?: string | null
+  arch_area_m2?: number | null
+  land_area_m2?: number | null
+  floor?: number | null
+  arch_year?: number | null
+  building_use?: string | null
+  deal_type?: string | null
 }
 
 type FeatureCollection = {
@@ -169,17 +186,11 @@ const emptyFeatureCollection: FeatureCollection = { type: "FeatureCollection", f
 let kakaoMapsPromise: Promise<typeof window.kakao.maps> | null = null
 
 const layerLabels: Record<LayerKey, string> = {
-  parcels: "필지/건물",
-  stores: "상가정보",
-  storeZones: "주요상권",
-  transactions: "실거래",
+  transactions: "부동산 실거래",
   regulations: "규제/정비",
 }
 
 const layerColors: Record<LayerKey, string> = {
-  parcels: "bg-sky-500",
-  stores: "bg-rose-500",
-  storeZones: "bg-emerald-500",
   transactions: "bg-indigo-500",
   regulations: "bg-amber-500",
 }
@@ -278,13 +289,6 @@ const mockFeatures: MapFeature[] = [
     nextActions: ["PNU 보강", "상권 반경 재조회", "현장 확인 후보 등록"],
     scenarios: ["리모델링", "신축"],
   },
-]
-
-const transactions = [
-  { label: "30.82억", date: "2022.07", coordinates: { lat: 37.5486, lng: 126.9108 } },
-  { label: "25.5억", date: "2017.09", coordinates: { lat: 37.5491, lng: 126.9137 } },
-  { label: "59.5억", date: "2022.06", coordinates: { lat: 37.5535, lng: 126.9068 } },
-  { label: "90억", date: "2024.11", coordinates: { lat: 37.552, lng: 126.9168 } },
 ]
 
 function createParcelCoordinates(feature: MapFeature): [number, number][][] {
@@ -496,24 +500,22 @@ function bboxFromKakaoMap(map: KakaoMapInstance) {
 
 export default function MapPage() {
   const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
-  const [activeSection, setActiveSection] = useState<PanelSection>("land")
+  const [activeSection, setActiveSection] = useState<PanelSection>("transactions")
   const [filterOpen, setFilterOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>("map")
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>(mockFeatures)
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
-  const [storeFeatures, setStoreFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
-  const [storeZoneFeatures, setStoreZoneFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
+  const [transactionFeatures, setTransactionFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
+  const [selectedTransactions, setSelectedTransactions] = useState<TransactionItem[]>([])
+  const [regulationFeatures, setRegulationFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
   const [bboxApi, setBboxApi] = useState<ApiState>({ status: "idle", count: mockFeatures.length, source: "idle" })
-  const [storeApi, setStoreApi] = useState<StoreApiState>({
+  const [transactionApi, setTransactionApi] = useState<MapLayerApiState>({
     status: "idle",
-    storeCount: 0,
-    zoneCount: 0,
+    count: 0,
     source: "idle",
   })
+  const [regulationApi, setRegulationApi] = useState<MapLayerApiState>({ status: "idle", count: 0, source: "idle" })
   const [activeLayers, setActiveLayers] = useState<Record<LayerKey, boolean>>({
-    parcels: true,
-    stores: true,
-    storeZones: true,
     transactions: true,
     regulations: true,
   })
@@ -547,40 +549,41 @@ export default function MapPage() {
     const loadViewportSignals = async () => {
       try {
         setBboxApi((current) => ({ ...current, status: "loading" }))
-        setStoreApi((current) => ({ ...current, status: "loading" }))
+        setTransactionApi((current) => ({ ...current, status: "loading" }))
+        setRegulationApi((current) => ({ ...current, status: "loading" }))
 
         const params = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           level: String(Math.round(mapViewport.zoom)),
           limit: "220",
         })
-        const storeParams = new URLSearchParams({
+        const transactionParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
-          limit: mapViewport.zoom >= 16 ? "900" : "350",
-          live: "auto",
+          pnu: selected.pnu,
+          limit: mapViewport.zoom >= 16 ? "180" : "90",
         })
-        const zoneParams = new URLSearchParams({
+        const regulationParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
-          limit: "80",
+          limit: "160",
         })
 
-        const [buildingResult, storesResult, zonesResult] = await Promise.allSettled([
+        const [buildingResult, transactionResult, regulationResult] = await Promise.allSettled([
           fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
-          fetch(`/api/map/stores?${storeParams.toString()}`, { signal: controller.signal }),
-          fetch(`/api/map/store-zones?${zoneParams.toString()}`, { signal: controller.signal }),
+          fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal }),
+          fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal }),
         ])
 
         const buildingResponse = buildingResult.status === "fulfilled" ? buildingResult.value : null
-        const storesResponse = storesResult.status === "fulfilled" ? storesResult.value : null
-        const zonesResponse = zonesResult.status === "fulfilled" ? zonesResult.value : null
+        const transactionResponse = transactionResult.status === "fulfilled" ? transactionResult.value : null
+        const regulationResponse = regulationResult.status === "fulfilled" ? regulationResult.value : null
         const buildingData = buildingResponse?.ok
           ? ((await buildingResponse.json()) as { count?: number; source?: string; buildings?: Array<Record<string, unknown>>; features?: Array<Record<string, unknown>> })
           : { count: mockFeatures.length, source: "local-map-features", buildings: [] }
-        const storesData = storesResponse?.ok
-          ? ((await storesResponse.json()) as FeatureCollection & { count?: number; source?: string })
+        const transactionData = transactionResponse?.ok
+          ? ((await transactionResponse.json()) as FeatureCollection & { count?: number; source?: string; items?: TransactionItem[] })
           : emptyFeatureCollection
-        const zonesData = zonesResponse?.ok
-          ? ((await zonesResponse.json()) as FeatureCollection & { count?: number; source?: string })
+        const regulationData = regulationResponse?.ok
+          ? ((await regulationResponse.json()) as FeatureCollection & { count?: number; source?: string })
           : emptyFeatureCollection
         const livePayloads = buildingData.buildings ?? buildingData.features ?? []
         const liveFeatures = livePayloads.map((item, index) =>
@@ -595,24 +598,30 @@ export default function MapPage() {
           count: buildingData.count ?? liveFeatures.length,
           source: buildingData.source ?? "map-building-signals",
         })
-        setStoreFeatures(storesData.features ? storesData : emptyFeatureCollection)
-        setStoreZoneFeatures(zonesData.features ? zonesData : emptyFeatureCollection)
-        setStoreApi({
-          status: "ready",
-          storeCount: Number(storesData.count ?? storesData.features?.length ?? 0),
-          zoneCount: Number(zonesData.count ?? zonesData.features?.length ?? 0),
-          source: [storesData.source, zonesData.source].filter(Boolean).join(" + ") || "store-layer",
+        setTransactionFeatures(transactionData.features ? transactionData : emptyFeatureCollection)
+        setSelectedTransactions((transactionData.items ?? []) as TransactionItem[])
+        setTransactionApi({
+          status: transactionResponse?.ok ? "ready" : "error",
+          count: Number(transactionData.count ?? transactionData.features?.length ?? 0),
+          source: transactionData.source ?? "commerce_seoul_transactions",
+        })
+        setRegulationFeatures(regulationData.features ? regulationData : emptyFeatureCollection)
+        setRegulationApi({
+          status: regulationResponse?.ok ? "ready" : "error",
+          count: Number(regulationData.count ?? regulationData.features?.length ?? 0),
+          source: regulationData.source ?? "map_redevelopment_zones",
         })
       } catch {
         if (controller.signal.aborted) return
         setBboxApi((current) => ({ ...current, status: "error" }))
-        setStoreApi((current) => ({ ...current, status: "error" }))
+        setTransactionApi((current) => ({ ...current, status: "error" }))
+        setRegulationApi((current) => ({ ...current, status: "error" }))
       }
     }
 
     loadViewportSignals()
     return () => controller.abort()
-  }, [mapViewport])
+  }, [mapViewport, selected.pnu])
 
   return (
     <main className="h-screen overflow-hidden bg-[#eef1ea] text-zinc-950">
@@ -621,8 +630,8 @@ export default function MapPage() {
           activeLayers={activeLayers}
           features={mapFeatures}
           selected={selected}
-          storeFeatures={storeFeatures}
-          storeZoneFeatures={storeZoneFeatures}
+          transactionFeatures={transactionFeatures}
+          regulationFeatures={regulationFeatures}
           viewMode={viewMode}
           onFeaturePayload={applyFeaturePayload}
           onViewportChange={setMapViewport}
@@ -630,6 +639,7 @@ export default function MapPage() {
 
         <LeftParcelPanel
           selected={selected}
+          transactions={selectedTransactions}
           activeSection={activeSection}
           onSectionChange={setActiveSection}
         />
@@ -694,7 +704,7 @@ export default function MapPage() {
         )}
 
         <div className="absolute bottom-3 left-[420px] z-20 rounded-lg border border-white/70 bg-white/86 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
-          필지 {bboxApi.count} · 상가 {storeApi.storeCount} · 상권 {storeApi.zoneCount} · {bboxApi.status}/{storeApi.status}
+          필지 {bboxApi.count} · 실거래 {transactionApi.count} · 정비 {regulationApi.count} · {bboxApi.status}/{transactionApi.status}/{regulationApi.status}
         </div>
       </section>
     </main>
@@ -705,8 +715,8 @@ function MapSurface({
   activeLayers,
   features,
   selected,
-  storeFeatures,
-  storeZoneFeatures,
+  transactionFeatures,
+  regulationFeatures,
   viewMode,
   onFeaturePayload,
   onViewportChange,
@@ -714,8 +724,8 @@ function MapSurface({
   activeLayers: Record<LayerKey, boolean>
   features: MapFeature[]
   selected: MapFeature
-  storeFeatures: FeatureCollection
-  storeZoneFeatures: FeatureCollection
+  transactionFeatures: FeatureCollection
+  regulationFeatures: FeatureCollection
   viewMode: ViewMode
   onFeaturePayload: (payload: Record<string, unknown>) => void
   onViewportChange: (viewport: MapViewport) => void
@@ -727,11 +737,10 @@ function MapSurface({
   const roadviewClientRef = useRef<KakaoRoadviewClient | null>(null)
   const roadviewOverlayRef = useRef<KakaoOverlay | null>(null)
   const overlaysRef = useRef<KakaoOverlay[]>([])
-  const storePopupRef = useRef<KakaoOverlay | null>(null)
   const featuresRef = useRef(features)
   const selectedRef = useRef(selected)
-  const storeFeaturesRef = useRef(storeFeatures)
-  const storeZoneFeaturesRef = useRef(storeZoneFeatures)
+  const transactionFeaturesRef = useRef(transactionFeatures)
+  const regulationFeaturesRef = useRef(regulationFeatures)
   const activeLayersRef = useRef(activeLayers)
   const viewModeRef = useRef(viewMode)
   const onFeaturePayloadRef = useRef(onFeaturePayload)
@@ -742,49 +751,23 @@ function MapSurface({
   useEffect(() => {
     featuresRef.current = features
     selectedRef.current = selected
-    storeFeaturesRef.current = storeFeatures
-    storeZoneFeaturesRef.current = storeZoneFeatures
+    transactionFeaturesRef.current = transactionFeatures
+    regulationFeaturesRef.current = regulationFeatures
     activeLayersRef.current = activeLayers
     viewModeRef.current = viewMode
     onFeaturePayloadRef.current = onFeaturePayload
     onViewportChangeRef.current = onViewportChange
-  }, [activeLayers, features, onFeaturePayload, onViewportChange, selected, storeFeatures, storeZoneFeatures, viewMode])
+  }, [activeLayers, features, onFeaturePayload, onViewportChange, selected, transactionFeatures, regulationFeatures, viewMode])
 
   const clearOverlays = useCallback(() => {
     overlaysRef.current.forEach((overlay) => overlay.setMap(null))
     overlaysRef.current = []
-    storePopupRef.current?.setMap(null)
-    storePopupRef.current = null
   }, [])
 
   const publishViewport = useCallback(() => {
     const map = mapInstanceRef.current
     if (!map) return
     onViewportChangeRef.current(bboxFromKakaoMap(map))
-  }, [])
-
-  const showStorePopup = useCallback((position: unknown, props: Record<string, unknown>) => {
-    const kakaoMaps = window.kakao.maps
-    storePopupRef.current?.setMap(null)
-
-    const content = document.createElement("div")
-    content.className = "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 shadow-xl"
-    content.style.maxWidth = "260px"
-    content.innerHTML = `
-      <strong style="display:block;font-size:13px;color:#18181b;margin-bottom:4px;">${escapeHtml(props.store_name ?? "상가")}</strong>
-      <span style="display:block;color:#52525b;">${escapeHtml(props.industry ?? props.industry_s_name ?? props.industry_m_name ?? props.industry_l_name ?? "업종 미분류")}</span>
-      <span style="display:block;margin-top:4px;color:#71717a;">${escapeHtml(props.address ?? props.road_address ?? props.lot_address ?? "")}</span>
-      <span style="display:block;margin-top:6px;color:#059669;">${escapeHtml(props.source_label ?? props.source ?? "공공 상가정보")}</span>
-    `
-
-    const overlay = new kakaoMaps.CustomOverlay({
-      position,
-      content,
-      yAnchor: 1.12,
-      zIndex: 80,
-    }) as KakaoOverlay
-    overlay.setMap(mapInstanceRef.current)
-    storePopupRef.current = overlay
   }, [])
 
   const drawOverlays = useCallback(() => {
@@ -796,100 +779,73 @@ function MapSurface({
     const layers = activeLayersRef.current
     const selectedFeature = selectedRef.current
 
-    if (layers.storeZones) {
-      storeZoneFeaturesRef.current.features.slice(0, 80).forEach((feature) => {
+    if (layers.regulations) {
+      regulationFeaturesRef.current.features.slice(0, 160).forEach((feature) => {
         const geometry = feature.geometry as MapGeometry | undefined
         geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
           const polygon = new kakaoMaps.Polygon({
             map,
             path,
-            strokeWeight: 2,
-            strokeColor: "#059669",
-            strokeOpacity: 0.5,
-            fillColor: "#10b981",
-            fillOpacity: 0.08,
-            zIndex: 15,
+            strokeWeight: 2.5,
+            strokeColor: "#f59e0b",
+            strokeOpacity: 0.78,
+            fillColor: "#fbbf24",
+            fillOpacity: 0.13,
+            zIndex: 18,
           }) as KakaoOverlay
           overlaysRef.current.push(polygon)
         })
       })
     }
 
-    if (layers.parcels) {
-      const drawable = featuresRef.current.filter((feature) => feature.geometry || feature.id === selectedFeature.id)
-      drawable.slice(0, 220).forEach((feature) => {
-        const isSelected = feature.id === selectedFeature.id || feature.featureId === selectedFeature.featureId || feature.pnu === selectedFeature.pnu
-        const geometry = feature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(feature) }
-        geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
-          const polygon = new kakaoMaps.Polygon({
-            map,
-            path,
-            strokeWeight: isSelected ? 3 : 1.3,
-            strokeColor: isSelected ? "#0284c7" : "#38bdf8",
-            strokeOpacity: isSelected ? 0.95 : 0.35,
-            strokeStyle: isSelected ? "shortdash" : "solid",
-            fillColor: "#38bdf8",
-            fillOpacity: isSelected ? 0.24 : 0.03,
-            zIndex: isSelected ? 45 : 20,
-          }) as KakaoOverlay
-          overlaysRef.current.push(polygon)
-        })
-      })
-
-      geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
+    const drawable = featuresRef.current.filter((feature) => feature.geometry || feature.id === selectedFeature.id)
+    drawable.slice(0, 220).forEach((feature) => {
+      const isSelected = feature.id === selectedFeature.id || feature.featureId === selectedFeature.featureId || feature.pnu === selectedFeature.pnu
+      const geometry = feature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(feature) }
+      geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
         const polygon = new kakaoMaps.Polygon({
           map,
           path,
-          strokeWeight: 3,
-          strokeColor: "#2563eb",
-          strokeOpacity: 0.95,
-          fillColor: "#60a5fa",
-          fillOpacity: 0.28,
-          zIndex: 55,
+          strokeWeight: isSelected ? 3 : 1.3,
+          strokeColor: isSelected ? "#0284c7" : "#38bdf8",
+          strokeOpacity: isSelected ? 0.95 : 0.32,
+          strokeStyle: isSelected ? "shortdash" : "solid",
+          fillColor: "#38bdf8",
+          fillOpacity: isSelected ? 0.24 : 0.025,
+          zIndex: isSelected ? 45 : 20,
         }) as KakaoOverlay
         overlaysRef.current.push(polygon)
       })
-    }
+    })
 
-    if (layers.stores) {
-      storeFeaturesRef.current.features.slice(0, 700).forEach((feature) => {
+    geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
+      const polygon = new kakaoMaps.Polygon({
+        map,
+        path,
+        strokeWeight: 3,
+        strokeColor: "#2563eb",
+        strokeOpacity: 0.95,
+        fillColor: "#60a5fa",
+        fillOpacity: 0.28,
+        zIndex: 55,
+      }) as KakaoOverlay
+      overlaysRef.current.push(polygon)
+    })
+
+    if (layers.transactions) {
+      transactionFeaturesRef.current.features.slice(0, 140).forEach((feature) => {
         const geometry = feature.geometry as { type?: string; coordinates?: unknown } | undefined
         const coords = geometry?.coordinates
         if (!Array.isArray(coords) || coords.length < 2) return
         const lng = Number(coords[0])
         const lat = Number(coords[1])
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
-
         const props = (feature.properties ?? {}) as Record<string, unknown>
-        const position = new kakaoMaps.LatLng(lat, lng)
-        const content = document.createElement("button")
-        content.type = "button"
-        content.title = textValue(props.store_name, "상가")
-        content.className = "block h-3.5 w-3.5 rounded-full border-2 border-white bg-rose-500 shadow-md transition hover:scale-125"
-        content.addEventListener("click", (event) => {
-          event.stopPropagation()
-          showStorePopup(position, props)
-        })
-
-        const overlay = new kakaoMaps.CustomOverlay({
-          position,
-          content,
-          yAnchor: 0.5,
-          xAnchor: 0.5,
-          zIndex: 60,
-        }) as KakaoOverlay
-        overlay.setMap(map)
-        overlaysRef.current.push(overlay)
-      })
-    }
-
-    if (layers.transactions) {
-      transactions.forEach((transaction) => {
         const content = document.createElement("div")
         content.className = "rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-center text-[11px] font-bold leading-tight text-indigo-600 shadow-md"
-        content.innerHTML = `${transaction.label}<br><span style="font-weight:600;color:#64748b">${transaction.date}</span>`
+        content.innerHTML = `${escapeHtml(props.amount_label ?? "-")}<br><span style="font-weight:600;color:#64748b">${escapeHtml(props.deal_date_label ?? "-")}</span>`
         const overlay = new kakaoMaps.CustomOverlay({
-          position: new kakaoMaps.LatLng(transaction.coordinates.lat, transaction.coordinates.lng),
+          position: new kakaoMaps.LatLng(lat, lng),
           content,
           yAnchor: 1,
           zIndex: 35,
@@ -898,7 +854,7 @@ function MapSurface({
         overlaysRef.current.push(overlay)
       })
     }
-  }, [clearOverlays, showStorePopup])
+  }, [clearOverlays])
 
   const hitTestParcel = useCallback(async (lat: number, lng: number) => {
     try {
@@ -1004,7 +960,7 @@ function MapSurface({
 
   useEffect(() => {
     drawOverlays()
-  }, [activeLayers, drawOverlays, features, selected, storeFeatures, storeZoneFeatures])
+  }, [activeLayers, drawOverlays, features, selected, transactionFeatures, regulationFeatures])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1064,20 +1020,26 @@ function MapSurface({
 
 function LeftParcelPanel({
   selected,
+  transactions,
   activeSection,
   onSectionChange,
 }: {
   selected: MapFeature
+  transactions: TransactionItem[]
   activeSection: PanelSection
   onSectionChange: (section: PanelSection) => void
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [transactionMode, setTransactionMode] = useState<"sale" | "jeonse" | "rent">("sale")
   const sectionRefs = useRef<Record<PanelSection, HTMLElement | null>>({
+    transactions: null,
     land: null,
     building: null,
     analysis: null,
   })
   const status = statusBadge(selected.status)
+  const visibleTransactions = transactionMode === "sale" ? transactions : []
+  const latestTransaction = visibleTransactions[0]
 
   const scrollToSection = (section: PanelSection) => {
     onSectionChange(section)
@@ -1109,8 +1071,9 @@ function LeftParcelPanel({
             <Input value={selected.pnu} readOnly className="h-10 rounded-lg border-zinc-200 bg-zinc-50 pl-9 text-xs" aria-label="선택 필지 PNU" />
           </div>
         </div>
-        <div className="grid grid-cols-3 border-t border-zinc-200">
+        <div className="grid grid-cols-4 border-t border-zinc-200">
           {[
+            ["transactions", "실거래가"],
             ["land", "토지"],
             ["building", "건물"],
             ["analysis", "빌드모어분석"],
@@ -1131,6 +1094,94 @@ function LeftParcelPanel({
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-white">
+        <section
+          ref={(node) => {
+            sectionRefs.current.transactions = node
+          }}
+          className="border-b-8 border-zinc-100 px-5 py-5"
+        >
+          <SectionTitle icon={CircleDollarSign} title="실거래가" />
+          <div className="mb-4 grid grid-cols-3 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+            {[
+              ["sale", "매매"],
+              ["jeonse", "전세"],
+              ["rent", "월세"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTransactionMode(key as "sale" | "jeonse" | "rent")}
+                className={cn(
+                  "h-10 rounded-md text-sm font-semibold",
+                  transactionMode === key ? "bg-[#0f67e8] text-white shadow-sm" : "text-zinc-700 hover:bg-white"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mb-4 grid grid-cols-[1fr_120px] gap-3">
+            <div>
+              <p className="text-sm font-semibold text-zinc-500">최근 실거래가</p>
+              <p className="mt-1 text-2xl font-extrabold text-[#0f67e8]">{latestTransaction?.amount_label ?? "-"}</p>
+              <p className="mt-1 text-sm font-medium text-zinc-500">{latestTransaction?.deal_date_label ?? "거래내역 없음"}</p>
+            </div>
+            <button
+              type="button"
+              className="h-14 self-end rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-500"
+            >
+              타입면적
+            </button>
+          </div>
+
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-zinc-950">거래내역 ({visibleTransactions.length}건)</h3>
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">총액</span>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-zinc-200">
+            <div className="grid grid-cols-[86px_1fr_74px_40px] bg-zinc-50 px-3 py-2 text-xs font-bold text-zinc-500">
+              <span>거래일</span>
+              <span>거래금액</span>
+              <span>층/면적</span>
+              <span />
+            </div>
+            {visibleTransactions.length ? (
+              visibleTransactions.slice(0, 8).map((transaction) => (
+                <div
+                  key={`${transaction.transaction_id ?? transaction.id}-${transaction.deal_date}`}
+                  className="grid grid-cols-[86px_1fr_74px_40px] items-center border-t border-zinc-100 px-3 py-3 text-sm"
+                >
+                  <span className="font-semibold text-zinc-700">{transaction.deal_date_label ?? "-"}</span>
+                  <span className="font-bold text-zinc-950">{transaction.amount_label ?? "-"}</span>
+                  <span className="text-xs font-medium text-zinc-500">
+                    {transaction.floor ? `${transaction.floor}층` : "-"} · {compactArea(transaction.arch_area_m2 ?? undefined)}
+                  </span>
+                  <span className="rounded-md bg-zinc-200 px-1.5 py-1 text-center text-[11px] font-bold text-zinc-600">등기</span>
+                </div>
+              ))
+            ) : (
+              <div className="border-t border-zinc-100 px-3 py-10 text-center text-sm font-medium text-zinc-400">
+                표시할 실거래가 없습니다.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 rounded-lg bg-slate-50 px-4 py-4">
+            <p className="text-sm font-bold text-zinc-950">우리동네 중개사</p>
+            <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-3 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-200 text-sm font-bold text-slate-600">BM</div>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-zinc-950">BuildMore 인증 중개사</p>
+                <p className="truncate text-xs text-zinc-500">실거래 및 현장 확인 연결 준비</p>
+              </div>
+              <button type="button" className="h-10 rounded-lg bg-[#0f67e8] px-3 text-sm font-bold text-white">
+                연결
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section
           ref={(node) => {
             sectionRefs.current.land = node
