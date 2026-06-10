@@ -191,7 +191,7 @@ const layerLabels: Record<LayerKey, string> = {
 }
 
 const layerColors: Record<LayerKey, string> = {
-  transactions: "bg-indigo-500",
+  transactions: "bg-zinc-950",
   regulations: "bg-amber-500",
 }
 
@@ -474,6 +474,18 @@ function compactArea(value?: number) {
   return `${value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}㎡`
 }
 
+function formatTransactionAmount(value?: { amount_10k?: unknown; amount_label?: unknown } | null) {
+  const amount10k = Number(value?.amount_10k)
+  if (!Number.isFinite(amount10k) || amount10k <= 0) {
+    return typeof value?.amount_label === "string" ? value.amount_label : "-"
+  }
+  const eok = amount10k / 10000
+  if (eok >= 100) return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}억`
+  if (eok >= 10) return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`
+  if (eok >= 1) return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억`
+  return `${amount10k.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}만`
+}
+
 function kakaoLatLngToPoint(latLng: KakaoLatLngLike) {
   return {
     lat: typeof latLng.getLat === "function" ? latLng.getLat() : Number(latLng.Ma ?? latLng.La),
@@ -559,28 +571,36 @@ export default function MapPage() {
         })
         const transactionParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
+          limit: mapViewport.zoom >= 16 ? "500" : "260",
+        })
+        const selectedTransactionParams = new URLSearchParams({
           pnu: selected.pnu,
-          limit: mapViewport.zoom >= 16 ? "180" : "90",
+          limit: "40",
         })
         const regulationParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           limit: "160",
         })
 
-        const [buildingResult, transactionResult, regulationResult] = await Promise.allSettled([
+        const [buildingResult, transactionResult, selectedTransactionResult, regulationResult] = await Promise.allSettled([
           fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal }),
+          fetch(`/api/map/transactions?${selectedTransactionParams.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal }),
         ])
 
         const buildingResponse = buildingResult.status === "fulfilled" ? buildingResult.value : null
         const transactionResponse = transactionResult.status === "fulfilled" ? transactionResult.value : null
+        const selectedTransactionResponse = selectedTransactionResult.status === "fulfilled" ? selectedTransactionResult.value : null
         const regulationResponse = regulationResult.status === "fulfilled" ? regulationResult.value : null
         const buildingData = buildingResponse?.ok
           ? ((await buildingResponse.json()) as { count?: number; source?: string; buildings?: Array<Record<string, unknown>>; features?: Array<Record<string, unknown>> })
           : { count: mockFeatures.length, source: "local-map-features", buildings: [] }
         const transactionData = transactionResponse?.ok
           ? ((await transactionResponse.json()) as FeatureCollection & { count?: number; source?: string; items?: TransactionItem[] })
+          : emptyFeatureCollection
+        const selectedTransactionData = selectedTransactionResponse?.ok
+          ? ((await selectedTransactionResponse.json()) as FeatureCollection & { count?: number; source?: string; items?: TransactionItem[] })
           : emptyFeatureCollection
         const regulationData = regulationResponse?.ok
           ? ((await regulationResponse.json()) as FeatureCollection & { count?: number; source?: string })
@@ -599,7 +619,7 @@ export default function MapPage() {
           source: buildingData.source ?? "map-building-signals",
         })
         setTransactionFeatures(transactionData.features ? transactionData : emptyFeatureCollection)
-        setSelectedTransactions((transactionData.items ?? []) as TransactionItem[])
+        setSelectedTransactions((selectedTransactionData.items ?? []) as TransactionItem[])
         setTransactionApi({
           status: transactionResponse?.ok ? "ready" : "error",
           count: Number(transactionData.count ?? transactionData.features?.length ?? 0),
@@ -624,7 +644,7 @@ export default function MapPage() {
   }, [mapViewport, selected.pnu])
 
   return (
-    <main className="h-screen overflow-hidden bg-[#eef1ea] text-zinc-950">
+    <main className="h-screen overflow-hidden bg-background text-foreground">
       <section className="relative h-full w-full overflow-hidden">
         <MapSurface
           activeLayers={activeLayers}
@@ -647,23 +667,23 @@ export default function MapPage() {
         <div className="absolute left-[420px] top-3 z-30 flex items-center gap-2">
           <Button
             variant="outline"
-            className={cn("h-12 rounded-lg border-white/80 bg-white/92 px-4 shadow-lg", filterOpen && "border-zinc-900 bg-zinc-950 text-white")}
+            className={cn("h-12 rounded-lg border-border bg-background/90 px-4 shadow-lg backdrop-blur", filterOpen && "border-zinc-950 bg-zinc-950 text-white")}
             onClick={() => setFilterOpen((open) => !open)}
           >
             <SlidersHorizontal className="h-4 w-4" />
             필터
           </Button>
-          <div className="rounded-lg border border-white/80 bg-white/92 p-1 shadow-lg">
+          <div className="rounded-lg border border-border bg-background/90 p-1 shadow-lg backdrop-blur">
             <Button
               variant="ghost"
-              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "map" && "bg-[#0f67e8] text-white hover:bg-[#0f67e8] hover:text-white")}
+              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "map" && "bg-zinc-950 text-white hover:bg-zinc-950 hover:text-white")}
               onClick={() => setViewMode("map")}
             >
               지도
             </Button>
             <Button
               variant="ghost"
-              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "roadview" && "bg-[#0f67e8] text-white hover:bg-[#0f67e8] hover:text-white")}
+              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "roadview" && "bg-zinc-950 text-white hover:bg-zinc-950 hover:text-white")}
               onClick={() => setViewMode("roadview")}
             >
               로드뷰
@@ -672,7 +692,7 @@ export default function MapPage() {
         </div>
 
         {filterOpen && (
-          <div className="absolute left-[420px] top-[72px] z-40 w-72 rounded-lg border border-white/80 bg-white/94 p-3 shadow-xl backdrop-blur">
+          <div className="absolute left-[420px] top-[72px] z-40 w-72 rounded-lg border border-border bg-background/90 p-3 shadow-xl backdrop-blur">
             <div className="mb-2 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">지도 레이어</p>
@@ -688,13 +708,13 @@ export default function MapPage() {
                   key={key}
                   type="button"
                   onClick={() => toggleLayer(key)}
-                  className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  className="flex w-full items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-sm"
                 >
                   <span className="flex items-center gap-2">
                     <span className={cn("h-2.5 w-2.5 rounded-full", layerColors[key])} />
                     {layerLabels[key]}
                   </span>
-                  <span className={cn("text-xs font-semibold", activeLayers[key] ? "text-emerald-700" : "text-zinc-400")}>
+                  <span className={cn("text-xs font-semibold", activeLayers[key] ? "text-zinc-950" : "text-zinc-400")}>
                     {activeLayers[key] ? "ON" : "OFF"}
                   </span>
                 </button>
@@ -703,7 +723,7 @@ export default function MapPage() {
           </div>
         )}
 
-        <div className="absolute bottom-3 left-[420px] z-20 rounded-lg border border-white/70 bg-white/86 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
+        <div className="absolute bottom-3 left-[420px] z-20 rounded-lg border border-border bg-background/85 px-3 py-2 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur">
           필지 {bboxApi.count} · 실거래 {transactionApi.count} · 정비 {regulationApi.count} · {bboxApi.status}/{transactionApi.status}/{regulationApi.status}
         </div>
       </section>
@@ -798,35 +818,31 @@ function MapSurface({
       })
     }
 
-    const drawable = featuresRef.current.filter((feature) => feature.geometry || feature.id === selectedFeature.id)
-    drawable.slice(0, 220).forEach((feature) => {
-      const isSelected = feature.id === selectedFeature.id || feature.featureId === selectedFeature.featureId || feature.pnu === selectedFeature.pnu
-      const geometry = feature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(feature) }
-      geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
-        const polygon = new kakaoMaps.Polygon({
-          map,
-          path,
-          strokeWeight: isSelected ? 3 : 1.3,
-          strokeColor: isSelected ? "#0284c7" : "#38bdf8",
-          strokeOpacity: isSelected ? 0.95 : 0.32,
-          strokeStyle: isSelected ? "shortdash" : "solid",
-          fillColor: "#38bdf8",
-          fillOpacity: isSelected ? 0.24 : 0.025,
-          zIndex: isSelected ? 45 : 20,
-        }) as KakaoOverlay
-        overlaysRef.current.push(polygon)
-      })
+    const selectedGeometry = selectedFeature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(selectedFeature) }
+    geometryToKakaoPaths(selectedGeometry, kakaoMaps).forEach((path) => {
+      const polygon = new kakaoMaps.Polygon({
+        map,
+        path,
+        strokeWeight: 2.5,
+        strokeColor: "#111827",
+        strokeOpacity: 0.9,
+        strokeStyle: "shortdash",
+        fillColor: "#111827",
+        fillOpacity: 0.08,
+        zIndex: 45,
+      }) as KakaoOverlay
+      overlaysRef.current.push(polygon)
     })
 
     geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
       const polygon = new kakaoMaps.Polygon({
         map,
         path,
-        strokeWeight: 3,
-        strokeColor: "#2563eb",
-        strokeOpacity: 0.95,
-        fillColor: "#60a5fa",
-        fillOpacity: 0.28,
+        strokeWeight: 2,
+        strokeColor: "#18181b",
+        strokeOpacity: 0.82,
+        fillColor: "#18181b",
+        fillOpacity: 0.1,
         zIndex: 55,
       }) as KakaoOverlay
       overlaysRef.current.push(polygon)
@@ -841,9 +857,10 @@ function MapSurface({
         const lat = Number(coords[1])
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
         const props = (feature.properties ?? {}) as Record<string, unknown>
+        const amountLabel = formatTransactionAmount(props)
         const content = document.createElement("div")
-        content.className = "rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-center text-[11px] font-bold leading-tight text-indigo-600 shadow-md"
-        content.innerHTML = `${escapeHtml(props.amount_label ?? "-")}<br><span style="font-weight:600;color:#64748b">${escapeHtml(props.deal_date_label ?? "-")}</span>`
+        content.className = "relative min-w-[58px] rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
+        content.innerHTML = `<span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span style="position:absolute;left:50%;bottom:-4px;width:7px;height:7px;border-radius:9999px;background:#f97316;transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
         const overlay = new kakaoMaps.CustomOverlay({
           position: new kakaoMaps.LatLng(lat, lng),
           content,
@@ -985,7 +1002,7 @@ function MapSurface({
   }, [roadviewActive])
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-[#eef1ea]">
+    <div className="absolute inset-0 overflow-hidden bg-background">
       <div ref={mapRef} className="absolute inset-0" />
       <div
         ref={roadviewRef}
@@ -995,9 +1012,9 @@ function MapSurface({
         )}
       />
 
-      <div className="absolute left-[420px] top-[76px] z-30 rounded-lg border border-white/80 bg-white/88 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-lg backdrop-blur">
+      <div className="absolute left-[420px] top-[76px] z-30 rounded-lg border border-border bg-background/88 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-lg backdrop-blur">
         <span className="inline-flex items-center gap-2">
-          {viewMode === "roadview" ? <Navigation className="h-3.5 w-3.5 text-[#0f67e8]" /> : <MapIcon className="h-3.5 w-3.5 text-[#0f67e8]" />}
+          {viewMode === "roadview" ? <Navigation className="h-3.5 w-3.5 text-zinc-950" /> : <MapIcon className="h-3.5 w-3.5 text-zinc-950" />}
           {message}
         </span>
       </div>
@@ -1053,8 +1070,8 @@ function LeftParcelPanel({
   }
 
   return (
-    <aside className="absolute bottom-0 left-0 top-0 z-40 flex w-[396px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
-      <div className="shrink-0 border-b border-zinc-200">
+    <aside className="absolute bottom-0 left-0 top-0 z-40 flex w-[396px] flex-col border-r border-border bg-white/60 shadow-2xl backdrop-blur-xl">
+      <div className="shrink-0 border-b border-border bg-white/72">
         <div className="flex h-16 items-center gap-3 px-4">
           <Link href="/analysis" className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 hover:bg-zinc-100" aria-label="분석으로 이동">
             <ArrowLeft className="h-5 w-5" />
@@ -1068,10 +1085,10 @@ function LeftParcelPanel({
         <div className="px-4 pb-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input value={selected.pnu} readOnly className="h-10 rounded-lg border-zinc-200 bg-zinc-50 pl-9 text-xs" aria-label="선택 필지 PNU" />
+            <Input value={selected.pnu} readOnly className="h-10 rounded-lg border-border bg-white/85 pl-9 text-xs" aria-label="선택 필지 PNU" />
           </div>
         </div>
-        <div className="grid grid-cols-4 border-t border-zinc-200">
+        <div className="grid grid-cols-4 border-t border-border">
           {[
             ["transactions", "실거래가"],
             ["land", "토지"],
@@ -1083,8 +1100,8 @@ function LeftParcelPanel({
               type="button"
               onClick={() => scrollToSection(key as PanelSection)}
               className={cn(
-                "h-11 border-r border-zinc-200 text-sm font-semibold last:border-r-0",
-                activeSection === key ? "bg-[#0f67e8] text-white" : "bg-white text-zinc-700 hover:bg-zinc-50"
+                "h-11 border-r border-border text-sm font-semibold last:border-r-0",
+                activeSection === key ? "bg-zinc-950 text-white" : "bg-white/70 text-zinc-700 hover:bg-white"
               )}
             >
               {label}
@@ -1093,15 +1110,15 @@ function LeftParcelPanel({
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-transparent">
         <section
           ref={(node) => {
             sectionRefs.current.transactions = node
           }}
-          className="border-b-8 border-zinc-100 px-5 py-5"
+          className="border-b-8 border-white/35 px-5 py-5"
         >
           <SectionTitle icon={CircleDollarSign} title="실거래가" />
-          <div className="mb-4 grid grid-cols-3 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+          <div className="mb-4 grid grid-cols-3 rounded-lg border border-border bg-white/75 p-1">
             {[
               ["sale", "매매"],
               ["jeonse", "전세"],
@@ -1113,7 +1130,7 @@ function LeftParcelPanel({
                 onClick={() => setTransactionMode(key as "sale" | "jeonse" | "rent")}
                 className={cn(
                   "h-10 rounded-md text-sm font-semibold",
-                  transactionMode === key ? "bg-[#0f67e8] text-white shadow-sm" : "text-zinc-700 hover:bg-white"
+                  transactionMode === key ? "bg-zinc-950 text-white shadow-sm" : "text-zinc-700 hover:bg-white"
                 )}
               >
                 {label}
@@ -1124,12 +1141,12 @@ function LeftParcelPanel({
           <div className="mb-4 grid grid-cols-[1fr_120px] gap-3">
             <div>
               <p className="text-sm font-semibold text-zinc-500">최근 실거래가</p>
-              <p className="mt-1 text-2xl font-extrabold text-[#0f67e8]">{latestTransaction?.amount_label ?? "-"}</p>
+              <p className="mt-1 text-2xl font-extrabold text-zinc-950">{formatTransactionAmount(latestTransaction)}</p>
               <p className="mt-1 text-sm font-medium text-zinc-500">{latestTransaction?.deal_date_label ?? "거래내역 없음"}</p>
             </div>
             <button
               type="button"
-              className="h-14 self-end rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-500"
+              className="h-14 self-end rounded-lg border border-border bg-white/85 text-sm font-bold text-zinc-500"
             >
               타입면적
             </button>
@@ -1137,10 +1154,10 @@ function LeftParcelPanel({
 
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold text-zinc-950">거래내역 ({visibleTransactions.length}건)</h3>
-            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">총액</span>
+            <span className="rounded-full border border-zinc-300 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-700">총액</span>
           </div>
-          <div className="overflow-hidden rounded-lg border border-zinc-200">
-            <div className="grid grid-cols-[86px_1fr_74px_40px] bg-zinc-50 px-3 py-2 text-xs font-bold text-zinc-500">
+          <div className="overflow-hidden rounded-lg border border-border bg-white/88">
+            <div className="grid grid-cols-[86px_1fr_74px_40px] bg-zinc-50/90 px-3 py-2 text-xs font-bold text-zinc-500">
               <span>거래일</span>
               <span>거래금액</span>
               <span>층/면적</span>
@@ -1153,7 +1170,7 @@ function LeftParcelPanel({
                   className="grid grid-cols-[86px_1fr_74px_40px] items-center border-t border-zinc-100 px-3 py-3 text-sm"
                 >
                   <span className="font-semibold text-zinc-700">{transaction.deal_date_label ?? "-"}</span>
-                  <span className="font-bold text-zinc-950">{transaction.amount_label ?? "-"}</span>
+                  <span className="font-bold text-zinc-950">{formatTransactionAmount(transaction)}</span>
                   <span className="text-xs font-medium text-zinc-500">
                     {transaction.floor ? `${transaction.floor}층` : "-"} · {compactArea(transaction.arch_area_m2 ?? undefined)}
                   </span>
@@ -1167,15 +1184,15 @@ function LeftParcelPanel({
             )}
           </div>
 
-          <div className="mt-5 rounded-lg bg-slate-50 px-4 py-4">
+          <div className="mt-5 rounded-lg border border-border bg-white/70 px-4 py-4">
             <p className="text-sm font-bold text-zinc-950">우리동네 중개사</p>
             <div className="mt-3 flex items-center gap-3 rounded-lg bg-white p-3 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-200 text-sm font-bold text-slate-600">BM</div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-100 text-sm font-bold text-zinc-700">BM</div>
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-zinc-950">BuildMore 인증 중개사</p>
                 <p className="truncate text-xs text-zinc-500">실거래 및 현장 확인 연결 준비</p>
               </div>
-              <button type="button" className="h-10 rounded-lg bg-[#0f67e8] px-3 text-sm font-bold text-white">
+              <button type="button" className="h-10 rounded-lg bg-zinc-950 px-3 text-sm font-bold text-white">
                 연결
               </button>
             </div>
@@ -1186,7 +1203,7 @@ function LeftParcelPanel({
           ref={(node) => {
             sectionRefs.current.land = node
           }}
-          className="border-b-8 border-zinc-100 px-5 py-5"
+          className="border-b-8 border-white/35 px-5 py-5"
         >
           <SectionTitle icon={Ruler} title="토지 정보" />
           <InfoRows
@@ -1206,10 +1223,10 @@ function LeftParcelPanel({
           ref={(node) => {
             sectionRefs.current.building = node
           }}
-          className="border-b-8 border-zinc-100 px-5 py-5"
+          className="border-b-8 border-white/35 px-5 py-5"
         >
           <SectionTitle icon={Building2} title="건물 정보" />
-          <div className="mb-3 rounded-lg bg-[#0f67e8] px-4 py-3 text-white">
+          <div className="mb-3 rounded-lg bg-zinc-950 px-4 py-3 text-white">
             <p className="text-xs font-semibold opacity-80">건축물대장 선택</p>
             <p className="mt-1 text-lg font-bold">{selected.buildingName && selected.buildingName !== "-" ? selected.buildingName : selected.address.split(" ").slice(-1)[0]}</p>
             <p className="text-xs font-medium opacity-85">{selected.buildingCount || 0}개 동 · 사용승인 {selected.approvalYear ?? "-"}</p>
@@ -1245,12 +1262,12 @@ function LeftParcelPanel({
             <CoreMetric icon={Store} label="Cap" value={selected.capRate} />
           </div>
 
-          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3">
+          <div className="mt-4 rounded-lg border border-border bg-white/80 px-3 py-3">
             <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="font-semibold text-sky-900">{selected.locationSignal}</span>
-              <span className="text-sky-700">신뢰도 {selected.confidence}</span>
+              <span className="font-semibold text-zinc-950">{selected.locationSignal}</span>
+              <span className="text-zinc-600">신뢰도 {selected.confidence}</span>
             </div>
-            <p className="mt-2 text-xs leading-5 text-sky-800">{selected.hiddenYield}</p>
+            <p className="mt-2 text-xs leading-5 text-zinc-700">{selected.hiddenYield}</p>
           </div>
 
           <PanelList
@@ -1286,7 +1303,7 @@ function InfoRows({ rows }: { rows: Array<[string, string | number | null | unde
     <div className="divide-y divide-zinc-200 border-y border-zinc-200">
       {rows.map(([label, value]) => (
         <div key={label} className="grid grid-cols-[112px_1fr] gap-3 py-3 text-sm">
-          <div className="font-medium text-slate-500">{label}</div>
+          <div className="font-medium text-zinc-500">{label}</div>
           <div className="min-w-0 text-right font-semibold text-zinc-950">{value ?? "-"}</div>
         </div>
       ))}
@@ -1296,7 +1313,7 @@ function InfoRows({ rows }: { rows: Array<[string, string | number | null | unde
 
 function CoreMetric({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+    <div className="rounded-lg border border-border bg-white/88 px-3 py-2">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-500">
         <Icon className="h-3 w-3" />
         {label}
@@ -1320,7 +1337,7 @@ function PanelList({
   ordered?: boolean
 }) {
   return (
-    <div className={cn("rounded-lg border border-zinc-200 bg-white p-3", className)}>
+    <div className={cn("rounded-lg border border-border bg-white/88 p-3", className)}>
       <div className="mb-2 flex items-center gap-2">
         <Icon className="h-4 w-4 text-zinc-700" />
         <h3 className="text-sm font-bold">{title}</h3>
