@@ -53,10 +53,17 @@ type BuildingRegister = {
   legal_max_building_coverage_ratio?: number | null
   floor_area_ratio?: number | null
   legal_max_floor_area_ratio?: number | null
+  temporary_floor_area_ratio?: number | null
+  legal_relaxation_note?: string | null
+  legal_max_source?: string | null
   violation_building_label?: string | null
   parking_count?: number | null
+  parking_self_count?: number | null
+  parking_mechanical_count?: number | null
+  passenger_elevator_count?: number | null
   zoning_label?: string | null
   district_label?: string | null
+  zone_label?: string | null
   owner_count?: number | null
 }
 
@@ -101,10 +108,17 @@ type MapFeature = {
   legalMaxBuildingCoverageRatio?: number
   floorAreaRatio?: number
   legalMaxFloorAreaRatio?: number
+  temporaryFloorAreaRatio?: number
+  legalRelaxationNote?: string
+  legalMaxSource?: string
   violationBuildingLabel?: string
   parkingCount?: number
+  parkingSelfCount?: number
+  parkingMechanicalCount?: number
+  passengerElevatorCount?: number
   zoningLabel?: string
   districtLabel?: string
+  zoneLabel?: string
   ownerCount?: number
   landValueLabel?: string
   officialLandPriceLabel?: string
@@ -459,10 +473,17 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
     legalMaxBuildingCoverageRatio: numberValue(buildingRegister?.legal_max_building_coverage_ratio),
     floorAreaRatio: numberValue(buildingRegister?.floor_area_ratio),
     legalMaxFloorAreaRatio: numberValue(buildingRegister?.legal_max_floor_area_ratio),
+    temporaryFloorAreaRatio: numberValue(buildingRegister?.temporary_floor_area_ratio),
+    legalRelaxationNote: textValue(buildingRegister?.legal_relaxation_note, ""),
+    legalMaxSource: textValue(buildingRegister?.legal_max_source, ""),
     violationBuildingLabel: textValue(buildingRegister?.violation_building_label, "확인 필요"),
     parkingCount: numberValue(buildingRegister?.parking_count),
+    parkingSelfCount: numberValue(buildingRegister?.parking_self_count),
+    parkingMechanicalCount: numberValue(buildingRegister?.parking_mechanical_count),
+    passengerElevatorCount: numberValue(buildingRegister?.passenger_elevator_count),
     zoningLabel: textValue(buildingRegister?.zoning_label, "확인 필요"),
     districtLabel: textValue(buildingRegister?.district_label, "확인 필요"),
+    zoneLabel: textValue(buildingRegister?.zone_label, "확인 필요"),
     ownerCount: numberValue(buildingRegister?.owner_count),
     landValueLabel: textValue(payload.land_value_label, fallback.landValueLabel ?? "-"),
     officialLandPriceLabel: textValue(payload.official_land_price_label, fallback.officialLandPriceLabel ?? "-"),
@@ -556,6 +577,13 @@ function transactionAccent(category: unknown) {
   return { color: "#f97316", label: "그외" }
 }
 
+const transactionLegend = [
+  { key: "apartment", ...transactionAccent("apartment") },
+  { key: "officetel", ...transactionAccent("officetel") },
+  { key: "retail", ...transactionAccent("retail") },
+  { key: "other", ...transactionAccent("other") },
+]
+
 function percentLabel(value?: number, suffix = "%") {
   if (!Number.isFinite(value)) return "확인 필요"
   return `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${suffix}`
@@ -565,6 +593,27 @@ function legalPairLabel(current?: number, legalMax?: number) {
   const currentLabel = percentLabel(current)
   const maxLabel = Number.isFinite(legalMax) ? percentLabel(legalMax) : "확인 필요"
   return `${currentLabel} (${maxLabel})`
+}
+
+function groupedTransactionFeatures(collection: FeatureCollection) {
+  const groups = new Map<string, { feature: Record<string, unknown>; count: number }>()
+  collection.features.forEach((feature) => {
+    const geometry = feature.geometry as { type?: string; coordinates?: unknown } | undefined
+    const coords = geometry?.coordinates
+    const props = (feature.properties ?? {}) as Record<string, unknown>
+    const pnu = typeof props.pnu === "string" ? props.pnu : ""
+    const key = pnu || (Array.isArray(coords) ? coords.map((coord) => Number(coord).toFixed(7)).join(",") : String(feature.id ?? ""))
+    const current = groups.get(key)
+    if (!current) {
+      groups.set(key, { feature, count: 1 })
+      return
+    }
+    const nextDate = String(props.deal_date ?? "")
+    const currentDate = String(((current.feature.properties ?? {}) as Record<string, unknown>).deal_date ?? "")
+    if (nextDate > currentDate) current.feature = feature
+    current.count += 1
+  })
+  return Array.from(groups.values())
 }
 
 function ignoreMapMessage(value: string) {
@@ -771,13 +820,13 @@ export default function MapPage() {
         setTransactionApi({
           status: transactionResponse?.ok ? "ready" : "error",
           count: Number(transactionData.count ?? transactionData.features?.length ?? 0),
-          source: transactionData.source ?? "commerce_seoul_transactions",
+          source: typeof transactionData.source === "string" ? transactionData.source : "commerce_seoul_transactions",
         })
         setRegulationFeatures(regulationData.features ? regulationData : emptyFeatureCollection)
         setRegulationApi({
           status: regulationResponse?.ok ? "ready" : "error",
           count: Number(regulationData.count ?? regulationData.features?.length ?? 0),
-          source: regulationData.source ?? "map_redevelopment_zones",
+          source: typeof regulationData.source === "string" ? regulationData.source : "map_redevelopment_zones",
         })
       } catch {
         if (controller.signal.aborted) return
@@ -842,8 +891,17 @@ export default function MapPage() {
           </div>
         </div>
 
+        <div className="absolute left-[420px] top-[68px] z-30 flex flex-wrap gap-1.5 rounded-lg border border-border bg-background/88 px-2.5 py-2 text-[11px] font-bold text-zinc-700 shadow-lg backdrop-blur">
+          {transactionLegend.map((item) => (
+            <span key={item.key} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white/80 px-2 py-1">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+              {item.label}
+            </span>
+          ))}
+        </div>
+
         {filterOpen && (
-          <div className="absolute left-[420px] top-[72px] z-40 w-72 rounded-lg border border-border bg-background/90 p-3 shadow-xl backdrop-blur">
+          <div className="absolute left-[420px] top-[112px] z-40 w-72 rounded-lg border border-border bg-background/90 p-3 shadow-xl backdrop-blur">
             <div className="mb-2 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">지도 레이어</p>
@@ -1018,7 +1076,7 @@ function MapSurface({
     })
 
     if (layers.transactions) {
-      transactionFeaturesRef.current.features.slice(0, 140).forEach((feature) => {
+      groupedTransactionFeatures(transactionFeaturesRef.current).slice(0, 140).forEach(({ feature, count }) => {
         const geometry = feature.geometry as { type?: string; coordinates?: unknown } | undefined
         const coords = geometry?.coordinates
         if (!Array.isArray(coords) || coords.length < 2) return
@@ -1029,8 +1087,9 @@ function MapSurface({
         const amountLabel = formatTransactionAmount(props)
         const accent = transactionAccent(props.transaction_category)
         const content = document.createElement("div")
-        content.className = "relative min-w-[62px] overflow-hidden rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 pl-3 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-        content.innerHTML = `<span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${accent.color}"></span><span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:-4px;width:7px;height:7px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
+        const countBadge = count > 1 ? `<span style="position:absolute;right:-5px;top:-6px;min-width:17px;height:17px;border-radius:9999px;background:#111827;color:#fff;border:2px solid #fff;font-size:9px;line-height:13px;text-align:center;font-weight:900">${count}</span>` : ""
+        content.className = "relative min-w-[62px] overflow-visible rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 pl-3 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
+        content.innerHTML = `<span style="position:absolute;left:0;top:0;bottom:0;width:4px;border-top-left-radius:9999px;border-bottom-left-radius:9999px;background:${accent.color}"></span>${countBadge}<span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:-6px;width:8px;height:8px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
         const overlay = new kakaoMaps.CustomOverlay({
           position: new kakaoMaps.LatLng(lat, lng),
           content,
@@ -1394,20 +1453,6 @@ function LeftParcelPanel({
               </button>
             ))}
           </div>
-          <div className="mb-4 flex flex-wrap gap-2 text-[11px] font-bold text-zinc-600">
-            {[
-              ["#2563eb", "아파트"],
-              ["#7c3aed", "오피스텔"],
-              ["#059669", "상가"],
-              ["#f97316", "그외"],
-            ].map(([color, label]) => (
-              <span key={label} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white/75 px-2 py-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-                {label}
-              </span>
-            ))}
-          </div>
-
           <div className="mb-4 grid grid-cols-[1fr_120px] gap-3">
             <div>
               <p className="text-sm font-semibold text-zinc-500">최근 실거래가</p>
@@ -1480,10 +1525,13 @@ function LeftParcelPanel({
             rows={[
               ["면적", selected.area],
               ["지목", selected.use],
-              ["건축물대장상 지역", selected.zoningLabel ?? "확인 필요"],
-              ["건축물대장상 지구", selected.districtLabel ?? "확인 필요"],
+              ["지역", selected.zoningLabel ?? "확인 필요"],
+              ["지구", selected.districtLabel ?? "확인 필요"],
               ["현재 건폐율(법정 최대건폐율)", legalPairLabel(selected.buildingCoverageRatio, selected.legalMaxBuildingCoverageRatio)],
               ["용적률(법정 최대용적률)", legalPairLabel(selected.floorAreaRatio, selected.legalMaxFloorAreaRatio)],
+              ...(selected.legalRelaxationNote
+                ? ([["한시 완화", `${selected.temporaryFloorAreaRatio ? percentLabel(selected.temporaryFloorAreaRatio) : "확인 필요"} · ${selected.legalRelaxationNote}`]] as Array<[string, string]>)
+                : []),
               ["위반건축물 여부", selected.violationBuildingLabel ?? "확인 필요"],
               ["소유권자수", selected.ownerCount ? `${selected.ownerCount.toLocaleString("ko-KR")}명` : "확인 필요"],
             ]}
@@ -1512,7 +1560,9 @@ function LeftParcelPanel({
               ["대지면적", compactArea(selected.areaM2)],
               ["건축면적", compactArea(selected.buildingAreaM2)],
               ["연면적", compactArea(selected.totalFloorAreaM2)],
-              ["대장 주차대수", selected.parkingCount ? `${selected.parkingCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ["자주식 주차", typeof selected.parkingSelfCount === "number" ? `${selected.parkingSelfCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ["기계식 주차", typeof selected.parkingMechanicalCount === "number" ? `${selected.parkingMechanicalCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ["승용승강기수", typeof selected.passengerElevatorCount === "number" ? `${selected.passengerElevatorCount.toLocaleString("ko-KR")}대` : "확인 필요"],
               ["사용승인", selected.buildingRegister?.latest_use_approval_date ?? selected.approvalYear ?? "-"],
             ]}
           />
