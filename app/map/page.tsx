@@ -1,30 +1,23 @@
-﻿"use client"
+"use client"
 
-import "maplibre-gl/dist/maplibre-gl.css"
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import maplibregl from "maplibre-gl"
-import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl"
-import { Protocol } from "pmtiles"
 import {
   Activity,
+  ArrowLeft,
   BarChart3,
   Building2,
-  ChevronRight,
+  CheckCircle2,
   CircleDollarSign,
   Database,
-  FileText,
-  Layers,
-  MessageSquareText,
-  Save,
+  MapIcon,
+  Navigation,
+  Ruler,
   Search,
-  Send,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  TrendingUp,
+  Store,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -35,10 +28,27 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 type DataStatus = "ready" | "partial" | "queued"
+type LayerKey = "parcels" | "stores" | "storeZones" | "transactions" | "regulations"
+type ViewMode = "map" | "roadview"
+type PanelSection = "land" | "building" | "analysis"
 
 type MapGeometry = {
   type: string
   coordinates: unknown
+}
+
+type BuildingRegister = {
+  building_count?: number
+  building_name?: string | null
+  use_code?: string | null
+  structure_code?: string | null
+  approval_year?: number | null
+  latest_use_approval_date?: string | null
+  total_floor_area_m2?: number | null
+  largest_total_floor_area_m2?: number | null
+  ground_floors?: number | null
+  underground_floors?: number | null
+  height_m?: number | null
 }
 
 type MapFeature = {
@@ -52,7 +62,7 @@ type MapFeature = {
   price: string
   area: string
   areaM2?: number
-  approvalYear: number
+  approvalYear?: number
   bankability: number
   readiness: number
   capRate: string
@@ -69,13 +79,26 @@ type MapFeature = {
   sourceUpdatedAt: string
   status: DataStatus
   geometry?: MapGeometry
+  buildingGeometry?: MapGeometry
+  buildingName?: string | null
+  buildingCount?: number
+  buildingRegister?: BuildingRegister
+  buildingAreaM2?: number
+  totalFloorAreaM2?: number
+  groundFloors?: number
+  undergroundFloors?: number
+  heightM?: number
+  landValueLabel?: string
+  officialLandPriceLabel?: string
+  officialLandPricePerM2?: number
+  latestDealDate?: string
+  transactionContext?: Record<string, unknown>
+  source?: string
+  sourceBaseDate?: string | null
   risks: string[]
   nextActions: string[]
   scenarios: string[]
 }
-
-type LayerKey = "parcels" | "stores" | "storeZones" | "transactions" | "regulations"
-type PromptKey = "bankability" | "price" | "location" | "risk"
 
 type MapViewport = {
   swLat: number
@@ -88,9 +111,6 @@ type MapViewport = {
 
 type MapConfig = {
   engine: string
-  tilesBaseUrl: string
-  styleUrl: string
-  tilesetVersion: string
   defaultCenter: [number, number]
   defaultZoom: number
   minZoom: number
@@ -98,10 +118,9 @@ type MapConfig = {
   status: string
 }
 
-type BboxApiState = {
+type ApiState = {
   status: "idle" | "loading" | "ready" | "error"
   count: number
-  bboxLabel: string
   source: string
 }
 
@@ -118,48 +137,57 @@ type FeatureCollection = {
   [key: string]: unknown
 }
 
-const mapCenter = { lat: 37.5523, lng: 126.9139 }
-const mapMinZoom = 9
-const mapMaxZoom = 22
-const mapInitialZoom = 15
-const parcelMinZoom = 13
-const parcelNativeMaxZoom = 17
+type KakaoOverlay = { setMap: (map: unknown | null) => void }
+type KakaoLatLngLike = {
+  getLat?: () => number
+  getLng?: () => number
+  Ma?: number
+  La?: number
+}
+type KakaoBoundsLike = {
+  getSouthWest: () => KakaoLatLngLike
+  getNorthEast: () => KakaoLatLngLike
+}
+type KakaoMapInstance = {
+  addControl: (control: unknown, position: unknown) => void
+  getBounds: () => KakaoBoundsLike
+  getLevel?: () => number
+}
+type KakaoRoadviewInstance = {
+  setPanoId: (panoId: number, position: unknown) => void
+  relayout?: () => void
+}
+type KakaoRoadviewClient = {
+  getNearestPanoId: (position: unknown, radius: number, callback: (panoId: number | null) => void) => void
+}
+type KakaoClickEvent = { latLng: KakaoLatLngLike }
+type KakaoEventHandler = (...args: unknown[]) => void
 
-let pmtilesProtocolRegistered = false
+const mapInitialLevel = 3
+const emptyFeatureCollection: FeatureCollection = { type: "FeatureCollection", features: [] }
 
-const vworldTileProxyBaseUrl = (
-  process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
-).replace(/\/+$/, "")
-const vworldBaseTiles = [`${vworldTileProxyBaseUrl}/{z}/{y}/{x}.png`]
-const preloadedRasterTiles = new Set<string>()
+let kakaoMapsPromise: Promise<typeof window.kakao.maps> | null = null
 
 const layerLabels: Record<LayerKey, string> = {
-  parcels: "필지 경계",
-  stores: "상호/상가",
+  parcels: "필지/건물",
+  stores: "상가정보",
   storeZones: "주요상권",
   transactions: "실거래",
   regulations: "규제/정비",
 }
 
-const promptLabels: Record<PromptKey, string> = {
-  bankability: "은행 대출 가능성",
-  price: "매입가 협상 여지",
-  location: "상업축/배후세대",
-  risk: "먼저 봐야 할 리스크",
-}
-
 const layerColors: Record<LayerKey, string> = {
-  parcels: "bg-zinc-700",
+  parcels: "bg-sky-500",
   stores: "bg-rose-500",
   storeZones: "bg-emerald-500",
-  transactions: "bg-sky-500",
+  transactions: "bg-indigo-500",
   regulations: "bg-amber-500",
 }
 
 const mockFeatures: MapFeature[] = [
   {
     id: "bm-map-001",
-    featureId: "parcel-mapo-001",
+    featureId: "1144012400104140016",
     pnu: "1144012400104140016",
     address: "서울 마포구 합정동 414-16",
     district: "합정역 6번 출구권",
@@ -167,6 +195,7 @@ const mockFeatures: MapFeature[] = [
     coordinates: { lat: 37.5496, lng: 126.9142 },
     price: "52.8억",
     area: "대지 142㎡",
+    areaM2: 142,
     approvalYear: 1998,
     bankability: 74,
     readiness: 68,
@@ -177,19 +206,19 @@ const mockFeatures: MapFeature[] = [
     equity: "22.1억",
     interest: "1,920만/월",
     maxPurchasePrice: "49.6억",
-    locationSignal: "가로주택정비 180m",
+    locationSignal: "합정역 상업축 인접",
     signalStrength: "strong",
     hiddenYield: "검토 가능",
-    confidence: "중상",
+    confidence: "샘플",
     sourceUpdatedAt: "2026.06.09",
     status: "ready",
-    risks: ["임대료 표본 6건", "인허가 보수 반영 필요"],
-    nextActions: ["임대차 명세 확인", "최근 거래 12개월 비교", "은행 제출 메모 초안"],
+    risks: ["임대료 표본 보강 필요", "건축물대장 원장 확인 필요"],
+    nextActions: ["임대차 명세 확인", "최근 거래 24개월 비교", "은행 제출 메모 초안"],
     scenarios: ["리모델링", "증축"],
   },
   {
     id: "bm-map-002",
-    featureId: "parcel-mapo-002",
+    featureId: "1144012000103570001",
     pnu: "1144012000103570001",
     address: "서울 마포구 서교동 357-1",
     district: "홍대입구 배후상권",
@@ -197,6 +226,7 @@ const mockFeatures: MapFeature[] = [
     coordinates: { lat: 37.5562, lng: 126.9235 },
     price: "64.5억",
     area: "대지 171㎡",
+    areaM2: 171,
     approvalYear: 2004,
     bankability: 61,
     readiness: 56,
@@ -207,10 +237,10 @@ const mockFeatures: MapFeature[] = [
     equity: "31.0억",
     interest: "2,460만/월",
     maxPurchasePrice: "57.2억",
-    locationSignal: "역세권 통합기획 520m",
+    locationSignal: "홍대 배후 임대수요",
     signalStrength: "medium",
     hiddenYield: "검증 필요",
-    confidence: "중간",
+    confidence: "샘플",
     sourceUpdatedAt: "2026.06.09",
     status: "partial",
     risks: ["공실률 보정 필요", "최근 고가 거래 영향"],
@@ -219,7 +249,7 @@ const mockFeatures: MapFeature[] = [
   },
   {
     id: "bm-map-003",
-    featureId: "parcel-mapo-003",
+    featureId: "1144012300103990004",
     pnu: "1144012300103990004",
     address: "서울 마포구 망원동 399-4",
     district: "망리단길 생활상권",
@@ -227,6 +257,7 @@ const mockFeatures: MapFeature[] = [
     coordinates: { lat: 37.5551, lng: 126.9064 },
     price: "41.8억",
     area: "대지 132㎡",
+    areaM2: 132,
     approvalYear: 1992,
     bankability: 69,
     readiness: 63,
@@ -237,10 +268,10 @@ const mockFeatures: MapFeature[] = [
     equity: "18.5억",
     interest: "1,410만/월",
     maxPurchasePrice: "40.9억",
-    locationSignal: "모아타운 후보지 310m",
+    locationSignal: "생활상권 유입",
     signalStrength: "watch",
     hiddenYield: "근거 부족",
-    confidence: "보강 필요",
+    confidence: "샘플",
     sourceUpdatedAt: "분석 대기",
     status: "queued",
     risks: ["좌표 보강 대기", "상권 매출 최신성 낮음"],
@@ -250,256 +281,11 @@ const mockFeatures: MapFeature[] = [
 ]
 
 const transactions = [
-  { label: "2026.06", value: "58.2억", coordinates: [126.9168, 37.552] },
-  { label: "2026.05", value: "50.1억", coordinates: [126.9108, 37.5486] },
-  { label: "2026.04", value: "62.0억", coordinates: [126.9216, 37.5576] },
-  { label: "2026.03", value: "45.6억", coordinates: [126.9068, 37.5535] },
+  { label: "30.82억", date: "2022.07", coordinates: { lat: 37.5486, lng: 126.9108 } },
+  { label: "25.5억", date: "2017.09", coordinates: { lat: 37.5491, lng: 126.9137 } },
+  { label: "59.5억", date: "2022.06", coordinates: { lat: 37.5535, lng: 126.9068 } },
+  { label: "90억", date: "2024.11", coordinates: { lat: 37.552, lng: 126.9168 } },
 ]
-
-const emptyFeatureCollection: FeatureCollection = {
-  type: "FeatureCollection",
-  features: [],
-}
-
-function registerPmtilesProtocol() {
-  if (pmtilesProtocolRegistered || typeof window === "undefined") return
-  const protocol = new Protocol()
-  maplibregl.addProtocol("pmtiles", protocol.tile)
-  pmtilesProtocolRegistered = true
-}
-
-function fallbackStyle(): StyleSpecification {
-  return {
-    version: 8,
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {
-      "buildmore-parcels": {
-        type: "vector",
-        tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
-        minzoom: parcelMinZoom,
-        maxzoom: parcelNativeMaxZoom,
-        attribution: "BuildMore PostGIS",
-      },
-    },
-    layers: [
-      {
-        id: "buildmore-parcels-line",
-        type: "line",
-        source: "buildmore-parcels",
-        "source-layer": "parcels",
-        minzoom: parcelMinZoom,
-        paint: {
-          "line-color": "#475569",
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            13,
-            0.22,
-            15,
-            0.42,
-            16.5,
-            0.62,
-            18,
-            0.82,
-            20,
-            1.04,
-            22,
-            1.18,
-          ],
-          "line-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            13,
-            0.18,
-            15,
-            0.3,
-            16.5,
-            0.38,
-            18,
-            0.44,
-            20,
-            0.48,
-            22,
-            0.52,
-          ],
-        },
-      },
-    ],
-  }
-}
-
-function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
-  const sources = { ...(style.sources ?? {}) } as NonNullable<StyleSpecification["sources"]>
-
-  Object.entries(sources).forEach(([sourceId, source]) => {
-    if (source && source.type === "raster") {
-      delete sources[sourceId]
-    }
-  })
-
-  return {
-    ...style,
-    sources,
-    layers: style.layers
-      .filter((layer) => {
-        const sourceId = "source" in layer ? String(layer.source ?? "") : ""
-        const sourceLayerId = "source-layer" in layer ? String(layer["source-layer"] ?? "") : ""
-        const layerId = layer.id.toLowerCase()
-
-        return (
-          layer.type !== "background" &&
-          layer.type !== "raster" &&
-          Boolean(sourceId || sourceLayerId || layerId)
-        )
-      }) as StyleSpecification["layers"],
-  }
-}
-
-function isCadastralVisualLayer(layer: StyleSpecification["layers"][number]) {
-  const layerId = layer.id.toLowerCase()
-  const sourceId = "source" in layer ? String(layer.source ?? "").toLowerCase() : ""
-  const sourceLayerId = "source-layer" in layer ? String(layer["source-layer"] ?? "").toLowerCase() : ""
-
-  return (
-    layerId.includes("parcel") ||
-    layerId.includes("cadastral") ||
-    sourceId.includes("parcel") ||
-    sourceId.includes("cadastral") ||
-    sourceLayerId.includes("parcel") ||
-    sourceLayerId.includes("cadastral")
-  )
-}
-
-function resolveInitialZoom(defaultZoom?: number) {
-  return Math.min(mapMaxZoom, Math.max(defaultZoom || mapInitialZoom, mapInitialZoom))
-}
-
-function tuneCadastralVisualLayers(map: MapLibreMap) {
-  map.getStyle().layers.forEach((layer) => {
-    if (!map.getLayer(layer.id) || !isCadastralVisualLayer(layer)) return
-
-    map.setLayerZoomRange(layer.id, layer.minzoom ?? parcelMinZoom, mapMaxZoom)
-    if (layer.type === "line") {
-      map.setPaintProperty(layer.id, "line-color", "#475569")
-      map.setPaintProperty(layer.id, "line-width", [
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        13,
-        0.22,
-        15,
-        0.42,
-        16.5,
-        0.62,
-        18,
-        0.82,
-        20,
-        1.04,
-        22,
-        1.18,
-      ])
-      map.setPaintProperty(layer.id, "line-opacity", [
-        "interpolate",
-        ["linear"],
-        ["zoom"],
-        13,
-        0.18,
-        15,
-        0.3,
-        16.5,
-        0.38,
-        18,
-        0.44,
-        20,
-        0.48,
-        22,
-        0.52,
-      ])
-    }
-  })
-}
-
-function ensureFallbackRasterBase(map: MapLibreMap | null) {
-  if (!map?.isStyleLoaded()) return
-  if (!map.getSource("vworld-fallback-base")) {
-    map.addSource("vworld-fallback-base", {
-      type: "raster",
-      tiles: vworldBaseTiles,
-      tileSize: 256,
-      minzoom: mapMinZoom,
-      maxzoom: 19,
-      attribution: "VWorld",
-    })
-  }
-  if (!map.getLayer("vworld-fallback-base")) {
-    map.addLayer(
-      {
-        id: "vworld-fallback-base",
-        type: "raster",
-        source: "vworld-fallback-base",
-        paint: {
-          "raster-saturation": -0.18,
-          "raster-contrast": -0.05,
-          "raster-opacity": 0.92,
-          "raster-fade-duration": 140,
-          "raster-resampling": "linear",
-        },
-      },
-      map.getStyle().layers[0]?.id
-    )
-  }
-}
-
-function lngLatToTile(lng: number, lat: number, zoom: number) {
-  const scale = 2 ** zoom
-  const latRad = (lat * Math.PI) / 180
-  return {
-    x: Math.floor(((lng + 180) / 360) * scale),
-    y: Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale),
-  }
-}
-
-function preloadNeighborRasterTiles(map: MapLibreMap | null) {
-  if (!map || typeof window === "undefined") return
-  const preload = () => {
-    const zoom = Math.min(19, Math.max(mapMinZoom, Math.round(map.getZoom())))
-    const bounds = map.getBounds()
-    const sw = bounds.getSouthWest()
-    const ne = bounds.getNorthEast()
-    const nwTile = lngLatToTile(sw.lng, ne.lat, zoom)
-    const seTile = lngLatToTile(ne.lng, sw.lat, zoom)
-    const maxTile = 2 ** zoom - 1
-    const minX = Math.max(0, Math.min(nwTile.x, seTile.x) - 1)
-    const maxX = Math.min(maxTile, Math.max(nwTile.x, seTile.x) + 1)
-    const minY = Math.max(0, Math.min(nwTile.y, seTile.y) - 1)
-    const maxY = Math.min(maxTile, Math.max(nwTile.y, seTile.y) + 1)
-    const urls: string[] = []
-
-    for (let x = minX; x <= maxX; x += 1) {
-      for (let y = minY; y <= maxY; y += 1) {
-        urls.push(`${vworldTileProxyBaseUrl}/${zoom}/${y}/${x}.png`)
-      }
-    }
-
-    if (preloadedRasterTiles.size > 700) preloadedRasterTiles.clear()
-    urls.slice(0, 64).forEach((url) => {
-      if (preloadedRasterTiles.has(url)) return
-      preloadedRasterTiles.add(url)
-      const image = new Image()
-      image.decoding = "async"
-      image.loading = "eager"
-      image.src = url
-    })
-  }
-
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(preload, { timeout: 1200 })
-  } else {
-    window.setTimeout(preload, 150)
-  }
-}
 
 function createParcelCoordinates(feature: MapFeature): [number, number][][] {
   const { lat, lng } = feature.coordinates
@@ -515,90 +301,62 @@ function createParcelCoordinates(feature: MapFeature): [number, number][][] {
   ]]
 }
 
-function mockParcelsGeojson(features: MapFeature[] = mockFeatures) {
-  return {
-    type: "FeatureCollection",
-    features: features.map((feature) => ({
-      type: "Feature",
-      properties: {
-        buildingId: feature.id,
-        feature_id: feature.featureId,
-        pnu: feature.pnu,
-        address: feature.address,
-        buildmore_class: feature.use,
-        confidence: feature.confidence,
-      },
-      geometry: feature.geometry ?? {
-        type: "Polygon",
-        coordinates: createParcelCoordinates(feature),
-      },
-    })),
+function loadKakaoMaps() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Kakao Maps requires browser runtime"))
   }
+  if (window.kakao?.maps) {
+    return new Promise<typeof window.kakao.maps>((resolve) => {
+      window.kakao.maps.load(() => resolve(window.kakao.maps))
+    })
+  }
+  if (kakaoMapsPromise) return kakaoMapsPromise
+
+  kakaoMapsPromise = fetch("/api/config/kakao-map-key", { cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) throw new Error("Kakao Map API key is not configured")
+      return response.json() as Promise<{ kakaoMapKey?: string }>
+    })
+    .then(({ kakaoMapKey }) => {
+      if (!kakaoMapKey) throw new Error("Kakao Map API key is missing")
+
+      return new Promise<typeof window.kakao.maps>((resolve, reject) => {
+        const existingScript = document.getElementById("kakao-map-script") as HTMLScriptElement | null
+        const finish = () => window.kakao.maps.load(() => resolve(window.kakao.maps))
+
+        if (existingScript) {
+          if (window.kakao?.maps) finish()
+          else existingScript.addEventListener("load", finish, { once: true })
+          return
+        }
+
+        const script = document.createElement("script")
+        script.id = "kakao-map-script"
+        script.async = true
+        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoMapKey)}&autoload=false&libraries=services`
+        script.onload = finish
+        script.onerror = () => reject(new Error("Kakao Maps SDK load failed"))
+        document.head.appendChild(script)
+      })
+    })
+
+  return kakaoMapsPromise
 }
 
-function mockTransactionsGeojson() {
-  return {
-    type: "FeatureCollection",
-    features: transactions.map((item) => ({
-      type: "Feature",
-      properties: {
-        label: item.label,
-        value: item.value,
-      },
-      geometry: {
-        type: "Point",
-        coordinates: item.coordinates,
-      },
-    })),
-  }
+function numberValue(value: unknown) {
+  const next = Number(value)
+  return Number.isFinite(next) ? next : undefined
 }
 
-function statusBadge(status: DataStatus) {
-  if (status === "ready") {
-    return { label: "ready", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
-  }
-  if (status === "partial") {
-    return { label: "partial", className: "border-amber-200 bg-amber-50 text-amber-700" }
-  }
-  return { label: "queued", className: "border-violet-200 bg-violet-50 text-violet-700" }
-}
-
-function signalTone(signal: MapFeature["signalStrength"]) {
-  if (signal === "strong") return "border-amber-300 bg-amber-50 text-amber-800"
-  if (signal === "medium") return "border-sky-300 bg-sky-50 text-sky-800"
-  return "border-violet-300 bg-violet-50 text-violet-800"
-}
-
-function mockLlmAnswer(selected: MapFeature, prompt: PromptKey) {
-  if (prompt === "price") {
-    return `희망가 ${selected.price}는 보수 산정가 ${selected.maxPurchasePrice} 대비 높게 보입니다. DSCR ${selected.dscr}, 월 이자 ${selected.interest}를 맞추려면 매입가 조정 또는 자기자본 확대가 먼저 필요합니다.`
-  }
-  if (prompt === "location") {
-    return `${selected.district}은 ${selected.locationSignal} 신호가 있고, ${selected.hiddenYield} 단계입니다. 현재 지도에서는 상호명보다 필지, 상업축, 배후 주거, 최근 거래 밀도를 우선 읽는 구조로 전환했습니다.`
-  }
-  if (prompt === "risk") {
-    return `우선 리스크는 ${selected.risks.join(", ")}입니다. 은행 제출 전에는 임대차 명세, 최근 실거래 비교, 좌표/PNU confidence를 보강해야 합니다.`
-  }
-  return `${selected.address}의 Bankability는 ${selected.bankability}점입니다. 핵심 근거는 DSCR ${selected.dscr}, LTV ${selected.ltv}, NOI ${selected.noi}, cap rate ${selected.capRate}이며 추천 시나리오는 ${selected.scenarios.join(" / ")}입니다.`
+function textValue(value: unknown, fallback: string) {
+  if (value === null || value === undefined || value === "") return fallback
+  return String(value)
 }
 
 function stringList(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback
   const items = value.map((item) => String(item)).filter(Boolean)
   return items.length ? items : fallback
-}
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => {
-    const escaped: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    }
-    return escaped[char] ?? char
-  })
 }
 
 function dataStatus(value: unknown, fallback: DataStatus): DataStatus {
@@ -609,72 +367,148 @@ function signalStrength(value: unknown, fallback: MapFeature["signalStrength"]):
   return value === "strong" || value === "medium" || value === "watch" ? value : fallback
 }
 
+function statusBadge(status: DataStatus) {
+  if (status === "ready") return { label: "ready", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
+  if (status === "partial") return { label: "partial", className: "border-amber-200 bg-amber-50 text-amber-700" }
+  return { label: "queued", className: "border-violet-200 bg-violet-50 text-violet-700" }
+}
+
 function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
-  const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id) ?? mockFeatures[0]
+  const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id || feature.pnu === id) ?? mockFeatures[0]
   const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
   const geometry = payload.geometry as MapGeometry | undefined
+  const buildingGeometry = payload.building_geometry as MapGeometry | undefined
+  const buildingRegister = payload.building_register as BuildingRegister | undefined
+  const featureId = textValue(payload.feature_id ?? payload.pnu ?? id, fallback.featureId)
+  const areaM2 = numberValue(payload.area_m2 ?? payload.areaM2 ?? fallback.areaM2)
 
   return {
     ...fallback,
-    id: String(payload.id ?? payload.building_id ?? id),
-    featureId: String(payload.feature_id ?? id),
-    pnu: String(payload.pnu ?? fallback.pnu),
-    address: String(payload.address ?? fallback.address),
-    district: String(payload.district ?? payload.location_label ?? fallback.district),
-    use: String(payload.use ?? payload.main_use ?? payload.land_category ?? payload.jimok ?? fallback.use),
+    id: textValue(payload.id ?? `parcel-${featureId}`, fallback.id),
+    featureId,
+    pnu: textValue(payload.pnu ?? featureId, fallback.pnu),
+    address: textValue(payload.address, fallback.address),
+    district: textValue(payload.district ?? payload.location_label, fallback.district),
+    use: textValue(payload.use ?? payload.main_use ?? payload.land_category ?? payload.jimok, fallback.use),
     coordinates: {
       lat: Number(coordinates?.lat ?? payload.lat ?? fallback.coordinates.lat),
       lng: Number(coordinates?.lng ?? payload.lng ?? fallback.coordinates.lng),
     },
-    price: String(payload.price ?? fallback.price),
-    area: String(payload.area ?? fallback.area),
-    areaM2: Number(payload.area_m2 ?? payload.areaM2 ?? fallback.areaM2 ?? 0) || undefined,
-    approvalYear: Number(payload.approval_year ?? payload.approvalYear ?? fallback.approvalYear),
-    bankability: Number(payload.bankability ?? payload.bankability_score ?? fallback.bankability),
-    readiness: Number(payload.readiness ?? payload.deal_readiness_score ?? fallback.readiness),
-    capRate: String(payload.cap_rate ?? fallback.capRate),
-    dscr: String(payload.dscr ?? fallback.dscr),
-    ltv: String(payload.ltv ?? fallback.ltv),
-    noi: String(payload.noi ?? fallback.noi),
-    equity: String(payload.equity ?? fallback.equity),
-    interest: String(payload.interest ?? fallback.interest),
-    maxPurchasePrice: String(payload.max_purchase_price ?? payload.maxPurchasePrice ?? fallback.maxPurchasePrice),
-    locationSignal: String(payload.location_signal ?? payload.locationSignal ?? fallback.locationSignal),
+    price: textValue(payload.price, fallback.price),
+    area: textValue(payload.area, areaM2 ? `${areaM2.toLocaleString("ko-KR")}㎡` : fallback.area),
+    areaM2,
+    approvalYear: numberValue(payload.approval_year ?? payload.approvalYear ?? fallback.approvalYear),
+    bankability: numberValue(payload.bankability ?? payload.bankability_score) ?? fallback.bankability,
+    readiness: numberValue(payload.readiness ?? payload.deal_readiness_score) ?? fallback.readiness,
+    capRate: textValue(payload.cap_rate, fallback.capRate),
+    dscr: textValue(payload.dscr, fallback.dscr),
+    ltv: textValue(payload.ltv, fallback.ltv),
+    noi: textValue(payload.noi, fallback.noi),
+    equity: textValue(payload.equity, fallback.equity),
+    interest: textValue(payload.interest, fallback.interest),
+    maxPurchasePrice: textValue(payload.max_purchase_price ?? payload.maxPurchasePrice, fallback.maxPurchasePrice),
+    locationSignal: textValue(payload.location_signal ?? payload.locationSignal, fallback.locationSignal),
     signalStrength: signalStrength(payload.signal_strength ?? payload.signalStrength, fallback.signalStrength),
-    hiddenYield: String(payload.hidden_yield ?? payload.hiddenYield ?? fallback.hiddenYield),
-    confidence: String(payload.confidence ?? payload.source_confidence ?? fallback.confidence),
-    sourceUpdatedAt: String(payload.source_updated_at ?? fallback.sourceUpdatedAt),
+    hiddenYield: textValue(payload.hidden_yield ?? payload.hiddenYield, fallback.hiddenYield),
+    confidence: textValue(payload.confidence ?? payload.source_confidence, fallback.confidence),
+    sourceUpdatedAt: textValue(payload.source_updated_at, fallback.sourceUpdatedAt),
     status: dataStatus(payload.status, "partial"),
     geometry: geometry?.type && geometry.coordinates ? geometry : fallback.geometry,
+    buildingGeometry: buildingGeometry?.type && buildingGeometry.coordinates ? buildingGeometry : fallback.buildingGeometry,
+    buildingName: textValue(payload.building_name ?? buildingRegister?.building_name, fallback.buildingName ?? "-"),
+    buildingCount: numberValue(payload.building_count ?? buildingRegister?.building_count) ?? fallback.buildingCount ?? 0,
+    buildingRegister,
+    buildingAreaM2: numberValue(payload.building_area_m2 ?? buildingRegister?.largest_total_floor_area_m2),
+    totalFloorAreaM2: numberValue(payload.total_floor_area_m2 ?? buildingRegister?.total_floor_area_m2),
+    groundFloors: numberValue(payload.ground_floors ?? buildingRegister?.ground_floors),
+    undergroundFloors: numberValue(payload.underground_floors ?? buildingRegister?.underground_floors),
+    heightM: numberValue(payload.height_m ?? buildingRegister?.height_m),
+    landValueLabel: textValue(payload.land_value_label, fallback.landValueLabel ?? "-"),
+    officialLandPriceLabel: textValue(payload.official_land_price_label, fallback.officialLandPriceLabel ?? "-"),
+    officialLandPricePerM2: numberValue(payload.official_land_price_per_m2),
+    latestDealDate: textValue(payload.latest_deal_date, fallback.latestDealDate ?? "-"),
+    transactionContext: (payload.transaction_context as Record<string, unknown> | undefined) ?? fallback.transactionContext,
+    source: textValue(payload.source, fallback.source ?? "BuildMore"),
+    sourceBaseDate: textValue(payload.source_base_date, fallback.sourceBaseDate ?? "-"),
     risks: stringList(payload.risks, fallback.risks),
     nextActions: stringList(payload.next_actions ?? payload.nextActions, fallback.nextActions),
     scenarios: stringList(payload.scenarios, fallback.scenarios),
   }
 }
 
+function geometryToKakaoPaths(geometry: MapGeometry | undefined, kakaoMaps: typeof window.kakao.maps) {
+  if (!geometry?.coordinates) return []
+  const paths: unknown[][] = []
+
+  const addRing = (ring: unknown) => {
+    if (!Array.isArray(ring)) return
+    const path = ring
+      .map((point) => {
+        if (!Array.isArray(point) || point.length < 2) return null
+        const lng = Number(point[0])
+        const lat = Number(point[1])
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+        return new kakaoMaps.LatLng(lat, lng)
+      })
+      .filter(Boolean) as unknown[]
+    if (path.length >= 3) paths.push(path)
+  }
+
+  if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
+    addRing(geometry.coordinates[0])
+  }
+  if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+    geometry.coordinates.forEach((polygon) => {
+      if (Array.isArray(polygon)) addRing(polygon[0])
+    })
+  }
+  return paths
+}
+
+function compactArea(value?: number) {
+  if (!value) return "-"
+  return `${value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}㎡`
+}
+
+function kakaoLatLngToPoint(latLng: KakaoLatLngLike) {
+  return {
+    lat: typeof latLng.getLat === "function" ? latLng.getLat() : Number(latLng.Ma ?? latLng.La),
+    lng: typeof latLng.getLng === "function" ? latLng.getLng() : Number(latLng.La ?? latLng.Ma),
+  }
+}
+
+function bboxFromKakaoMap(map: KakaoMapInstance) {
+  const bounds = map.getBounds()
+  const sw = kakaoLatLngToPoint(bounds.getSouthWest())
+  const ne = kakaoLatLngToPoint(bounds.getNorthEast())
+  const level = Number(map.getLevel?.() ?? mapInitialLevel)
+  const zoom = Math.max(1, 22 - level)
+  const bboxParam = [sw.lng, sw.lat, ne.lng, ne.lat].map((value) => value.toFixed(6)).join(",")
+  return {
+    swLat: sw.lat,
+    swLng: sw.lng,
+    neLat: ne.lat,
+    neLng: ne.lng,
+    zoom,
+    bboxParam,
+  }
+}
+
 export default function MapPage() {
   const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
-  const [statusOpen, setStatusOpen] = useState(false)
+  const [activeSection, setActiveSection] = useState<PanelSection>("land")
   const [filterOpen, setFilterOpen] = useState(false)
-  const [activePrompt, setActivePrompt] = useState<PromptKey>("bankability")
-  const [selectedScenario, setSelectedScenario] = useState(mockFeatures[0].scenarios[0])
-  const [savedIds, setSavedIds] = useState<string[]>([])
-  const [viewedFeatureIds, setViewedFeatureIds] = useState<string[]>(mockFeatures.map((feature) => feature.id))
+  const [viewMode, setViewMode] = useState<ViewMode>("map")
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>(mockFeatures)
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
   const [storeFeatures, setStoreFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
   const [storeZoneFeatures, setStoreZoneFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
-  const [bboxApi, setBboxApi] = useState<BboxApiState>({
-    status: "idle",
-    count: mockFeatures.length,
-    bboxLabel: "bbox 대기",
-    source: "maplibre-local",
-  })
+  const [bboxApi, setBboxApi] = useState<ApiState>({ status: "idle", count: mockFeatures.length, source: "idle" })
   const [storeApi, setStoreApi] = useState<StoreApiState>({
     status: "idle",
     storeCount: 0,
     zoneCount: 0,
-    source: "store-layer-idle",
+    source: "idle",
   })
   const [activeLayers, setActiveLayers] = useState<Record<LayerKey, boolean>>({
     parcels: true,
@@ -684,86 +518,41 @@ export default function MapPage() {
     regulations: true,
   })
 
-  const selectedStatus = statusBadge(selected.status)
-  const isSaved = savedIds.includes(selected.id)
-  const viewedFeatures = useMemo(
-    () =>
-      viewedFeatureIds
-        .map((id) => (id === selected.id ? selected : mapFeatures.find((feature) => feature.id === id) ?? mockFeatures.find((feature) => feature.id === id)))
-        .filter((feature): feature is MapFeature => Boolean(feature)),
-    [mapFeatures, selected, viewedFeatureIds]
-  )
+  const applySelected = useCallback((feature: MapFeature) => {
+    setSelected(feature)
+    setMapFeatures((current) => {
+      const exists = current.some((item) => item.id === feature.id || item.featureId === feature.featureId || item.pnu === feature.pnu)
+      if (exists) {
+        return current.map((item) =>
+          item.id === feature.id || item.featureId === feature.featureId || item.pnu === feature.pnu ? feature : item
+        )
+      }
+      return [feature, ...current].slice(0, 240)
+    })
+  }, [])
+
+  const applyFeaturePayload = useCallback((payload: Record<string, unknown>) => {
+    const featureId = textValue(payload.feature_id ?? payload.pnu ?? payload.id, "clicked-feature")
+    applySelected(featureFromSummary(featureId, payload))
+  }, [applySelected])
 
   const toggleLayer = (key: LayerKey) => {
     setActiveLayers((current) => ({ ...current, [key]: !current[key] }))
   }
 
-  const applySelected = useCallback((feature: MapFeature) => {
-    setSelected(feature)
-    setViewedFeatureIds((current) => [feature.id, ...current.filter((currentId) => currentId !== feature.id)].slice(0, 3))
-    setSelectedScenario(feature.scenarios[0] ?? "")
-    setActivePrompt("bankability")
-    setStatusOpen(true)
-  }, [])
-
-  const selectFeatureById = useCallback((id: string) => {
-    const next =
-      mapFeatures.find((feature) => feature.id === id || feature.featureId === id) ??
-      mockFeatures.find((feature) => feature.id === id || feature.featureId === id)
-    if (next) applySelected(next)
-  }, [applySelected, mapFeatures])
-
-  const loadFeatureSummary = useCallback(async (featureId: string, properties?: Record<string, unknown>) => {
-    const fallback = featureFromSummary(featureId, properties ?? {})
-    applySelected(fallback)
-
-    try {
-      const response = await fetch(`/api/map/features/${encodeURIComponent(featureId)}/summary`, { cache: "no-store" })
-      if (!response.ok) return
-      const payload = await response.json()
-      const enriched = featureFromSummary(featureId, payload)
-      setMapFeatures((current) =>
-        current.map((feature) => (feature.id === enriched.id || feature.featureId === enriched.featureId ? enriched : feature))
-      )
-      applySelected(enriched)
-    } catch {
-      applySelected({
-        ...fallback,
-        status: "partial",
-        risks: ["Feature summary API 연결 대기", ...fallback.risks.slice(0, 1)],
-      })
-    }
-  }, [applySelected])
-
-  const toggleSaved = () => {
-    setSavedIds((current) =>
-      current.includes(selected.id)
-        ? current.filter((id) => id !== selected.id)
-        : [...current, selected.id]
-    )
-  }
-
-  const closeBuildingPanels = useCallback(() => {
-    setStatusOpen(false)
-  }, [])
-
-  const handleViewportChange = useCallback((viewport: MapViewport) => {
-    setMapViewport(viewport)
-  }, [])
-
   useEffect(() => {
     if (!mapViewport) return
-
     const controller = new AbortController()
 
-    const loadBboxSignals = async () => {
+    const loadViewportSignals = async () => {
       try {
-        setBboxApi((current) => ({ ...current, status: "loading", bboxLabel: mapViewport.bboxParam }))
+        setBboxApi((current) => ({ ...current, status: "loading" }))
         setStoreApi((current) => ({ ...current, status: "loading" }))
 
         const params = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           level: String(Math.round(mapViewport.zoom)),
+          limit: "220",
         })
         const storeParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
@@ -774,225 +563,110 @@ export default function MapPage() {
           bbox: mapViewport.bboxParam,
           limit: "80",
         })
+
         const [buildingResult, storesResult, zonesResult] = await Promise.allSettled([
           fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/stores?${storeParams.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/store-zones?${zoneParams.toString()}`, { signal: controller.signal }),
         ])
-        const response = buildingResult.status === "fulfilled" ? buildingResult.value : null
+
+        const buildingResponse = buildingResult.status === "fulfilled" ? buildingResult.value : null
         const storesResponse = storesResult.status === "fulfilled" ? storesResult.value : null
         const zonesResponse = zonesResult.status === "fulfilled" ? zonesResult.value : null
-
-        const data = response?.ok
-          ? ((await response.json()) as {
-              count?: number
-              bbox?: string
-              source?: string
-              buildings?: Array<Record<string, unknown>>
-              features?: Array<Record<string, unknown>>
-            })
-          : {
-              count: mockFeatures.length,
-              bbox: mapViewport.bboxParam,
-              source: "maplibre-local",
-              buildings: [],
-            }
+        const buildingData = buildingResponse?.ok
+          ? ((await buildingResponse.json()) as { count?: number; source?: string; buildings?: Array<Record<string, unknown>>; features?: Array<Record<string, unknown>> })
+          : { count: mockFeatures.length, source: "local-map-features", buildings: [] }
         const storesData = storesResponse?.ok
           ? ((await storesResponse.json()) as FeatureCollection & { count?: number; source?: string })
           : emptyFeatureCollection
         const zonesData = zonesResponse?.ok
           ? ((await zonesResponse.json()) as FeatureCollection & { count?: number; source?: string })
           : emptyFeatureCollection
-        const livePayloads = data.buildings ?? data.features ?? []
+        const livePayloads = buildingData.buildings ?? buildingData.features ?? []
         const liveFeatures = livePayloads.map((item, index) =>
-          featureFromSummary(String(item.feature_id ?? item.pnu ?? item.id ?? `bbox-${index}`), item)
+          featureFromSummary(textValue(item.feature_id ?? item.pnu ?? item.id, `bbox-${index}`), item)
         )
 
         if (liveFeatures.length) {
           setMapFeatures(liveFeatures)
-          if (selected.featureId.startsWith("parcel-mapo-")) {
-            void loadFeatureSummary(liveFeatures[0].featureId, livePayloads[0])
-          }
         }
-
         setBboxApi({
-          status: response?.ok ? "ready" : "error",
-          count: data.count ?? (liveFeatures.length || mockFeatures.length),
-          bboxLabel: data.bbox ?? mapViewport.bboxParam,
-          source: data.source ?? "maplibre-local",
+          status: buildingResponse?.ok ? "ready" : "error",
+          count: buildingData.count ?? liveFeatures.length,
+          source: buildingData.source ?? "map-building-signals",
         })
         setStoreFeatures(storesData.features ? storesData : emptyFeatureCollection)
         setStoreZoneFeatures(zonesData.features ? zonesData : emptyFeatureCollection)
         setStoreApi({
           status: "ready",
-          storeCount: storesData.count ?? storesData.features?.length ?? 0,
-          zoneCount: zonesData.count ?? zonesData.features?.length ?? 0,
+          storeCount: Number(storesData.count ?? storesData.features?.length ?? 0),
+          zoneCount: Number(zonesData.count ?? zonesData.features?.length ?? 0),
           source: [storesData.source, zonesData.source].filter(Boolean).join(" + ") || "store-layer",
         })
       } catch {
         if (controller.signal.aborted) return
-        setBboxApi((current) => ({ ...current, status: "error", source: "maplibre-local" }))
+        setBboxApi((current) => ({ ...current, status: "error" }))
         setStoreApi((current) => ({ ...current, status: "error" }))
       }
     }
 
-    loadBboxSignals()
+    loadViewportSignals()
     return () => controller.abort()
-  }, [loadFeatureSummary, mapViewport, selected.featureId])
+  }, [mapViewport])
 
   return (
-    <main className="min-h-screen bg-[#e7ece4] text-zinc-950">
-      <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/96 backdrop-blur">
-        <div className="flex min-h-16 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:px-5">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/analysis"
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-800 transition hover:bg-zinc-100"
-              aria-label="Analysis로 이동"
-            >
-              <ChevronRight className="h-4 w-4 rotate-180" />
-            </Link>
-            <div>
-              <p className="text-xs font-medium text-zinc-500">BuildMore Map</p>
-              <h1 className="text-lg font-semibold leading-tight text-zinc-950">필지 기반 금융 실행 지도</h1>
-            </div>
-          </div>
-
-          <div className="flex flex-1 flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <Input
-                value="서울 마포구 합정동"
-                readOnly
-                className="h-10 rounded-lg border-zinc-200 bg-white pl-9 text-sm"
-                aria-label="주소 검색"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className={cn("h-10 rounded-lg border-zinc-200 bg-white", filterOpen && "border-zinc-900 bg-zinc-100")}
-                onClick={() => setFilterOpen((open) => !open)}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                레이어
-              </Button>
-              <Button
-                variant="outline"
-                className={cn(
-                  "h-10 rounded-lg border-zinc-200 bg-white",
-                  isSaved && "border-emerald-300 bg-emerald-50 text-emerald-800"
-                )}
-                onClick={toggleSaved}
-              >
-                <Save className="h-4 w-4" />
-                {isSaved ? "저장됨" : "후보 저장"}
-              </Button>
-              <Button asChild className="h-10 rounded-lg bg-zinc-950 text-white hover:bg-zinc-800">
-                <Link href="/analysis">
-                  <Activity className="h-4 w-4" />
-                  분석 실행
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <section className="relative h-[calc(100vh-65px)] min-h-[720px] overflow-hidden bg-[#dfe7dc]">
+    <main className="h-screen overflow-hidden bg-[#eef1ea] text-zinc-950">
+      <section className="relative h-full w-full overflow-hidden">
         <MapSurface
           activeLayers={activeLayers}
-          selected={selected}
           features={mapFeatures}
+          selected={selected}
           storeFeatures={storeFeatures}
           storeZoneFeatures={storeZoneFeatures}
-          savedIds={savedIds}
-          onSelect={selectFeatureById}
-          onExternalFeature={loadFeatureSummary}
-          onCloseBuildingPanels={closeBuildingPanels}
-          onViewportChange={handleViewportChange}
+          viewMode={viewMode}
+          onFeaturePayload={applyFeaturePayload}
+          onViewportChange={setMapViewport}
         />
 
-        <div className="absolute bottom-5 left-4 top-4 z-30 flex w-[calc(100%-2rem)] max-w-[400px] flex-col rounded-lg border border-white/80 bg-white/78 shadow-2xl backdrop-blur-md md:left-5 md:top-5">
-          <div className="flex items-center justify-between border-b border-white/60 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <MessageSquareText className="h-4 w-4 text-zinc-700" />
-              <div>
-                <p className="text-sm font-semibold">BuildMore LLM</p>
-                <p className="text-[11px] text-zinc-500">선택 필지의 대출 가능성과 실행 근거</p>
-              </div>
-            </div>
-            <Badge className={cn("rounded-md border px-2 py-1 text-xs", selectedStatus.className)}>
-              {selectedStatus.label}
-            </Badge>
-          </div>
+        <LeftParcelPanel
+          selected={selected}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-zinc-500">최근 클릭 필지</p>
-              <div className="grid gap-2">
-                {viewedFeatures.map((feature) => (
-                  <button
-                    key={feature.id}
-                    type="button"
-                    onClick={() => applySelected(feature)}
-                    className={cn(
-                      "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition",
-                      selected.id === feature.id
-                        ? "border-zinc-900 bg-zinc-950 text-white"
-                        : "border-zinc-200 bg-white/90 text-zinc-800 hover:bg-zinc-50"
-                    )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold">{feature.district}</span>
-                      <span className={cn("block truncate text-[11px]", selected.id === feature.id ? "text-zinc-300" : "text-zinc-500")}>
-                        {feature.price} · {feature.use}
-                      </span>
-                    </span>
-                    <span className={cn("rounded-md px-2 py-1 text-[10px]", selected.id === feature.id ? "bg-white/12 text-white" : "bg-zinc-100 text-zinc-600")}>
-                      {feature.bankability}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(promptLabels) as PromptKey[]).map((key) => (
-                <PromptChip
-                  key={key}
-                  label={promptLabels[key]}
-                  active={activePrompt === key}
-                  onClick={() => setActivePrompt(key)}
-                />
-              ))}
-            </div>
-
-            <div className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-normal text-zinc-500">Answer</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-800">{mockLlmAnswer(selected, activePrompt)}</p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Input value={`${selected.address} 기준으로 은행 제출 메모 초안`} readOnly className="h-10 rounded-lg bg-white text-xs" />
-              <Button size="icon" className="h-10 w-10 rounded-lg bg-zinc-950">
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+        <div className="absolute left-[420px] top-3 z-30 flex items-center gap-2">
+          <Button
+            variant="outline"
+            className={cn("h-12 rounded-lg border-white/80 bg-white/92 px-4 shadow-lg", filterOpen && "border-zinc-900 bg-zinc-950 text-white")}
+            onClick={() => setFilterOpen((open) => !open)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            필터
+          </Button>
+          <div className="rounded-lg border border-white/80 bg-white/92 p-1 shadow-lg">
+            <Button
+              variant="ghost"
+              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "map" && "bg-[#0f67e8] text-white hover:bg-[#0f67e8] hover:text-white")}
+              onClick={() => setViewMode("map")}
+            >
+              지도
+            </Button>
+            <Button
+              variant="ghost"
+              className={cn("h-10 rounded-md px-8 text-base font-semibold", viewMode === "roadview" && "bg-[#0f67e8] text-white hover:bg-[#0f67e8] hover:text-white")}
+              onClick={() => setViewMode("roadview")}
+            >
+              로드뷰
+            </Button>
           </div>
         </div>
 
         {filterOpen && (
-          <div
-            className={cn(
-              "absolute right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-lg border border-white/80 bg-white/88 p-4 shadow-2xl backdrop-blur-md md:top-5",
-              statusOpen ? "md:right-[460px]" : "md:right-5"
-            )}
-          >
-            <div className="mb-3 flex items-center justify-between">
+          <div className="absolute left-[420px] top-[72px] z-40 w-72 rounded-lg border border-white/80 bg-white/94 p-3 shadow-xl backdrop-blur">
+            <div className="mb-2 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">MapLibre layers</p>
-                <p className="text-[11px] text-zinc-500">VWorld/R2 배경 위 공공 상가·상권</p>
+                <p className="text-sm font-semibold">지도 레이어</p>
+                <p className="text-[11px] text-zinc-500">Kakao 단일 엔진 오버레이</p>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setFilterOpen(false)}>
                 <X className="h-4 w-4" />
@@ -1019,34 +693,8 @@ export default function MapPage() {
           </div>
         )}
 
-        <div className="absolute bottom-3 left-3 z-20 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
-          bbox API: {bboxApi.status} · 줌 {mapViewport?.zoom.toFixed(1) ?? "-"} · 후보 {bboxApi.count}건 · 상가 {storeApi.storeCount} · 상권 {storeApi.zoneCount} · {bboxApi.source}
-        </div>
-
-        {!statusOpen && (
-          <button
-            type="button"
-            onClick={() => setStatusOpen(true)}
-            className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-xl backdrop-blur transition hover:bg-white"
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            상태창
-          </button>
-        )}
-
-        <div
-          className={cn(
-            "absolute bottom-4 right-4 top-4 z-40 flex w-[calc(100%-2rem)] max-w-[430px] translate-x-[calc(100%+1.5rem)] flex-col rounded-xl border border-white/80 bg-white/90 shadow-2xl backdrop-blur-md transition-transform duration-300 md:bottom-5 md:right-5 md:top-5",
-            statusOpen ? "translate-x-0" : "pointer-events-none"
-          )}
-        >
-          <StatusDrawer
-            selected={selected}
-            selectedScenario={selectedScenario}
-            isSaved={isSaved}
-            onScenarioChange={setSelectedScenario}
-            onClose={() => setStatusOpen(false)}
-          />
+        <div className="absolute bottom-3 left-[420px] z-20 rounded-lg border border-white/70 bg-white/86 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
+          필지 {bboxApi.count} · 상가 {storeApi.storeCount} · 상권 {storeApi.zoneCount} · {bboxApi.status}/{storeApi.status}
         </div>
       </section>
     </main>
@@ -1055,571 +703,602 @@ export default function MapPage() {
 
 function MapSurface({
   activeLayers,
-  selected,
   features,
+  selected,
   storeFeatures,
   storeZoneFeatures,
-  savedIds,
-  onSelect,
-  onExternalFeature,
-  onCloseBuildingPanels,
+  viewMode,
+  onFeaturePayload,
   onViewportChange,
 }: {
   activeLayers: Record<LayerKey, boolean>
-  selected: MapFeature
   features: MapFeature[]
+  selected: MapFeature
   storeFeatures: FeatureCollection
   storeZoneFeatures: FeatureCollection
-  savedIds: string[]
-  onSelect: (id: string) => void
-  onExternalFeature: (featureId: string, properties?: Record<string, unknown>) => void
-  onCloseBuildingPanels: () => void
+  viewMode: ViewMode
+  onFeaturePayload: (payload: Record<string, unknown>) => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
   const mapRef = useRef<HTMLDivElement | null>(null)
-  const mapInstanceRef = useRef<MapLibreMap | null>(null)
-  const [message, setMessage] = useState("MapLibre 단일 지도 준비 중")
-  const [config, setConfig] = useState<MapConfig | null>(null)
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
-  const draggedRef = useRef(false)
-  const selectedRef = useRef(selected)
+  const roadviewRef = useRef<HTMLDivElement | null>(null)
+  const mapInstanceRef = useRef<KakaoMapInstance | null>(null)
+  const roadviewInstanceRef = useRef<KakaoRoadviewInstance | null>(null)
+  const roadviewClientRef = useRef<KakaoRoadviewClient | null>(null)
+  const roadviewOverlayRef = useRef<KakaoOverlay | null>(null)
+  const overlaysRef = useRef<KakaoOverlay[]>([])
+  const storePopupRef = useRef<KakaoOverlay | null>(null)
   const featuresRef = useRef(features)
+  const selectedRef = useRef(selected)
   const storeFeaturesRef = useRef(storeFeatures)
   const storeZoneFeaturesRef = useRef(storeZoneFeatures)
-  const onSelectRef = useRef(onSelect)
-  const onExternalFeatureRef = useRef(onExternalFeature)
-  const onCloseBuildingPanelsRef = useRef(onCloseBuildingPanels)
+  const activeLayersRef = useRef(activeLayers)
+  const viewModeRef = useRef(viewMode)
+  const onFeaturePayloadRef = useRef(onFeaturePayload)
   const onViewportChangeRef = useRef(onViewportChange)
-
-  useEffect(() => {
-    selectedRef.current = selected
-  }, [selected])
+  const [message, setMessage] = useState("Kakao 지도 준비 중")
+  const [roadviewActive, setRoadviewActive] = useState(false)
 
   useEffect(() => {
     featuresRef.current = features
-  }, [features])
-
-  useEffect(() => {
+    selectedRef.current = selected
     storeFeaturesRef.current = storeFeatures
-  }, [storeFeatures])
-
-  useEffect(() => {
     storeZoneFeaturesRef.current = storeZoneFeatures
-  }, [storeZoneFeatures])
-
-  useEffect(() => {
-    onSelectRef.current = onSelect
-    onExternalFeatureRef.current = onExternalFeature
-    onCloseBuildingPanelsRef.current = onCloseBuildingPanels
+    activeLayersRef.current = activeLayers
+    viewModeRef.current = viewMode
+    onFeaturePayloadRef.current = onFeaturePayload
     onViewportChangeRef.current = onViewportChange
-  }, [onCloseBuildingPanels, onExternalFeature, onSelect, onViewportChange])
+  }, [activeLayers, features, onFeaturePayload, onViewportChange, selected, storeFeatures, storeZoneFeatures, viewMode])
 
-  const publishViewport = useCallback((map: MapLibreMap) => {
-    const bounds = map.getBounds()
-    const sw = bounds.getSouthWest()
-    const ne = bounds.getNorthEast()
-    const bboxParam = [sw.lng, sw.lat, ne.lng, ne.lat].map((value) => value.toFixed(6)).join(",")
-    onViewportChangeRef.current({
-      swLat: sw.lat,
-      swLng: sw.lng,
-      neLat: ne.lat,
-      neLng: ne.lng,
-      zoom: map.getZoom(),
-      bboxParam,
+  const clearOverlays = useCallback(() => {
+    overlaysRef.current.forEach((overlay) => overlay.setMap(null))
+    overlaysRef.current = []
+    storePopupRef.current?.setMap(null)
+    storePopupRef.current = null
+  }, [])
+
+  const publishViewport = useCallback(() => {
+    const map = mapInstanceRef.current
+    if (!map) return
+    onViewportChangeRef.current(bboxFromKakaoMap(map))
+  }, [])
+
+  const showStorePopup = useCallback((position: unknown, props: Record<string, unknown>) => {
+    const kakaoMaps = window.kakao.maps
+    storePopupRef.current?.setMap(null)
+
+    const content = document.createElement("div")
+    content.className = "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 shadow-xl"
+    content.style.maxWidth = "260px"
+    content.innerHTML = `
+      <strong style="display:block;font-size:13px;color:#18181b;margin-bottom:4px;">${escapeHtml(props.store_name ?? "상가")}</strong>
+      <span style="display:block;color:#52525b;">${escapeHtml(props.industry ?? props.industry_s_name ?? props.industry_m_name ?? props.industry_l_name ?? "업종 미분류")}</span>
+      <span style="display:block;margin-top:4px;color:#71717a;">${escapeHtml(props.address ?? props.road_address ?? props.lot_address ?? "")}</span>
+      <span style="display:block;margin-top:6px;color:#059669;">${escapeHtml(props.source_label ?? props.source ?? "공공 상가정보")}</span>
+    `
+
+    const overlay = new kakaoMaps.CustomOverlay({
+      position,
+      content,
+      yAnchor: 1.12,
+      zIndex: 80,
+    }) as KakaoOverlay
+    overlay.setMap(mapInstanceRef.current)
+    storePopupRef.current = overlay
+  }, [])
+
+  const drawOverlays = useCallback(() => {
+    const kakaoMaps = window.kakao?.maps
+    const map = mapInstanceRef.current
+    if (!kakaoMaps || !map) return
+
+    clearOverlays()
+    const layers = activeLayersRef.current
+    const selectedFeature = selectedRef.current
+
+    if (layers.storeZones) {
+      storeZoneFeaturesRef.current.features.slice(0, 80).forEach((feature) => {
+        const geometry = feature.geometry as MapGeometry | undefined
+        geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
+          const polygon = new kakaoMaps.Polygon({
+            map,
+            path,
+            strokeWeight: 2,
+            strokeColor: "#059669",
+            strokeOpacity: 0.5,
+            fillColor: "#10b981",
+            fillOpacity: 0.08,
+            zIndex: 15,
+          }) as KakaoOverlay
+          overlaysRef.current.push(polygon)
+        })
+      })
+    }
+
+    if (layers.parcels) {
+      const drawable = featuresRef.current.filter((feature) => feature.geometry || feature.id === selectedFeature.id)
+      drawable.slice(0, 220).forEach((feature) => {
+        const isSelected = feature.id === selectedFeature.id || feature.featureId === selectedFeature.featureId || feature.pnu === selectedFeature.pnu
+        const geometry = feature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(feature) }
+        geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
+          const polygon = new kakaoMaps.Polygon({
+            map,
+            path,
+            strokeWeight: isSelected ? 3 : 1.3,
+            strokeColor: isSelected ? "#0284c7" : "#38bdf8",
+            strokeOpacity: isSelected ? 0.95 : 0.35,
+            strokeStyle: isSelected ? "shortdash" : "solid",
+            fillColor: "#38bdf8",
+            fillOpacity: isSelected ? 0.24 : 0.03,
+            zIndex: isSelected ? 45 : 20,
+          }) as KakaoOverlay
+          overlaysRef.current.push(polygon)
+        })
+      })
+
+      geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
+        const polygon = new kakaoMaps.Polygon({
+          map,
+          path,
+          strokeWeight: 3,
+          strokeColor: "#2563eb",
+          strokeOpacity: 0.95,
+          fillColor: "#60a5fa",
+          fillOpacity: 0.28,
+          zIndex: 55,
+        }) as KakaoOverlay
+        overlaysRef.current.push(polygon)
+      })
+    }
+
+    if (layers.stores) {
+      storeFeaturesRef.current.features.slice(0, 700).forEach((feature) => {
+        const geometry = feature.geometry as { type?: string; coordinates?: unknown } | undefined
+        const coords = geometry?.coordinates
+        if (!Array.isArray(coords) || coords.length < 2) return
+        const lng = Number(coords[0])
+        const lat = Number(coords[1])
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+        const props = (feature.properties ?? {}) as Record<string, unknown>
+        const position = new kakaoMaps.LatLng(lat, lng)
+        const content = document.createElement("button")
+        content.type = "button"
+        content.title = textValue(props.store_name, "상가")
+        content.className = "block h-3.5 w-3.5 rounded-full border-2 border-white bg-rose-500 shadow-md transition hover:scale-125"
+        content.addEventListener("click", (event) => {
+          event.stopPropagation()
+          showStorePopup(position, props)
+        })
+
+        const overlay = new kakaoMaps.CustomOverlay({
+          position,
+          content,
+          yAnchor: 0.5,
+          xAnchor: 0.5,
+          zIndex: 60,
+        }) as KakaoOverlay
+        overlay.setMap(map)
+        overlaysRef.current.push(overlay)
+      })
+    }
+
+    if (layers.transactions) {
+      transactions.forEach((transaction) => {
+        const content = document.createElement("div")
+        content.className = "rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-center text-[11px] font-bold leading-tight text-indigo-600 shadow-md"
+        content.innerHTML = `${transaction.label}<br><span style="font-weight:600;color:#64748b">${transaction.date}</span>`
+        const overlay = new kakaoMaps.CustomOverlay({
+          position: new kakaoMaps.LatLng(transaction.coordinates.lat, transaction.coordinates.lng),
+          content,
+          yAnchor: 1,
+          zIndex: 35,
+        }) as KakaoOverlay
+        overlay.setMap(map)
+        overlaysRef.current.push(overlay)
+      })
+    }
+  }, [clearOverlays, showStorePopup])
+
+  const hitTestParcel = useCallback(async (lat: number, lng: number) => {
+    try {
+      setMessage("클릭 좌표에서 필지 조회 중")
+      const response = await fetch(`/api/map/feature-at?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`, {
+        cache: "no-store",
+      })
+      if (!response.ok) {
+        setMessage("해당 좌표의 필지를 찾지 못했습니다")
+        return
+      }
+      const payload = (await response.json()) as Record<string, unknown>
+      onFeaturePayloadRef.current(payload)
+      setMessage("필지/건물 경계 강조")
+    } catch {
+      setMessage("필지 hit-test API 연결 대기")
+    }
+  }, [])
+
+  const openRoadviewAt = useCallback((position: unknown) => {
+    const roadview = roadviewInstanceRef.current
+    const client = roadviewClientRef.current
+    if (!roadview || !client) return
+
+    setMessage("근처 로드뷰 탐색 중")
+    client.getNearestPanoId(position, 80, (panoId: number | null) => {
+      if (!panoId) {
+        setMessage("반경 80m 안에 로드뷰가 없습니다")
+        return
+      }
+      roadview.setPanoId(panoId, position)
+      setRoadviewActive(true)
+      window.setTimeout(() => roadview.relayout?.(), 120)
+      setMessage("로드뷰 표시 중")
     })
   }, [])
 
   useEffect(() => {
-    let cancelled = false
+    if (!mapRef.current || !roadviewRef.current || mapInstanceRef.current) return
 
-    const loadConfig = async () => {
+    let cancelled = false
+    let idleHandler: KakaoEventHandler | null = null
+    let clickHandler: KakaoEventHandler | null = null
+
+    const initMap = async () => {
       try {
-        const mapResponse = await fetch("/api/config/map-tiles", { cache: "no-store" })
-        const payload = (await mapResponse.json()) as MapConfig
-        if (!cancelled) setConfig(payload)
-      } catch {
-        if (!cancelled) {
-          setConfig({
-            engine: "maplibre",
-            tilesBaseUrl: "",
-            styleUrl: "",
-            tilesetVersion: "fallback",
-            defaultCenter: [mapCenter.lng, mapCenter.lat],
-            defaultZoom: mapInitialZoom,
-            minZoom: mapMinZoom,
-            maxZoom: mapMaxZoom,
-            status: "fallback",
-          })
+        const [kakaoMaps, configResponse] = await Promise.all([
+          loadKakaoMaps(),
+          fetch("/api/config/map-tiles", { cache: "no-store" }).catch(() => null),
+        ])
+        const config = configResponse?.ok ? ((await configResponse.json()) as MapConfig) : null
+        if (cancelled || !mapRef.current || !roadviewRef.current) return
+
+        const level = Math.max(1, Math.min(8, 18 - (config?.defaultZoom ?? 15))) || mapInitialLevel
+        const map = new kakaoMaps.Map(mapRef.current, {
+          center: new kakaoMaps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
+          level: Math.max(1, Math.min(8, level)),
+        }) as KakaoMapInstance
+        mapInstanceRef.current = map
+        map.addControl(new kakaoMaps.ZoomControl(), kakaoMaps.ControlPosition.RIGHT)
+
+        roadviewInstanceRef.current = new kakaoMaps.Roadview(roadviewRef.current) as KakaoRoadviewInstance
+        roadviewClientRef.current = new kakaoMaps.RoadviewClient() as KakaoRoadviewClient
+        roadviewOverlayRef.current = new kakaoMaps.RoadviewOverlay() as KakaoOverlay
+
+        idleHandler = () => {
+          publishViewport()
+          drawOverlays()
         }
-      }
-    }
-
-    loadConfig()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!config || !mapRef.current || mapInstanceRef.current) return
-
-    let cancelled = false
-    let handleWindowResize: (() => void) | null = null
-
-    const createMap = async () => {
-      registerPmtilesProtocol()
-
-      let style: string | StyleSpecification = normalizeOverlayStyle(fallbackStyle())
-      if (config.styleUrl) {
-        try {
-          const response = await fetch(config.styleUrl, { cache: "no-store" })
-          if (response.ok) {
-            style = normalizeOverlayStyle((await response.json()) as StyleSpecification)
-            setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
-          } else {
-            setMessage(`R2 overlay ${response.status} · fallback style`)
+        clickHandler = (eventValue: unknown) => {
+          const event = eventValue as KakaoClickEvent
+          const point = kakaoLatLngToPoint(event.latLng)
+          if (viewModeRef.current === "roadview") {
+            openRoadviewAt(event.latLng)
+            return
           }
-        } catch {
-          setMessage("R2 overlay CORS/연결 대기 · fallback style")
+          void hitTestParcel(point.lat, point.lng)
         }
-      } else {
-        setMessage("R2 overlay URL 없음 · fallback style")
+
+        kakaoMaps.event.addListener(map, "idle", idleHandler)
+        kakaoMaps.event.addListener(map, "click", clickHandler)
+        publishViewport()
+        drawOverlays()
+        setMessage("Kakao 단일 지도 · 필지 클릭 준비")
+      } catch {
+        setMessage("Kakao 지도 로딩 실패")
       }
-
-      if (cancelled || !mapRef.current) return
-
-      const map = new maplibregl.Map({
-        container: mapRef.current,
-        style,
-        center: [selectedRef.current.coordinates.lng, selectedRef.current.coordinates.lat],
-        zoom: resolveInitialZoom(config.defaultZoom),
-        minZoom: config.minZoom || mapMinZoom,
-        maxZoom: config.maxZoom || mapMaxZoom,
-        attributionControl: false,
-        refreshExpiredTiles: false,
-        maxTileCacheSize: 768,
-        maxTileCacheZoomLevels: 6,
-        fadeDuration: 160,
-      })
-
-      mapInstanceRef.current = map
-      map.getContainer().style.background = "#dfe7dc"
-      map.scrollZoom.setWheelZoomRate(1 / 900)
-      map.scrollZoom.setZoomRate(1 / 160)
-      requestAnimationFrame(() => map.resize())
-      window.setTimeout(() => map.resize(), 250)
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right")
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left")
-
-      map.on("load", () => {
-        ensureFallbackRasterBase(map)
-        preloadNeighborRasterTiles(map)
-        tuneCadastralVisualLayers(map)
-
-        if (!map.getSource("bm-mock-parcels")) {
-          map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
-        }
-        if (!map.getSource("bm-mock-transactions")) {
-          map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
-        }
-        if (!map.getSource("bm-store-zones")) {
-          map.addSource("bm-store-zones", { type: "geojson", data: storeZoneFeaturesRef.current as never })
-        }
-        if (!map.getSource("bm-store-pois")) {
-          map.addSource("bm-store-pois", { type: "geojson", data: storeFeaturesRef.current as never })
-        }
-
-        map.addLayer({
-          id: "bm-parcels-hit",
-          type: "fill",
-          source: "bm-mock-parcels",
-          paint: {
-            "fill-color": "#ffffff",
-            "fill-opacity": 0.001,
-          },
-        })
-        map.addLayer({
-          id: "bm-store-zone-fill",
-          type: "fill",
-          source: "bm-store-zones",
-          paint: {
-            "fill-color": "#10b981",
-            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.05, 15, 0.1, 18, 0.16],
-          },
-        })
-        map.addLayer({
-          id: "bm-store-zone-line",
-          type: "line",
-          source: "bm-store-zones",
-          paint: {
-            "line-color": "#047857",
-            "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.8, 16, 1.3, 20, 1.8],
-            "line-opacity": 0.58,
-          },
-        })
-        map.addLayer({
-          id: "bm-store-circle",
-          type: "circle",
-          source: "bm-store-pois",
-          paint: {
-            "circle-color": [
-              "match",
-              ["get", "industry_l_name"],
-              "음식",
-              "#ef4444",
-              "음식점",
-              "#ef4444",
-              "소매",
-              "#f59e0b",
-              "소매업",
-              "#f59e0b",
-              "생활서비스",
-              "#14b8a6",
-              "#6366f1",
-            ],
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.4, 15, 4.2, 18, 6.4, 21, 8],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 18, 1.2],
-            "circle-opacity": 0.78,
-          },
-        })
-        map.addLayer({
-          id: "bm-transaction-circle",
-          type: "circle",
-          source: "bm-mock-transactions",
-          paint: {
-            "circle-color": "#0ea5e9",
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 3.5, 16, 6, 19, 6.5],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 1.4,
-            "circle-opacity": 0.72,
-          },
-        })
-        publishViewport(map)
-        map.resize()
-        setMessage((current) => current.includes("fallback") ? current : `MapLibre 단일 지도 · VWorld/R2 · ${config.tilesetVersion}`)
-      })
-
-      map.on("moveend", () => {
-        publishViewport(map)
-        preloadNeighborRasterTiles(map)
-      })
-
-      handleWindowResize = () => {
-        map.resize()
-      }
-      window.addEventListener("resize", handleWindowResize)
-
-      map.on("click", (event) => {
-        const storeLayers = ["bm-store-circle"].filter((layerId) => map.getLayer(layerId))
-        const storeFeature = map.queryRenderedFeatures(event.point, { layers: storeLayers })[0]
-        if (storeFeature) {
-          const props = storeFeature.properties as Record<string, unknown>
-          const name = escapeHtml(props.store_name ?? "상가")
-          const industry = escapeHtml(props.industry ?? props.industry_s_name ?? props.industry_m_name ?? props.industry_l_name ?? "업종 미분류")
-          const address = escapeHtml(props.address ?? props.road_address ?? props.lot_address ?? "")
-          const source = escapeHtml(props.source_label ?? props.source ?? "공공 상가정보")
-          new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "280px" })
-            .setLngLat(event.lngLat)
-            .setHTML(
-              `<div style="font: 12px/1.45 system-ui, sans-serif; color: #18181b;">
-                <strong style="display:block; font-size:13px; margin-bottom:4px;">${name}</strong>
-                <span style="display:block; color:#52525b;">${industry}</span>
-                <span style="display:block; margin-top:4px; color:#71717a;">${address}</span>
-                <span style="display:block; margin-top:6px; color:#059669;">${source}</span>
-              </div>`
-            )
-            .addTo(map)
-          return
-        }
-
-        const parcelLayers = ["bm-parcels-hit"].filter((layerId) => map.getLayer(layerId))
-        const parcelFeature = map.queryRenderedFeatures(event.point, { layers: parcelLayers })[0]
-
-        if (!parcelFeature) {
-          onCloseBuildingPanelsRef.current()
-          return
-        }
-
-        const props = parcelFeature.properties as Record<string, unknown>
-        const buildingId = String(props.buildingId ?? "")
-        const featureId = String(props.feature_id ?? props.pnu ?? buildingId)
-
-        if (buildingId) {
-          onSelectRef.current(buildingId)
-          return
-        }
-        if (featureId) {
-          onExternalFeatureRef.current(featureId, props)
-        }
-      })
     }
 
-    createMap()
-
+    initMap()
     return () => {
       cancelled = true
-      if (handleWindowResize) window.removeEventListener("resize", handleWindowResize)
-      mapInstanceRef.current?.remove()
+      const kakaoMaps = window.kakao?.maps
+      if (kakaoMaps && mapInstanceRef.current) {
+        if (idleHandler) kakaoMaps.event.removeListener(mapInstanceRef.current, "idle", idleHandler)
+        if (clickHandler) kakaoMaps.event.removeListener(mapInstanceRef.current, "click", clickHandler)
+      }
+      roadviewOverlayRef.current?.setMap(null)
+      clearOverlays()
       mapInstanceRef.current = null
     }
-  }, [config, publishViewport])
+  }, [clearOverlays, drawOverlays, hitTestParcel, openRoadviewAt, publishViewport])
+
+  useEffect(() => {
+    drawOverlays()
+  }, [activeLayers, drawOverlays, features, selected, storeFeatures, storeZoneFeatures])
 
   useEffect(() => {
     const map = mapInstanceRef.current
-    if (!map?.isStyleLoaded()) return
-    const parcelsSource = map.getSource("bm-mock-parcels") as maplibregl.GeoJSONSource | undefined
-    parcelsSource?.setData(mockParcelsGeojson(features) as never)
-  }, [features])
+    const overlay = roadviewOverlayRef.current
+    if (!map || !overlay) return
 
-  useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map?.isStyleLoaded()) return
-    const storesSource = map.getSource("bm-store-pois") as maplibregl.GeoJSONSource | undefined
-    storesSource?.setData(storeFeatures as never)
-  }, [storeFeatures])
-
-  useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map?.isStyleLoaded()) return
-    const zonesSource = map.getSource("bm-store-zones") as maplibregl.GeoJSONSource | undefined
-    zonesSource?.setData(storeZoneFeatures as never)
-  }, [storeZoneFeatures])
-
-  useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map?.isStyleLoaded()) return
-
-    const visibilityByLayer: Array<[string, boolean]> = [
-      ["bm-parcels-hit", activeLayers.parcels],
-      ["bm-store-circle", activeLayers.stores],
-      ["bm-store-zone-fill", activeLayers.storeZones],
-      ["bm-store-zone-line", activeLayers.storeZones],
-      ["bm-transaction-circle", activeLayers.transactions],
-    ]
-
-    visibilityByLayer.forEach(([layerId, visible]) => {
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none")
-      }
-    })
-
-    map.getStyle().layers.forEach((layer) => {
-      if (layer.id === "bm-parcels-hit" || !map.getLayer(layer.id) || !isCadastralVisualLayer(layer)) return
-      map.setLayoutProperty(layer.id, "visibility", activeLayers.parcels ? "visible" : "none")
-    })
-  }, [activeLayers])
-
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    dragStartRef.current = { x: event.clientX, y: event.clientY }
-    draggedRef.current = false
-  }
-
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    const start = dragStartRef.current
-    if (!start) return
-    if (Math.abs(event.clientX - start.x) > 8 || Math.abs(event.clientY - start.y) > 8) {
-      draggedRef.current = true
+    if (viewMode === "roadview") {
+      overlay.setMap(map)
+      window.setTimeout(() => setMessage(roadviewActive ? "로드뷰 표시 중" : "파란 로드뷰 노선을 클릭하세요"), 0)
+    } else {
+      overlay.setMap(null)
+      window.setTimeout(() => {
+        setRoadviewActive(false)
+        setMessage("Kakao 단일 지도 · 필지 클릭 준비")
+      }, 0)
     }
-  }
+  }, [roadviewActive, viewMode])
 
-  const handleSurfaceClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (draggedRef.current) {
-      draggedRef.current = false
-      return
-    }
-    if ((event.target as HTMLElement).closest("[data-map-overlay]")) return
-  }
+  useEffect(() => {
+    if (!roadviewActive) return
+    window.setTimeout(() => roadviewInstanceRef.current?.relayout?.(), 120)
+  }, [roadviewActive])
 
   return (
-    <div
-      className="absolute inset-0 overflow-hidden bg-[#dfe7dc]"
-      onClick={handleSurfaceClick}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-    >
+    <div className="absolute inset-0 overflow-hidden bg-[#eef1ea]">
+      <div ref={mapRef} className="absolute inset-0" />
       <div
-        ref={mapRef}
-        className="absolute inset-0"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "#dfe7dc" }}
+        ref={roadviewRef}
+        className={cn(
+          "absolute inset-0 z-20 bg-zinc-900 transition-opacity",
+          roadviewActive && viewMode === "roadview" ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
       />
 
-      <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
+      <div className="absolute left-[420px] top-[76px] z-30 rounded-lg border border-white/80 bg-white/88 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-lg backdrop-blur">
         <span className="inline-flex items-center gap-2">
-          <Layers className="h-3.5 w-3.5" />
+          {viewMode === "roadview" ? <Navigation className="h-3.5 w-3.5 text-[#0f67e8]" /> : <MapIcon className="h-3.5 w-3.5 text-[#0f67e8]" />}
           {message}
         </span>
       </div>
 
-      {mockFeatures.map((feature) => {
-        if (!savedIds.includes(feature.id)) return null
-        return (
-          <div
-            key={feature.id}
-            data-map-overlay
-            className="pointer-events-none absolute right-5 top-[calc(76px+var(--offset))] z-10 rounded-lg border border-emerald-200 bg-white/82 px-3 py-2 text-[11px] font-semibold text-emerald-800 shadow-sm backdrop-blur"
-            style={{ "--offset": `${mockFeatures.findIndex((item) => item.id === feature.id) * 40}px` } as CSSProperties}
-          >
-            저장 후보 · {feature.district}
-          </div>
-        )
-      })}
+      {roadviewActive && viewMode === "roadview" && (
+        <Button
+          className="absolute right-5 top-5 z-40 h-10 rounded-lg bg-zinc-950 text-white shadow-lg hover:bg-zinc-800"
+          onClick={() => {
+            setRoadviewActive(false)
+            setMessage("파란 로드뷰 노선을 클릭하세요")
+          }}
+        >
+          <MapIcon className="h-4 w-4" />
+          지도에서 다시 선택
+        </Button>
+      )}
     </div>
   )
 }
 
-function StatusDrawer({
+function LeftParcelPanel({
   selected,
-  selectedScenario,
-  isSaved,
-  onScenarioChange,
-  onClose,
+  activeSection,
+  onSectionChange,
 }: {
   selected: MapFeature
-  selectedScenario: string
-  isSaved: boolean
-  onScenarioChange: (scenario: string) => void
-  onClose: () => void
+  activeSection: PanelSection
+  onSectionChange: (section: PanelSection) => void
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const sectionRefs = useRef<Record<PanelSection, HTMLElement | null>>({
+    land: null,
+    building: null,
+    analysis: null,
+  })
+  const status = statusBadge(selected.status)
+
+  const scrollToSection = (section: PanelSection) => {
+    onSectionChange(section)
+    const container = scrollRef.current
+    const target = sectionRefs.current[section]
+    if (!container || !target) return
+    container.scrollTo({
+      top: target.offsetTop - 8,
+      behavior: "smooth",
+    })
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-zinc-200/80 px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 shrink-0 text-zinc-500" />
-            <p className="truncate text-xs font-medium text-zinc-500">{selected.district}</p>
+    <aside className="absolute bottom-0 left-0 top-0 z-40 flex w-[396px] flex-col border-r border-zinc-200 bg-white shadow-2xl">
+      <div className="shrink-0 border-b border-zinc-200">
+        <div className="flex h-16 items-center gap-3 px-4">
+          <Link href="/analysis" className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-700 hover:bg-zinc-100" aria-label="분석으로 이동">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-zinc-950">{selected.address}</p>
+            <p className="truncate text-xs text-zinc-500">{selected.district} · {selected.use}</p>
           </div>
-          <h2 className="mt-0.5 text-base font-semibold leading-tight">{selected.address}</h2>
+          <Badge className={cn("rounded-md border px-2 py-1 text-xs", status.className)}>{status.label}</Badge>
         </div>
-        <div className="flex shrink-0 items-start gap-2">
-        <Badge className={cn("rounded-md border px-2 py-1 text-xs", statusBadge(selected.status).className)}>
-          {statusBadge(selected.status).label} · {selected.sourceUpdatedAt} · {isSaved ? "저장됨" : "미저장"}
-        </Badge>
-        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 rounded-lg bg-white" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Input value={selected.pnu} readOnly className="h-10 rounded-lg border-zinc-200 bg-zinc-50 pl-9 text-xs" aria-label="선택 필지 PNU" />
+          </div>
         </div>
-      </div>
-      </div>
-
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        <div className="grid grid-cols-2 gap-2">
-          <CoreMetric icon={ShieldCheck} label="Bank" value={`${selected.bankability}`} />
-          <CoreMetric icon={Activity} label="Ready" value={`${selected.readiness}`} />
-          <CoreMetric icon={BarChart3} label="NOI" value={selected.noi} />
-          <CoreMetric icon={CircleDollarSign} label="Equity" value={selected.equity} />
-          <CoreMetric icon={TrendingUp} label="Cap" value={selected.capRate} />
-          <CoreMetric icon={Database} label="DSCR/LTV" value={`${selected.dscr}/${selected.ltv}`} />
-        </div>
-
-        <div className="grid gap-3">
-          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-600" />
-              <h3 className="text-sm font-semibold">딜 스냅샷</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <CompactFact label="희망가" value={selected.price} />
-              <CompactFact label="적정가" value={selected.maxPurchasePrice} />
-              <CompactFact label="월 이자" value={selected.interest} />
-            </div>
-            <div className={cn("mt-2 rounded-lg border px-2.5 py-2", signalTone(selected.signalStrength))}>
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-semibold">{selected.locationSignal}</span>
-                <span>신뢰도 {selected.confidence}</span>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-2 text-xs">
-              <span className="mr-1 text-zinc-500">추천 진행</span>
-              {selected.scenarios.map((scenario) => (
-                <button
-                  key={scenario}
-                  type="button"
-                  onClick={() => onScenarioChange(scenario)}
-                  className={cn(
-                    "rounded-md border px-2 py-0.5 text-[11px] font-semibold transition",
-                    selectedScenario === scenario
-                      ? "border-zinc-900 bg-zinc-950 text-white"
-                      : "border-amber-200 bg-amber-50 text-amber-800"
-                  )}
-                >
-                  {scenario}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <TriangleAlert className="h-4 w-4 text-rose-600" />
-              <h3 className="text-sm font-semibold">리스크</h3>
-            </div>
-            <div className="space-y-1.5 text-xs text-zinc-700">
-              {selected.risks.map((risk) => (
-                <div key={risk} className="rounded-md bg-zinc-50/90 px-2.5 py-1.5">
-                  {risk}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-sky-600" />
-              <h3 className="text-sm font-semibold">다음 액션</h3>
-            </div>
-            <div className="space-y-1.5 text-xs text-zinc-700">
-              {selected.nextActions.slice(0, 3).map((action, index) => (
-                <div key={action} className="flex items-center gap-2 rounded-md bg-zinc-50/90 px-2.5 py-1.5">
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">
-                    {index + 1}
-                  </span>
-                  {action}
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="grid grid-cols-3 border-t border-zinc-200">
+          {[
+            ["land", "토지"],
+            ["building", "건물"],
+            ["analysis", "빌드모어분석"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => scrollToSection(key as PanelSection)}
+              className={cn(
+                "h-11 border-r border-zinc-200 text-sm font-semibold last:border-r-0",
+                activeSection === key ? "bg-[#0f67e8] text-white" : "bg-white text-zinc-700 hover:bg-zinc-50"
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
+
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-white">
+        <section
+          ref={(node) => {
+            sectionRefs.current.land = node
+          }}
+          className="border-b-8 border-zinc-100 px-5 py-5"
+        >
+          <SectionTitle icon={Ruler} title="토지 정보" />
+          <InfoRows
+            rows={[
+              ["면적", selected.area],
+              ["지목", selected.use],
+              ["토지가액", selected.landValueLabel ?? selected.price],
+              ["공시지가", selected.officialLandPriceLabel ?? "-"],
+              ["PNU", selected.pnu],
+              ["자료 기준", selected.sourceBaseDate ?? selected.sourceUpdatedAt],
+              ["출처", selected.source ?? "BuildMore"],
+            ]}
+          />
+        </section>
+
+        <section
+          ref={(node) => {
+            sectionRefs.current.building = node
+          }}
+          className="border-b-8 border-zinc-100 px-5 py-5"
+        >
+          <SectionTitle icon={Building2} title="건물 정보" />
+          <div className="mb-3 rounded-lg bg-[#0f67e8] px-4 py-3 text-white">
+            <p className="text-xs font-semibold opacity-80">건축물대장 선택</p>
+            <p className="mt-1 text-lg font-bold">{selected.buildingName && selected.buildingName !== "-" ? selected.buildingName : selected.address.split(" ").slice(-1)[0]}</p>
+            <p className="text-xs font-medium opacity-85">{selected.buildingCount || 0}개 동 · 사용승인 {selected.approvalYear ?? "-"}</p>
+          </div>
+          <InfoRows
+            rows={[
+              ["건물명", selected.buildingName ?? "-"],
+              ["주용도", selected.buildingRegister?.use_code ?? selected.use],
+              ["구조", selected.buildingRegister?.structure_code ?? "-"],
+              ["높이", selected.heightM ? `${selected.heightM}m` : "-"],
+              ["지상/지하", `${selected.groundFloors ?? "-"} / ${selected.undergroundFloors ?? "-"}`],
+              ["대지면적", compactArea(selected.areaM2)],
+              ["건축면적", compactArea(selected.buildingAreaM2)],
+              ["연면적", compactArea(selected.totalFloorAreaM2)],
+              ["사용승인", selected.buildingRegister?.latest_use_approval_date ?? selected.approvalYear ?? "-"],
+            ]}
+          />
+        </section>
+
+        <section
+          ref={(node) => {
+            sectionRefs.current.analysis = node
+          }}
+          className="px-5 py-5"
+        >
+          <SectionTitle icon={Sparkles} title="빌드모어분석" />
+          <div className="grid grid-cols-2 gap-2">
+            <CoreMetric icon={ShieldCheck} label="Bankability" value={`${selected.bankability}`} />
+            <CoreMetric icon={Activity} label="Readiness" value={`${selected.readiness}`} />
+            <CoreMetric icon={BarChart3} label="NOI" value={selected.noi} />
+            <CoreMetric icon={CircleDollarSign} label="Equity" value={selected.equity} />
+            <CoreMetric icon={Database} label="DSCR/LTV" value={`${selected.dscr}/${selected.ltv}`} />
+            <CoreMetric icon={Store} label="Cap" value={selected.capRate} />
+          </div>
+
+          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-3">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="font-semibold text-sky-900">{selected.locationSignal}</span>
+              <span className="text-sky-700">신뢰도 {selected.confidence}</span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-sky-800">{selected.hiddenYield}</p>
+          </div>
+
+          <PanelList
+            icon={TriangleAlert}
+            title="리스크"
+            items={selected.risks}
+            className="mt-4"
+          />
+          <PanelList
+            icon={CheckCircle2}
+            title="다음 액션"
+            items={selected.nextActions}
+            className="mt-4"
+            ordered
+          />
+        </section>
+      </div>
+    </aside>
+  )
+}
+
+function SectionTitle({ icon: Icon, title }: { icon: typeof Ruler; title: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <Icon className="h-4 w-4 text-zinc-700" />
+      <h2 className="text-lg font-bold text-zinc-950">{title}</h2>
     </div>
   )
 }
 
-function PromptChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function InfoRows({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-lg border px-3 py-2 text-left text-xs font-medium transition",
-        active
-          ? "border-zinc-900 bg-zinc-950 text-white"
-          : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50"
-      )}
-    >
-      {label}
-    </button>
+    <div className="divide-y divide-zinc-200 border-y border-zinc-200">
+      {rows.map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[112px_1fr] gap-3 py-3 text-sm">
+          <div className="font-medium text-slate-500">{label}</div>
+          <div className="min-w-0 text-right font-semibold text-zinc-950">{value ?? "-"}</div>
+        </div>
+      ))}
+    </div>
   )
 }
 
 function CoreMetric({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white/90 px-2.5 py-1.5">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-500">
+    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-500">
         <Icon className="h-3 w-3" />
         {label}
       </div>
-      <p className="mt-0.5 text-sm font-semibold text-zinc-950">{value}</p>
+      <p className="mt-1 truncate text-sm font-bold text-zinc-950">{value}</p>
     </div>
   )
 }
 
-function CompactFact({ label, value }: { label: string; value: string }) {
+function PanelList({
+  icon: Icon,
+  title,
+  items,
+  className,
+  ordered,
+}: {
+  icon: typeof TriangleAlert
+  title: string
+  items: string[]
+  className?: string
+  ordered?: boolean
+}) {
   return (
-    <div className="rounded-md border border-zinc-200 bg-white/90 px-2 py-1.5">
-      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
-      <p className="mt-0.5 truncate text-xs font-semibold text-zinc-950">{value}</p>
+    <div className={cn("rounded-lg border border-zinc-200 bg-white p-3", className)}>
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-zinc-700" />
+        <h3 className="text-sm font-bold">{title}</h3>
+      </div>
+      <div className="space-y-1.5 text-xs text-zinc-700">
+        {items.map((item, index) => (
+          <div key={item} className="flex items-center gap-2 rounded-md bg-zinc-50 px-2.5 py-2">
+            {ordered && (
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[10px] font-semibold text-white">
+                {index + 1}
+              </span>
+            )}
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => {
+    const escaped: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }
+    return escaped[char] ?? char
+  })
 }

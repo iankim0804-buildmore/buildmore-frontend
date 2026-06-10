@@ -7,7 +7,7 @@ export async function GET() {
     (tilesBaseUrl ? `${tilesBaseUrl}/styles/buildmore-map-v1.json` : "")
 
   return Response.json({
-    engine: process.env.NEXT_PUBLIC_MAP_ENGINE || "kakao-maplibre",
+    engine: process.env.NEXT_PUBLIC_MAP_ENGINE || "kakao-single",
     tilesBaseUrl,
     styleUrl,
     tilesetVersion: process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-custom-domain",
