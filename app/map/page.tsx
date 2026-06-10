@@ -60,10 +60,18 @@ type BuildingRegister = {
   parking_count?: number | null
   parking_self_count?: number | null
   parking_mechanical_count?: number | null
+  parking_indoor_self_count?: number | null
+  parking_outdoor_self_count?: number | null
+  parking_indoor_mechanical_count?: number | null
+  parking_outdoor_mechanical_count?: number | null
   passenger_elevator_count?: number | null
+  household_count?: number | null
   zoning_label?: string | null
+  zoning_code?: string | null
   district_label?: string | null
+  district_code?: string | null
   zone_label?: string | null
+  zone_code?: string | null
   owner_count?: number | null
 }
 
@@ -115,10 +123,18 @@ type MapFeature = {
   parkingCount?: number
   parkingSelfCount?: number
   parkingMechanicalCount?: number
+  parkingIndoorSelfCount?: number
+  parkingOutdoorSelfCount?: number
+  parkingIndoorMechanicalCount?: number
+  parkingOutdoorMechanicalCount?: number
   passengerElevatorCount?: number
+  householdCount?: number
   zoningLabel?: string
+  zoningCode?: string
   districtLabel?: string
+  districtCode?: string
   zoneLabel?: string
+  zoneCode?: string
   ownerCount?: number
   landValueLabel?: string
   officialLandPriceLabel?: string
@@ -480,10 +496,18 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
     parkingCount: numberValue(buildingRegister?.parking_count),
     parkingSelfCount: numberValue(buildingRegister?.parking_self_count),
     parkingMechanicalCount: numberValue(buildingRegister?.parking_mechanical_count),
+    parkingIndoorSelfCount: numberValue(buildingRegister?.parking_indoor_self_count),
+    parkingOutdoorSelfCount: numberValue(buildingRegister?.parking_outdoor_self_count),
+    parkingIndoorMechanicalCount: numberValue(buildingRegister?.parking_indoor_mechanical_count),
+    parkingOutdoorMechanicalCount: numberValue(buildingRegister?.parking_outdoor_mechanical_count),
     passengerElevatorCount: numberValue(buildingRegister?.passenger_elevator_count),
+    householdCount: numberValue(buildingRegister?.household_count),
     zoningLabel: textValue(buildingRegister?.zoning_label, "확인 필요"),
+    zoningCode: textValue(buildingRegister?.zoning_code, ""),
     districtLabel: textValue(buildingRegister?.district_label, "확인 필요"),
+    districtCode: textValue(buildingRegister?.district_code, ""),
     zoneLabel: textValue(buildingRegister?.zone_label, "확인 필요"),
+    zoneCode: textValue(buildingRegister?.zone_code, ""),
     ownerCount: numberValue(buildingRegister?.owner_count),
     landValueLabel: textValue(payload.land_value_label, fallback.landValueLabel ?? "-"),
     officialLandPriceLabel: textValue(payload.official_land_price_label, fallback.officialLandPriceLabel ?? "-"),
@@ -577,6 +601,20 @@ function transactionAccent(category: unknown) {
   return { color: "#f97316", label: "그외" }
 }
 
+function transactionCategoryFromProps(props: Record<string, unknown>) {
+  const category = String(props.transaction_category ?? "").trim()
+  const buildingUse = String(props.building_use ?? props.use_label ?? "").trim()
+  if (category === "apartment" || buildingUse.includes("아파트")) return "apartment"
+  if (category === "officetel" || buildingUse.includes("오피스텔")) return "officetel"
+  if (
+    category === "retail" ||
+    ["근린생활시설", "근린", "상가", "상업", "업무", "판매", "생활시설"].some((token) => buildingUse.includes(token))
+  ) {
+    return "retail"
+  }
+  return "other"
+}
+
 const transactionLegend = [
   { key: "apartment", ...transactionAccent("apartment") },
   { key: "officetel", ...transactionAccent("officetel") },
@@ -585,14 +623,35 @@ const transactionLegend = [
 ]
 
 function percentLabel(value?: number, suffix = "%") {
-  if (!Number.isFinite(value)) return "확인 필요"
+  if (!Number.isFinite(value) || Number(value) <= 0) return "확인 필요"
   return `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${suffix}`
 }
 
 function legalPairLabel(current?: number, legalMax?: number) {
   const currentLabel = percentLabel(current)
-  const maxLabel = Number.isFinite(legalMax) ? percentLabel(legalMax) : "확인 필요"
+  const maxLabel = percentLabel(legalMax)
   return `${currentLabel} (${maxLabel})`
+}
+
+function valueWithCode(label?: string, code?: string) {
+  const cleanLabel = label && label !== "확인 필요" ? label : ""
+  const cleanCode = code && code !== "확인 필요" ? code : ""
+  if (cleanLabel && cleanCode) return `${cleanLabel} (${cleanCode})`
+  return cleanLabel || cleanCode || "확인 필요"
+}
+
+function parkingSplitLabel(total?: number, indoor?: number, outdoor?: number) {
+  if (typeof total !== "number") return "확인 필요"
+  const parts = [
+    typeof indoor === "number" ? `옥내 ${indoor.toLocaleString("ko-KR")}` : null,
+    typeof outdoor === "number" ? `옥외 ${outdoor.toLocaleString("ko-KR")}` : null,
+  ].filter(Boolean)
+  return parts.length ? `${total.toLocaleString("ko-KR")}대 (${parts.join(" / ")})` : `${total.toLocaleString("ko-KR")}대`
+}
+
+function shouldShowHouseholdCount(feature: MapFeature) {
+  const label = [feature.buildingRegister?.use_label, feature.use].filter(Boolean).join(" ")
+  return ["공동주택", "단독주택", "다세대", "연립", "아파트"].some((token) => label.includes(token))
 }
 
 function groupedTransactionFeatures(collection: FeatureCollection) {
@@ -1085,11 +1144,20 @@ function MapSurface({
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
         const props = (feature.properties ?? {}) as Record<string, unknown>
         const amountLabel = formatTransactionAmount(props)
-        const accent = transactionAccent(props.transaction_category)
+        const category = transactionCategoryFromProps(props)
+        const accent = transactionAccent(category)
         const content = document.createElement("div")
         const countBadge = count > 1 ? `<span style="position:absolute;right:-5px;top:-6px;min-width:17px;height:17px;border-radius:9999px;background:#111827;color:#fff;border:2px solid #fff;font-size:9px;line-height:13px;text-align:center;font-weight:900">${count}</span>` : ""
-        content.className = "relative min-w-[62px] overflow-visible rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 pl-3 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-        content.innerHTML = `<span style="position:absolute;left:0;top:0;bottom:0;width:4px;border-top-left-radius:9999px;border-bottom-left-radius:9999px;background:${accent.color}"></span>${countBadge}<span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:-6px;width:8px;height:8px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
+        content.className = "relative overflow-visible pb-2"
+        content.innerHTML = `
+          ${countBadge}
+          <div style="position:relative;min-width:62px;overflow:hidden;border-radius:9999px;border:1px solid rgba(9,9,11,0.1);background:#fff;padding:4px 10px 4px 13px;text-align:center;font-size:11px;font-weight:800;line-height:1.1;color:#09090b;box-shadow:0 2px 8px rgba(0,0,0,0.18)">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${accent.color}"></span>
+            <span>${escapeHtml(amountLabel)}</span><br>
+            <span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span>
+          </div>
+          <span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:3px;width:8px;height:8px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>
+        `
         const overlay = new kakaoMaps.CustomOverlay({
           position: new kakaoMaps.LatLng(lat, lng),
           content,
@@ -1525,8 +1593,8 @@ function LeftParcelPanel({
             rows={[
               ["면적", selected.area],
               ["지목", selected.use],
-              ["지역", selected.zoningLabel ?? "확인 필요"],
-              ["지구", selected.districtLabel ?? "확인 필요"],
+              ["지역", valueWithCode(selected.zoningLabel, selected.zoningCode)],
+              ["지구", valueWithCode(selected.districtLabel, selected.districtCode)],
               ["현재 건폐율(법정 최대건폐율)", legalPairLabel(selected.buildingCoverageRatio, selected.legalMaxBuildingCoverageRatio)],
               ["용적률(법정 최대용적률)", legalPairLabel(selected.floorAreaRatio, selected.legalMaxFloorAreaRatio)],
               ...(selected.legalRelaxationNote
@@ -1560,9 +1628,13 @@ function LeftParcelPanel({
               ["대지면적", compactArea(selected.areaM2)],
               ["건축면적", compactArea(selected.buildingAreaM2)],
               ["연면적", compactArea(selected.totalFloorAreaM2)],
-              ["자주식 주차", typeof selected.parkingSelfCount === "number" ? `${selected.parkingSelfCount.toLocaleString("ko-KR")}대` : "확인 필요"],
-              ["기계식 주차", typeof selected.parkingMechanicalCount === "number" ? `${selected.parkingMechanicalCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ["총 주차대수", typeof selected.parkingCount === "number" ? `${selected.parkingCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ["자주식 주차", parkingSplitLabel(selected.parkingSelfCount, selected.parkingIndoorSelfCount, selected.parkingOutdoorSelfCount)],
+              ["기계식 주차", parkingSplitLabel(selected.parkingMechanicalCount, selected.parkingIndoorMechanicalCount, selected.parkingOutdoorMechanicalCount)],
               ["승용승강기수", typeof selected.passengerElevatorCount === "number" ? `${selected.passengerElevatorCount.toLocaleString("ko-KR")}대` : "확인 필요"],
+              ...(shouldShowHouseholdCount(selected)
+                ? ([["세대수", typeof selected.householdCount === "number" ? `${selected.householdCount.toLocaleString("ko-KR")}세대` : "확인 필요"]] as Array<[string, string]>)
+                : []),
               ["사용승인", selected.buildingRegister?.latest_use_approval_date ?? selected.approvalYear ?? "-"],
             ]}
           />
