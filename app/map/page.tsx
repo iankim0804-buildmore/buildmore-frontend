@@ -357,6 +357,20 @@ const mockFeatures: MapFeature[] = [
   },
 ]
 
+function createParcelCoordinates(feature: MapFeature): [number, number][][] {
+  const { lat, lng } = feature.coordinates
+  const latDelta = 0.0001
+  const lngDelta = 0.00013
+
+  return [[
+    [lng - lngDelta, lat + latDelta],
+    [lng + lngDelta, lat + latDelta],
+    [lng + lngDelta, lat - latDelta],
+    [lng - lngDelta, lat - latDelta],
+    [lng - lngDelta, lat + latDelta],
+  ]]
+}
+
 function loadKakaoMaps() {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Kakao Maps requires browser runtime"))
@@ -1099,6 +1113,22 @@ function MapSurface({
         }
       })
     }
+
+    const selectedGeometry = selectedFeature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(selectedFeature) }
+    geometryToKakaoPaths(selectedGeometry, kakaoMaps).forEach((path) => {
+      const polygon = new kakaoMaps.Polygon({
+        map,
+        path,
+        strokeWeight: 2.5,
+        strokeColor: "#111827",
+        strokeOpacity: 0.9,
+        strokeStyle: "shortdash",
+        fillColor: "#111827",
+        fillOpacity: 0.08,
+        zIndex: 45,
+      }) as KakaoOverlay
+      overlaysRef.current.push(polygon)
+    })
 
     geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
       const polygon = new kakaoMaps.Polygon({
