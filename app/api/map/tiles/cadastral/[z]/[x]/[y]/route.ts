@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const TILES_BASE_URL = "https://tiles.buildmore.co.kr"
+const TILE_REVALIDATE_SECONDS = 60 * 60 * 24 * 30
+const TILE_BROWSER_CACHE_SECONDS = 60 * 60 * 24
+const TILE_STALE_SECONDS = 60 * 60 * 24 * 7
+const TILE_CACHE_CONTROL = [
+  "public",
+  `max-age=${TILE_BROWSER_CACHE_SECONDS}`,
+  `s-maxage=${TILE_REVALIDATE_SECONDS}`,
+  `stale-while-revalidate=${TILE_STALE_SECONDS}`,
+  "immutable",
+].join(", ")
 
 function parseTile(value: string, max: number) {
   const normalized = value.replace(/\.pbf$/i, "")
@@ -10,13 +20,14 @@ function parseTile(value: string, max: number) {
 }
 
 function tileResponse(body: BodyInit | null, status: number, contentType = "application/x-protobuf") {
+  const cacheable = status === 200 || status === 204
   return new NextResponse(body, {
     status,
     headers: {
       "content-type": contentType,
-      "cache-control": status === 200
-        ? "public, max-age=86400, stale-while-revalidate=604800"
-        : "no-store",
+      "cache-control": cacheable ? TILE_CACHE_CONTROL : "no-store",
+      "cdn-cache-control": cacheable ? TILE_CACHE_CONTROL : "no-store",
+      "vercel-cdn-cache-control": cacheable ? TILE_CACHE_CONTROL : "no-store",
     },
   })
 }
@@ -41,7 +52,7 @@ export async function GET(
         Accept: "application/x-protobuf,application/octet-stream,*/*",
         "User-Agent": "BuildMore/1.0",
       },
-      next: { revalidate: 86400 },
+      next: { revalidate: TILE_REVALIDATE_SECONDS },
     })
 
     if (!response.ok) return tileResponse(null, response.status === 404 ? 204 : response.status)

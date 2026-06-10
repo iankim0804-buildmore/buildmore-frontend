@@ -4,6 +4,16 @@ const VWORLD_WMTS_BASE = "http://api.vworld.kr/req/wmts/1.0.0"
 const OSM_TILE_BASE = "https://tile.openstreetmap.org"
 const BACKEND_WMTS_PROXY_BASE = "https://api.buildmore.co.kr/api/vworld/wmts/base"
 const DEFAULT_REFERER = "https://buildmore.co.kr"
+const TILE_REVALIDATE_SECONDS = 60 * 60 * 24 * 30
+const TILE_BROWSER_CACHE_SECONDS = 60 * 60 * 24
+const TILE_STALE_SECONDS = 60 * 60 * 24 * 7
+const TILE_CACHE_CONTROL = [
+  "public",
+  `max-age=${TILE_BROWSER_CACHE_SECONDS}`,
+  `s-maxage=${TILE_REVALIDATE_SECONDS}`,
+  `stale-while-revalidate=${TILE_STALE_SECONDS}`,
+  "immutable",
+].join(", ")
 const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ax2n1sAAAAASUVORK5CYII=",
   "base64"
@@ -21,9 +31,9 @@ function tileResponse(body: BodyInit, status: number, contentType = "image/png")
     status,
     headers: {
       "content-type": contentType,
-      "cache-control": status === 200
-        ? "public, max-age=86400, stale-while-revalidate=604800"
-        : "no-store",
+      "cache-control": status === 200 ? TILE_CACHE_CONTROL : "no-store",
+      "cdn-cache-control": status === 200 ? TILE_CACHE_CONTROL : "no-store",
+      "vercel-cdn-cache-control": status === 200 ? TILE_CACHE_CONTROL : "no-store",
     },
   })
 }
@@ -36,7 +46,7 @@ async function fetchTile(upstreamUrl: string, referer: string) {
       Referer: referer,
       "User-Agent": "BuildMore/1.0",
     },
-    next: { revalidate: 86400 },
+    next: { revalidate: TILE_REVALIDATE_SECONDS },
   })
 
   if (!response.ok) return null

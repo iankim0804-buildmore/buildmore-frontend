@@ -131,6 +131,7 @@ const vworldTileProxyBaseUrl = (
   process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
 ).replace(/\/+$/, "")
 const vworldBaseTiles = [`${vworldTileProxyBaseUrl}/{z}/{y}/{x}.png`]
+const preloadedRasterTiles = new Set<string>()
 
 const layerLabels: Record<LayerKey, string> = {
   parcels: "필지 경계",
@@ -427,6 +428,7 @@ function ensureFallbackRasterBase(map: MapLibreMap | null) {
       type: "raster",
       tiles: vworldBaseTiles,
       tileSize: 256,
+      minzoom: mapMinZoom,
       maxzoom: 19,
       attribution: "VWorld",
     })
@@ -441,11 +443,61 @@ function ensureFallbackRasterBase(map: MapLibreMap | null) {
           "raster-saturation": -0.18,
           "raster-contrast": -0.05,
           "raster-opacity": 0.92,
+          "raster-fade-duration": 140,
           "raster-resampling": "linear",
         },
       },
       map.getStyle().layers[0]?.id
     )
+  }
+}
+
+function lngLatToTile(lng: number, lat: number, zoom: number) {
+  const scale = 2 ** zoom
+  const latRad = (lat * Math.PI) / 180
+  return {
+    x: Math.floor(((lng + 180) / 360) * scale),
+    y: Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * scale),
+  }
+}
+
+function preloadNeighborRasterTiles(map: MapLibreMap | null) {
+  if (!map || typeof window === "undefined") return
+  const preload = () => {
+    const zoom = Math.min(19, Math.max(mapMinZoom, Math.round(map.getZoom())))
+    const bounds = map.getBounds()
+    const sw = bounds.getSouthWest()
+    const ne = bounds.getNorthEast()
+    const nwTile = lngLatToTile(sw.lng, ne.lat, zoom)
+    const seTile = lngLatToTile(ne.lng, sw.lat, zoom)
+    const maxTile = 2 ** zoom - 1
+    const minX = Math.max(0, Math.min(nwTile.x, seTile.x) - 1)
+    const maxX = Math.min(maxTile, Math.max(nwTile.x, seTile.x) + 1)
+    const minY = Math.max(0, Math.min(nwTile.y, seTile.y) - 1)
+    const maxY = Math.min(maxTile, Math.max(nwTile.y, seTile.y) + 1)
+    const urls: string[] = []
+
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let y = minY; y <= maxY; y += 1) {
+        urls.push(`${vworldTileProxyBaseUrl}/${zoom}/${y}/${x}.png`)
+      }
+    }
+
+    if (preloadedRasterTiles.size > 700) preloadedRasterTiles.clear()
+    urls.slice(0, 64).forEach((url) => {
+      if (preloadedRasterTiles.has(url)) return
+      preloadedRasterTiles.add(url)
+      const image = new Image()
+      image.decoding = "async"
+      image.loading = "eager"
+      image.src = url
+    })
+  }
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(preload, { timeout: 1200 })
+  } else {
+    window.setTimeout(preload, 150)
   }
 }
 
@@ -1144,6 +1196,10 @@ function MapSurface({
         minZoom: config.minZoom || mapMinZoom,
         maxZoom: config.maxZoom || mapMaxZoom,
         attributionControl: false,
+        refreshExpiredTiles: false,
+        maxTileCacheSize: 768,
+        maxTileCacheZoomLevels: 6,
+        fadeDuration: 160,
       })
 
       mapInstanceRef.current = map
@@ -1157,6 +1213,7 @@ function MapSurface({
 
       map.on("load", () => {
         ensureFallbackRasterBase(map)
+        preloadNeighborRasterTiles(map)
         tuneCadastralVisualLayers(map)
 
         if (!map.getSource("bm-mock-parcels")) {
@@ -1243,7 +1300,10 @@ function MapSurface({
         setMessage((current) => current.includes("fallback") ? current : `MapLibre 단일 지도 · VWorld/R2 · ${config.tilesetVersion}`)
       })
 
-      map.on("moveend", () => publishViewport(map))
+      map.on("moveend", () => {
+        publishViewport(map)
+        preloadNeighborRasterTiles(map)
+      })
 
       handleWindowResize = () => {
         map.resize()
