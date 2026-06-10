@@ -360,6 +360,7 @@ function NumField({
 // MAIN COMPONENT
 // ============================================================
 export default function AnalysisPage() {
+  const hydratedFromMapRef = useRef(false)
   // ============================================================
   // A. SIDEBAR STATE (maintained from demo page)
   // ============================================================
@@ -448,6 +449,33 @@ export default function AnalysisPage() {
   const [deposit, setDeposit] = useState(5000)
   const [vacancyRate, setVacancyRate] = useState(20) // 공실률: 긍정 10 / 적정 20 / 보수 30
   const [vacancySensitivity, setVacancySensitivity] = useState(20) // 공실민감도: 게이지바 별도 값
+
+  useEffect(() => {
+    if (hydratedFromMapRef.current) return
+    hydratedFromMapRef.current = true
+    const searchParams = new URLSearchParams(window.location.search)
+
+    const mapAddress = searchParams.get("address")
+    if (!mapAddress) return
+
+    const numeric = (key: string, fallback: number) => {
+      const value = Number(searchParams.get(key))
+      return Number.isFinite(value) && value > 0 ? value : fallback
+    }
+
+    const timer = window.setTimeout(() => {
+      setAddress(mapAddress)
+      setAddressConfirmed(true)
+      setPrice(numeric("price", 38))
+      setLoan(numeric("loan", 22))
+      setRate(numeric("rate", 4.8))
+      setRent(numeric("rent", 320))
+      setDeposit(numeric("deposit", 5000))
+      setChatProvidedDealFields(["price", "loan", "rate", "rent", "deposit"])
+      setInputValue(`${mapAddress} 기준으로 기본 조건을 넣어줘`)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
   
   // Panel D: 건축조건
   const [scenario, setScenario] = useState<'현황' | '증축' | '신축' | '리모델링'>('현황')

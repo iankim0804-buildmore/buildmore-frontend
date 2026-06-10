@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const params = new URLSearchParams()
 
-  for (const key of ["bbox", "pnu", "limit"]) {
+  for (const key of ["bbox", "pnu", "limit", "date_from", "date_to"]) {
     const value = url.searchParams.get(key)
     if (value) params.set(key, value)
   }

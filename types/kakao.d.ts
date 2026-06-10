@@ -30,6 +30,12 @@ declare global {
               callback: (result: Array<Record<string, string>>, status: string) => void,
             ) => void
           }
+          Places: new () => {
+            keywordSearch: (
+              keyword: string,
+              callback: (result: Array<Record<string, string>>, status: string) => void,
+            ) => void
+          }
           Status: {
             OK: string
           }

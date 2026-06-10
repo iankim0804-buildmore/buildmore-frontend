@@ -11,7 +11,6 @@ import {
   CircleDollarSign,
   Database,
   MapIcon,
-  Navigation,
   Ruler,
   Search,
   ShieldCheck,
@@ -22,7 +21,6 @@ import {
   X,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -41,7 +39,9 @@ type BuildingRegister = {
   building_count?: number
   building_name?: string | null
   use_code?: string | null
+  use_label?: string | null
   structure_code?: string | null
+  structure_label?: string | null
   approval_year?: number | null
   latest_use_approval_date?: string | null
   total_floor_area_m2?: number | null
@@ -49,6 +49,15 @@ type BuildingRegister = {
   ground_floors?: number | null
   underground_floors?: number | null
   height_m?: number | null
+  building_coverage_ratio?: number | null
+  legal_max_building_coverage_ratio?: number | null
+  floor_area_ratio?: number | null
+  legal_max_floor_area_ratio?: number | null
+  violation_building_label?: string | null
+  parking_count?: number | null
+  zoning_label?: string | null
+  district_label?: string | null
+  owner_count?: number | null
 }
 
 type MapFeature = {
@@ -88,6 +97,15 @@ type MapFeature = {
   groundFloors?: number
   undergroundFloors?: number
   heightM?: number
+  buildingCoverageRatio?: number
+  legalMaxBuildingCoverageRatio?: number
+  floorAreaRatio?: number
+  legalMaxFloorAreaRatio?: number
+  violationBuildingLabel?: string
+  parkingCount?: number
+  zoningLabel?: string
+  districtLabel?: string
+  ownerCount?: number
   landValueLabel?: string
   officialLandPriceLabel?: string
   officialLandPricePerM2?: number
@@ -145,6 +163,7 @@ type TransactionItem = {
   floor?: number | null
   arch_year?: number | null
   building_use?: string | null
+  transaction_category?: "apartment" | "officetel" | "retail" | "other" | string | null
   deal_type?: string | null
 }
 
@@ -169,6 +188,8 @@ type KakaoMapInstance = {
   addControl: (control: unknown, position: unknown) => void
   getBounds: () => KakaoBoundsLike
   getLevel?: () => number
+  setCenter?: (position: unknown) => void
+  panTo?: (position: unknown) => void
 }
 type KakaoRoadviewInstance = {
   setPanoId: (panoId: number, position: unknown) => void
@@ -179,6 +200,19 @@ type KakaoRoadviewClient = {
 }
 type KakaoClickEvent = { latLng: KakaoLatLngLike }
 type KakaoEventHandler = (...args: unknown[]) => void
+
+type AddressSuggestion = {
+  label: string
+  address: string
+  lat: number
+  lng: number
+}
+
+type FocusTarget = {
+  lat: number
+  lng: number
+  nonce: number
+}
 
 const mapInitialLevel = 3
 const emptyFeatureCollection: FeatureCollection = { type: "FeatureCollection", features: [] }
@@ -371,12 +405,6 @@ function signalStrength(value: unknown, fallback: MapFeature["signalStrength"]):
   return value === "strong" || value === "medium" || value === "watch" ? value : fallback
 }
 
-function statusBadge(status: DataStatus) {
-  if (status === "ready") return { label: "ready", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
-  if (status === "partial") return { label: "partial", className: "border-amber-200 bg-amber-50 text-amber-700" }
-  return { label: "queued", className: "border-violet-200 bg-violet-50 text-violet-700" }
-}
-
 function featureFromSummary(id: string, payload: Record<string, unknown>): MapFeature {
   const fallback = mockFeatures.find((feature) => feature.featureId === id || feature.id === id || feature.pnu === id) ?? mockFeatures[0]
   const coordinates = payload.coordinates as { lat?: number; lng?: number } | undefined
@@ -427,6 +455,15 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
     groundFloors: numberValue(payload.ground_floors ?? buildingRegister?.ground_floors),
     undergroundFloors: numberValue(payload.underground_floors ?? buildingRegister?.underground_floors),
     heightM: numberValue(payload.height_m ?? buildingRegister?.height_m),
+    buildingCoverageRatio: numberValue(buildingRegister?.building_coverage_ratio),
+    legalMaxBuildingCoverageRatio: numberValue(buildingRegister?.legal_max_building_coverage_ratio),
+    floorAreaRatio: numberValue(buildingRegister?.floor_area_ratio),
+    legalMaxFloorAreaRatio: numberValue(buildingRegister?.legal_max_floor_area_ratio),
+    violationBuildingLabel: textValue(buildingRegister?.violation_building_label, "확인 필요"),
+    parkingCount: numberValue(buildingRegister?.parking_count),
+    zoningLabel: textValue(buildingRegister?.zoning_label, "확인 필요"),
+    districtLabel: textValue(buildingRegister?.district_label, "확인 필요"),
+    ownerCount: numberValue(buildingRegister?.owner_count),
     landValueLabel: textValue(payload.land_value_label, fallback.landValueLabel ?? "-"),
     officialLandPriceLabel: textValue(payload.official_land_price_label, fallback.officialLandPriceLabel ?? "-"),
     officialLandPricePerM2: numberValue(payload.official_land_price_per_m2),
@@ -469,6 +506,32 @@ function geometryToKakaoPaths(geometry: MapGeometry | undefined, kakaoMaps: type
   return paths
 }
 
+function geometryCenter(geometry: MapGeometry | undefined) {
+  if (!geometry?.coordinates) return null
+  const points: Array<[number, number]> = []
+  const collect = (ring: unknown) => {
+    if (!Array.isArray(ring)) return
+    ring.forEach((point) => {
+      if (!Array.isArray(point) || point.length < 2) return
+      const lng = Number(point[0])
+      const lat = Number(point[1])
+      if (Number.isFinite(lat) && Number.isFinite(lng)) points.push([lng, lat])
+    })
+  }
+  if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
+    collect(geometry.coordinates[0])
+  }
+  if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+    geometry.coordinates.forEach((polygon) => {
+      if (Array.isArray(polygon)) collect(polygon[0])
+    })
+  }
+  if (!points.length) return null
+  const lng = points.reduce((sum, point) => sum + point[0], 0) / points.length
+  const lat = points.reduce((sum, point) => sum + point[1], 0) / points.length
+  return { lat, lng }
+}
+
 function compactArea(value?: number) {
   if (!value) return "-"
   return `${value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}㎡`
@@ -484,6 +547,28 @@ function formatTransactionAmount(value?: { amount_10k?: unknown; amount_label?: 
   if (eok >= 10) return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`
   if (eok >= 1) return `${eok.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}억`
   return `${amount10k.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}만`
+}
+
+function transactionAccent(category: unknown) {
+  if (category === "apartment") return { color: "#2563eb", label: "아파트" }
+  if (category === "officetel") return { color: "#7c3aed", label: "오피스텔" }
+  if (category === "retail") return { color: "#059669", label: "상가" }
+  return { color: "#f97316", label: "그외" }
+}
+
+function percentLabel(value?: number, suffix = "%") {
+  if (!Number.isFinite(value)) return "확인 필요"
+  return `${Number(value).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}${suffix}`
+}
+
+function legalPairLabel(current?: number, legalMax?: number) {
+  const currentLabel = percentLabel(current)
+  const maxLabel = Number.isFinite(legalMax) ? percentLabel(legalMax) : "확인 필요"
+  return `${currentLabel} (${maxLabel})`
+}
+
+function ignoreMapMessage(value: string) {
+  void value
 }
 
 function kakaoLatLngToPoint(latLng: KakaoLatLngLike) {
@@ -527,6 +612,7 @@ export default function MapPage() {
     source: "idle",
   })
   const [regulationApi, setRegulationApi] = useState<MapLayerApiState>({ status: "idle", count: 0, source: "idle" })
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null)
   const [activeLayers, setActiveLayers] = useState<Record<LayerKey, boolean>>({
     transactions: true,
     regulations: true,
@@ -554,6 +640,66 @@ export default function MapPage() {
     setActiveLayers((current) => ({ ...current, [key]: !current[key] }))
   }
 
+  const searchAddress = useCallback(async (query: string): Promise<AddressSuggestion[]> => {
+    const trimmed = query.trim()
+    if (trimmed.length < 2) return []
+    const kakaoMaps = await loadKakaoMaps()
+
+    const addressMatches = await new Promise<AddressSuggestion[]>((resolve) => {
+      const geocoder = new kakaoMaps.services.Geocoder()
+      geocoder.addressSearch(trimmed, (result, status) => {
+        if (status !== kakaoMaps.services.Status.OK) {
+          resolve([])
+          return
+        }
+        resolve(result.slice(0, 4).map((item) => ({
+          label: item.road_address_name || item.address_name || trimmed,
+          address: item.address_name || item.road_address_name || trimmed,
+          lat: Number(item.y),
+          lng: Number(item.x),
+        })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng)))
+      })
+    })
+
+    const placeMatches = await new Promise<AddressSuggestion[]>((resolve) => {
+      const places = new kakaoMaps.services.Places()
+      places.keywordSearch(trimmed, (result, status) => {
+        if (status !== kakaoMaps.services.Status.OK) {
+          resolve([])
+          return
+        }
+        resolve(result.slice(0, 5).map((item) => ({
+          label: item.place_name || item.road_address_name || item.address_name || trimmed,
+          address: item.road_address_name || item.address_name || item.place_name || trimmed,
+          lat: Number(item.y),
+          lng: Number(item.x),
+        })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng)))
+      })
+    })
+
+    const seen = new Set<string>()
+    return [...addressMatches, ...placeMatches].filter((item) => {
+      const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    }).slice(0, 6)
+  }, [])
+
+  const selectAddress = useCallback(async (suggestion: AddressSuggestion) => {
+    setFocusTarget({ lat: suggestion.lat, lng: suggestion.lng, nonce: Date.now() })
+    try {
+      const response = await fetch(`/api/map/feature-at?lat=${encodeURIComponent(String(suggestion.lat))}&lng=${encodeURIComponent(String(suggestion.lng))}`, {
+        cache: "no-store",
+      })
+      if (!response.ok) return
+      const payload = (await response.json()) as Record<string, unknown>
+      applyFeaturePayload(payload)
+    } catch {
+      // Map focus still works even when the clicked coordinate has no parcel in our cache.
+    }
+  }, [applyFeaturePayload])
+
   useEffect(() => {
     if (!mapViewport) return
     const controller = new AbortController()
@@ -572,10 +718,12 @@ export default function MapPage() {
         const transactionParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           limit: mapViewport.zoom >= 16 ? "500" : "260",
+          date_from: "2025-01-01",
         })
         const selectedTransactionParams = new URLSearchParams({
           pnu: selected.pnu,
           limit: "40",
+          date_from: "2025-01-01",
         })
         const regulationParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
@@ -653,6 +801,7 @@ export default function MapPage() {
           transactionFeatures={transactionFeatures}
           regulationFeatures={regulationFeatures}
           viewMode={viewMode}
+          focusTarget={focusTarget}
           onFeaturePayload={applyFeaturePayload}
           onViewportChange={setMapViewport}
         />
@@ -662,6 +811,8 @@ export default function MapPage() {
           transactions={selectedTransactions}
           activeSection={activeSection}
           onSectionChange={setActiveSection}
+          onSearchAddress={searchAddress}
+          onSelectAddress={selectAddress}
         />
 
         <div className="absolute left-[420px] top-3 z-30 flex items-center gap-2">
@@ -738,6 +889,7 @@ function MapSurface({
   transactionFeatures,
   regulationFeatures,
   viewMode,
+  focusTarget,
   onFeaturePayload,
   onViewportChange,
 }: {
@@ -747,6 +899,7 @@ function MapSurface({
   transactionFeatures: FeatureCollection
   regulationFeatures: FeatureCollection
   viewMode: ViewMode
+  focusTarget: FocusTarget | null
   onFeaturePayload: (payload: Record<string, unknown>) => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
@@ -765,7 +918,7 @@ function MapSurface({
   const viewModeRef = useRef(viewMode)
   const onFeaturePayloadRef = useRef(onFeaturePayload)
   const onViewportChangeRef = useRef(onViewportChange)
-  const [message, setMessage] = useState("Kakao 지도 준비 중")
+  const setMessage = ignoreMapMessage
   const [roadviewActive, setRoadviewActive] = useState(false)
 
   useEffect(() => {
@@ -777,7 +930,7 @@ function MapSurface({
     viewModeRef.current = viewMode
     onFeaturePayloadRef.current = onFeaturePayload
     onViewportChangeRef.current = onViewportChange
-  }, [activeLayers, features, onFeaturePayload, onViewportChange, selected, transactionFeatures, regulationFeatures, viewMode])
+  }, [activeLayers, features, focusTarget, onFeaturePayload, onViewportChange, selected, transactionFeatures, regulationFeatures, viewMode])
 
   const clearOverlays = useCallback(() => {
     overlaysRef.current.forEach((overlay) => overlay.setMap(null))
@@ -802,19 +955,35 @@ function MapSurface({
     if (layers.regulations) {
       regulationFeaturesRef.current.features.slice(0, 160).forEach((feature) => {
         const geometry = feature.geometry as MapGeometry | undefined
+        const props = (feature.properties ?? {}) as Record<string, unknown>
         geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
           const polygon = new kakaoMaps.Polygon({
             map,
             path,
-            strokeWeight: 2.5,
+            strokeWeight: 1.25,
             strokeColor: "#f59e0b",
-            strokeOpacity: 0.78,
+            strokeOpacity: 0.72,
             fillColor: "#fbbf24",
-            fillOpacity: 0.13,
+            fillOpacity: 0.11,
             zIndex: 18,
           }) as KakaoOverlay
           overlaysRef.current.push(polygon)
         })
+        const center = geometryCenter(geometry)
+        const name = textValue(props.name, "")
+        if (center && name) {
+          const label = document.createElement("div")
+          label.className = "max-w-[132px] truncate rounded-full border border-amber-500/30 bg-white/82 px-2 py-0.5 text-[10px] font-extrabold text-amber-700 shadow-sm backdrop-blur"
+          label.textContent = name
+          const overlay = new kakaoMaps.CustomOverlay({
+            position: new kakaoMaps.LatLng(center.lat, center.lng),
+            content: label,
+            yAnchor: 0.5,
+            zIndex: 24,
+          }) as KakaoOverlay
+          overlay.setMap(map)
+          overlaysRef.current.push(overlay)
+        }
       })
     }
 
@@ -858,9 +1027,10 @@ function MapSurface({
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
         const props = (feature.properties ?? {}) as Record<string, unknown>
         const amountLabel = formatTransactionAmount(props)
+        const accent = transactionAccent(props.transaction_category)
         const content = document.createElement("div")
-        content.className = "relative min-w-[58px] rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
-        content.innerHTML = `<span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span style="position:absolute;left:50%;bottom:-4px;width:7px;height:7px;border-radius:9999px;background:#f97316;transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
+        content.className = "relative min-w-[62px] overflow-hidden rounded-full border border-zinc-950/10 bg-white px-2.5 py-1 pl-3 text-center text-[11px] font-extrabold leading-tight text-zinc-950 shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
+        content.innerHTML = `<span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${accent.color}"></span><span>${escapeHtml(amountLabel)}</span><br><span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span><span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:-4px;width:7px;height:7px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>`
         const overlay = new kakaoMaps.CustomOverlay({
           position: new kakaoMaps.LatLng(lat, lng),
           content,
@@ -872,6 +1042,19 @@ function MapSurface({
       })
     }
   }, [clearOverlays])
+
+  useEffect(() => {
+    const kakaoMaps = window.kakao?.maps
+    const map = mapInstanceRef.current
+    if (!kakaoMaps || !map || !focusTarget) return
+    const position = new kakaoMaps.LatLng(focusTarget.lat, focusTarget.lng)
+    if (typeof map.panTo === "function") map.panTo(position)
+    else map.setCenter?.(position)
+    window.setTimeout(() => {
+      publishViewport()
+      drawOverlays()
+    }, 180)
+  }, [drawOverlays, focusTarget, publishViewport])
 
   const hitTestParcel = useCallback(async (lat: number, lng: number) => {
     try {
@@ -889,7 +1072,7 @@ function MapSurface({
     } catch {
       setMessage("필지 hit-test API 연결 대기")
     }
-  }, [])
+  }, [setMessage])
 
   const openRoadviewAt = useCallback((position: unknown) => {
     const roadview = roadviewInstanceRef.current
@@ -907,7 +1090,7 @@ function MapSurface({
       window.setTimeout(() => roadview.relayout?.(), 120)
       setMessage("로드뷰 표시 중")
     })
-  }, [])
+  }, [setMessage])
 
   useEffect(() => {
     if (!mapRef.current || !roadviewRef.current || mapInstanceRef.current) return
@@ -973,7 +1156,7 @@ function MapSurface({
       clearOverlays()
       mapInstanceRef.current = null
     }
-  }, [clearOverlays, drawOverlays, hitTestParcel, openRoadviewAt, publishViewport])
+  }, [clearOverlays, drawOverlays, hitTestParcel, openRoadviewAt, publishViewport, setMessage])
 
   useEffect(() => {
     drawOverlays()
@@ -994,7 +1177,7 @@ function MapSurface({
         setMessage("Kakao 단일 지도 · 필지 클릭 준비")
       }, 0)
     }
-  }, [roadviewActive, viewMode])
+  }, [roadviewActive, setMessage, viewMode])
 
   useEffect(() => {
     if (!roadviewActive) return
@@ -1011,13 +1194,6 @@ function MapSurface({
           roadviewActive && viewMode === "roadview" ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       />
-
-      <div className="absolute left-[420px] top-[76px] z-30 rounded-lg border border-border bg-background/88 px-3 py-2 text-xs font-semibold text-zinc-700 shadow-lg backdrop-blur">
-        <span className="inline-flex items-center gap-2">
-          {viewMode === "roadview" ? <Navigation className="h-3.5 w-3.5 text-zinc-950" /> : <MapIcon className="h-3.5 w-3.5 text-zinc-950" />}
-          {message}
-        </span>
-      </div>
 
       {roadviewActive && viewMode === "roadview" && (
         <Button
@@ -1040,23 +1216,62 @@ function LeftParcelPanel({
   transactions,
   activeSection,
   onSectionChange,
+  onSearchAddress,
+  onSelectAddress,
 }: {
   selected: MapFeature
   transactions: TransactionItem[]
   activeSection: PanelSection
   onSectionChange: (section: PanelSection) => void
+  onSearchAddress: (query: string) => Promise<AddressSuggestion[]>
+  onSelectAddress: (suggestion: AddressSuggestion) => void
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [transactionMode, setTransactionMode] = useState<"sale" | "jeonse" | "rent">("sale")
+  const [addressQuery, setAddressQuery] = useState(selected.address)
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false)
   const sectionRefs = useRef<Record<PanelSection, HTMLElement | null>>({
     transactions: null,
     land: null,
     building: null,
     analysis: null,
   })
-  const status = statusBadge(selected.status)
   const visibleTransactions = transactionMode === "sale" ? transactions : []
   const latestTransaction = visibleTransactions[0]
+  const analysisHref = `/analysis?address=${encodeURIComponent(selected.address)}&price=38&loan=22&rate=4.8&rent=320&deposit=5000&from=map`
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setAddressQuery(selected.address), 0)
+    return () => window.clearTimeout(timer)
+  }, [selected.address])
+
+  useEffect(() => {
+    const query = addressQuery.trim()
+    if (query.length < 2 || query === selected.address) {
+      const resetTimer = window.setTimeout(() => {
+        setAddressSuggestions([])
+        setIsSearchingAddress(false)
+      }, 0)
+      return () => window.clearTimeout(resetTimer)
+    }
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      setIsSearchingAddress(true)
+      try {
+        const results = await onSearchAddress(query)
+        if (!cancelled) setAddressSuggestions(results)
+      } catch {
+        if (!cancelled) setAddressSuggestions([])
+      } finally {
+        if (!cancelled) setIsSearchingAddress(false)
+      }
+    }, 220)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [addressQuery, onSearchAddress, selected.address])
 
   const scrollToSection = (section: PanelSection) => {
     onSectionChange(section)
@@ -1080,12 +1295,54 @@ function LeftParcelPanel({
             <p className="truncate text-sm font-semibold text-zinc-950">{selected.address}</p>
             <p className="truncate text-xs text-zinc-500">{selected.district} · {selected.use}</p>
           </div>
-          <Badge className={cn("rounded-md border px-2 py-1 text-xs", status.className)}>{status.label}</Badge>
+          <div className="flex shrink-0 items-center gap-1">
+            <Link
+              href={analysisHref}
+              className="rounded-md bg-zinc-950 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800"
+            >
+              분석기
+            </Link>
+            <button
+              type="button"
+              className="rounded-md border border-zinc-300 bg-white/80 px-2.5 py-1.5 text-xs font-bold text-zinc-500"
+              disabled
+            >
+              비교함
+            </button>
+          </div>
         </div>
         <div className="px-4 pb-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input value={selected.pnu} readOnly className="h-10 rounded-lg border-border bg-white/85 pl-9 text-xs" aria-label="선택 필지 PNU" />
+            <Input
+              value={addressQuery}
+              onChange={(event) => setAddressQuery(event.target.value)}
+              className="h-10 rounded-lg border-border bg-white/85 pl-9 pr-16 text-xs"
+              aria-label="주소 검색"
+              placeholder="주소, 건물명, 동을 입력"
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-zinc-400">
+              {isSearchingAddress ? "검색" : "자동"}
+            </span>
+            {addressSuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-[44px] z-50 overflow-hidden rounded-lg border border-border bg-white shadow-xl">
+                {addressSuggestions.map((suggestion) => (
+                  <button
+                    key={`${suggestion.lat}-${suggestion.lng}-${suggestion.label}`}
+                    type="button"
+                    className="block w-full border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-50"
+                    onClick={() => {
+                      setAddressQuery(suggestion.address)
+                      setAddressSuggestions([])
+                      onSelectAddress(suggestion)
+                    }}
+                  >
+                    <span className="block truncate text-xs font-bold text-zinc-950">{suggestion.label}</span>
+                    <span className="block truncate text-[11px] text-zinc-500">{suggestion.address}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-4 border-t border-border">
@@ -1135,6 +1392,19 @@ function LeftParcelPanel({
               >
                 {label}
               </button>
+            ))}
+          </div>
+          <div className="mb-4 flex flex-wrap gap-2 text-[11px] font-bold text-zinc-600">
+            {[
+              ["#2563eb", "아파트"],
+              ["#7c3aed", "오피스텔"],
+              ["#059669", "상가"],
+              ["#f97316", "그외"],
+            ].map(([color, label]) => (
+              <span key={label} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white/75 px-2 py-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                {label}
+              </span>
             ))}
           </div>
 
@@ -1210,11 +1480,12 @@ function LeftParcelPanel({
             rows={[
               ["면적", selected.area],
               ["지목", selected.use],
-              ["토지가액", selected.landValueLabel ?? selected.price],
-              ["공시지가", selected.officialLandPriceLabel ?? "-"],
-              ["PNU", selected.pnu],
-              ["자료 기준", selected.sourceBaseDate ?? selected.sourceUpdatedAt],
-              ["출처", selected.source ?? "BuildMore"],
+              ["건축물대장상 지역", selected.zoningLabel ?? "확인 필요"],
+              ["건축물대장상 지구", selected.districtLabel ?? "확인 필요"],
+              ["현재 건폐율(법정 최대건폐율)", legalPairLabel(selected.buildingCoverageRatio, selected.legalMaxBuildingCoverageRatio)],
+              ["용적률(법정 최대용적률)", legalPairLabel(selected.floorAreaRatio, selected.legalMaxFloorAreaRatio)],
+              ["위반건축물 여부", selected.violationBuildingLabel ?? "확인 필요"],
+              ["소유권자수", selected.ownerCount ? `${selected.ownerCount.toLocaleString("ko-KR")}명` : "확인 필요"],
             ]}
           />
         </section>
@@ -1234,13 +1505,14 @@ function LeftParcelPanel({
           <InfoRows
             rows={[
               ["건물명", selected.buildingName ?? "-"],
-              ["주용도", selected.buildingRegister?.use_code ?? selected.use],
-              ["구조", selected.buildingRegister?.structure_code ?? "-"],
+              ["주용도", selected.buildingRegister?.use_label ?? selected.use],
+              ["구조", selected.buildingRegister?.structure_label ?? "-"],
               ["높이", selected.heightM ? `${selected.heightM}m` : "-"],
               ["지상/지하", `${selected.groundFloors ?? "-"} / ${selected.undergroundFloors ?? "-"}`],
               ["대지면적", compactArea(selected.areaM2)],
               ["건축면적", compactArea(selected.buildingAreaM2)],
               ["연면적", compactArea(selected.totalFloorAreaM2)],
+              ["대장 주차대수", selected.parkingCount ? `${selected.parkingCount.toLocaleString("ko-KR")}대` : "확인 필요"],
               ["사용승인", selected.buildingRegister?.latest_use_approval_date ?? selected.approvalYear ?? "-"],
             ]}
           />
@@ -1302,9 +1574,9 @@ function InfoRows({ rows }: { rows: Array<[string, string | number | null | unde
   return (
     <div className="divide-y divide-zinc-200 border-y border-zinc-200">
       {rows.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[112px_1fr] gap-3 py-3 text-sm">
-          <div className="font-medium text-zinc-500">{label}</div>
-          <div className="min-w-0 text-right font-semibold text-zinc-950">{value ?? "-"}</div>
+        <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(92px,auto)] gap-3 py-3 text-sm">
+          <div className="min-w-0 break-keep font-medium leading-5 text-zinc-500">{label}</div>
+          <div className="min-w-0 break-keep text-right font-semibold leading-5 text-zinc-950">{value ?? "-"}</div>
         </div>
       ))}
     </div>
