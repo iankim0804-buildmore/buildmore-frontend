@@ -98,33 +98,32 @@ type MapConfig = {
   status: string
 }
 
-type NaverMapConfig = {
-  naverMapClientId: string
-  customStyleId: string | null
+type KakaoMapConfig = {
+  kakaoMapKey: string
 }
 
-type NaverLatLng = {
-  lat: () => number
-  lng: () => number
+type KakaoLatLng = {
+  getLat: () => number
+  getLng: () => number
 }
 
-type NaverMapInstance = {
-  setCenter: (center: NaverLatLng) => void
-  setZoom: (zoom: number) => void
-  getZoom: () => number
+type KakaoMapInstance = {
+  setCenter: (center: KakaoLatLng) => void
+  setLevel: (level: number, options?: Record<string, unknown>) => void
+  getLevel: () => number
   relayout?: () => void
-  destroy?: () => void
 }
 
-type NaverMapsNamespace = {
-  Map: new (element: HTMLElement, options: Record<string, unknown>) => NaverMapInstance
-  LatLng: new (lat: number, lng: number) => NaverLatLng
+type KakaoMapsNamespace = {
+  load: (callback: () => void) => void
+  Map: new (element: HTMLElement, options: Record<string, unknown>) => KakaoMapInstance
+  LatLng: new (lat: number, lng: number) => KakaoLatLng
 }
 
 declare global {
   interface Window {
-    naver?: {
-      maps: NaverMapsNamespace
+    kakao?: {
+      maps: KakaoMapsNamespace
     }
   }
 }
@@ -144,7 +143,7 @@ const parcelMinZoom = 13
 const parcelNativeMaxZoom = 17
 
 let pmtilesProtocolRegistered = false
-let naverMapsLoadPromise: Promise<NaverMapsNamespace> | null = null
+let kakaoMapsLoadPromise: Promise<KakaoMapsNamespace> | null = null
 
 const vworldTileProxyBaseUrl = (
   process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
@@ -277,35 +276,41 @@ function registerPmtilesProtocol() {
   pmtilesProtocolRegistered = true
 }
 
-function loadNaverMaps(clientId: string) {
-  if (typeof window === "undefined") return Promise.reject(new Error("Naver Maps requires a browser"))
-  if (window.naver?.maps) return Promise.resolve(window.naver.maps)
-  if (naverMapsLoadPromise) return naverMapsLoadPromise
+function loadKakaoMaps(kakaoMapKey: string) {
+  if (typeof window === "undefined") return Promise.reject(new Error("Kakao Maps requires a browser"))
+  if (window.kakao?.maps) {
+    return new Promise<KakaoMapsNamespace>((resolve) => {
+      window.kakao?.maps.load(() => resolve(window.kakao!.maps))
+    })
+  }
+  if (kakaoMapsLoadPromise) return kakaoMapsLoadPromise
 
-  naverMapsLoadPromise = new Promise<NaverMapsNamespace>((resolve, reject) => {
-    const existingScript = document.getElementById("naver-maps-sdk") as HTMLScriptElement | null
+  kakaoMapsLoadPromise = new Promise<KakaoMapsNamespace>((resolve, reject) => {
+    const existingScript = document.getElementById("kakao-maps-sdk") as HTMLScriptElement | null
+    const resolveLoadedMaps = () => {
+      if (!window.kakao?.maps) {
+        reject(new Error("Kakao Maps SDK loaded without maps namespace"))
+        return
+      }
+      window.kakao.maps.load(() => resolve(window.kakao!.maps))
+    }
+
     if (existingScript) {
-      existingScript.addEventListener("load", () => {
-        if (window.naver?.maps) resolve(window.naver.maps)
-        else reject(new Error("Naver Maps SDK loaded without maps namespace"))
-      })
-      existingScript.addEventListener("error", () => reject(new Error("Failed to load Naver Maps SDK")))
+      existingScript.addEventListener("load", resolveLoadedMaps)
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load Kakao Maps SDK")))
       return
     }
 
     const script = document.createElement("script")
-    script.id = "naver-maps-sdk"
+    script.id = "kakao-maps-sdk"
     script.async = true
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}&submodules=gl`
-    script.onload = () => {
-      if (window.naver?.maps) resolve(window.naver.maps)
-      else reject(new Error("Naver Maps SDK loaded without maps namespace"))
-    }
-    script.onerror = () => reject(new Error("Failed to load Naver Maps SDK"))
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoMapKey)}&autoload=false`
+    script.onload = resolveLoadedMaps
+    script.onerror = () => reject(new Error("Failed to load Kakao Maps SDK"))
     document.head.appendChild(script)
   })
 
-  return naverMapsLoadPromise
+  return kakaoMapsLoadPromise
 }
 
 function fallbackStyle(): StyleSpecification {
@@ -382,6 +387,10 @@ function isCadastralVisualLayer(layer: StyleSpecification["layers"][number]) {
 
 function resolveInitialZoom(defaultZoom?: number) {
   return Math.min(mapMaxZoom, Math.max(defaultZoom || mapInitialZoom, mapInitialZoom))
+}
+
+function mapLibreZoomToKakaoLevel(zoom: number) {
+  return Math.min(14, Math.max(1, Math.round(19 - zoom)))
 }
 
 function tuneCadastralVisualLayers(map: MapLibreMap) {
@@ -937,13 +946,13 @@ function MapSurface({
   onCloseBuildingPanels: () => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
-  const naverMapRef = useRef<HTMLDivElement | null>(null)
+  const kakaoMapRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<MapLibreMap | null>(null)
-  const naverMapInstanceRef = useRef<NaverMapInstance | null>(null)
-  const [message, setMessage] = useState("네이버 지도 준비 중")
+  const kakaoMapInstanceRef = useRef<KakaoMapInstance | null>(null)
+  const [message, setMessage] = useState("카카오 지도 준비 중")
   const [config, setConfig] = useState<MapConfig | null>(null)
-  const [naverConfig, setNaverConfig] = useState<NaverMapConfig | null>(null)
+  const [kakaoConfig, setKakaoConfig] = useState<KakaoMapConfig | null>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
   const selectedRef = useRef(selected)
@@ -983,15 +992,15 @@ function MapSurface({
     })
   }, [])
 
-  const syncNaverBaseMap = useCallback((map: MapLibreMap) => {
-    const naverMap = naverMapInstanceRef.current
-    const maps = window.naver?.maps
-    if (!naverMap || !maps) return
+  const syncKakaoBaseMap = useCallback((map: MapLibreMap) => {
+    const kakaoMap = kakaoMapInstanceRef.current
+    const maps = window.kakao?.maps
+    if (!kakaoMap || !maps) return
 
     const center = map.getCenter()
     const zoom = Math.min(mapMaxZoom, Math.max(mapMinZoom, map.getZoom()))
-    naverMap.setCenter(new maps.LatLng(center.lat, center.lng))
-    naverMap.setZoom(zoom)
+    kakaoMap.setCenter(new maps.LatLng(center.lat, center.lng))
+    kakaoMap.setLevel(mapLibreZoomToKakaoLevel(zoom), { animate: false })
   }, [])
 
   useEffect(() => {
@@ -999,19 +1008,19 @@ function MapSurface({
 
     const loadConfig = async () => {
       try {
-        const [mapResponse, naverResponse] = await Promise.all([
+        const [mapResponse, kakaoResponse] = await Promise.all([
           fetch("/api/config/map-tiles", { cache: "no-store" }),
-          fetch("/api/config/naver-map-key", { cache: "no-store" }),
+          fetch("/api/config/kakao-map-key", { cache: "no-store" }),
         ])
 
         const payload = (await mapResponse.json()) as MapConfig
         if (!cancelled) setConfig(payload)
 
-        if (naverResponse.ok) {
-          const naverPayload = (await naverResponse.json()) as NaverMapConfig
-          if (!cancelled) setNaverConfig(naverPayload)
+        if (kakaoResponse.ok) {
+          const kakaoPayload = (await kakaoResponse.json()) as KakaoMapConfig
+          if (!cancelled) setKakaoConfig(kakaoPayload)
         } else if (!cancelled) {
-          setNaverConfig({ naverMapClientId: "", customStyleId: null })
+          setKakaoConfig({ kakaoMapKey: "" })
         }
       } catch {
         if (!cancelled) {
@@ -1026,7 +1035,7 @@ function MapSurface({
             maxZoom: mapMaxZoom,
             status: "fallback",
           })
-          setNaverConfig({ naverMapClientId: "", customStyleId: null })
+          setKakaoConfig({ kakaoMapKey: "" })
         }
       }
     }
@@ -1038,56 +1047,46 @@ function MapSurface({
   }, [])
 
   useEffect(() => {
-    if (!config || !naverConfig || !mapRef.current || mapInstanceRef.current) return
+    if (!config || !kakaoConfig || !mapRef.current || mapInstanceRef.current) return
 
     let cancelled = false
     let handleWindowResize: (() => void) | null = null
-    const naverContainer = naverMapRef.current
+    const kakaoContainer = kakaoMapRef.current
 
     const createMap = async () => {
       registerPmtilesProtocol()
 
-      let naverReady = false
+      let kakaoReady = false
       let showFallbackBase = false
-      if (naverConfig.naverMapClientId && naverMapRef.current) {
+      if (kakaoConfig.kakaoMapKey && kakaoMapRef.current) {
         try {
-          const maps = await loadNaverMaps(naverConfig.naverMapClientId)
-          if (cancelled || !naverMapRef.current) return
+          const maps = await loadKakaoMaps(kakaoConfig.kakaoMapKey)
+          if (cancelled || !kakaoMapRef.current) return
 
-          const options: Record<string, unknown> = {
+          const options = {
             center: new maps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
-            zoom: resolveInitialZoom(config.defaultZoom),
-            minZoom: config.minZoom || mapMinZoom,
-            maxZoom: config.maxZoom || mapMaxZoom,
-            gl: true,
-            logoControl: true,
-            mapDataControl: false,
-            scaleControl: false,
-            zoomControl: false,
-          }
-          if (naverConfig.customStyleId) {
-            options.customStyleId = naverConfig.customStyleId
+            level: mapLibreZoomToKakaoLevel(resolveInitialZoom(config.defaultZoom)),
           }
 
-          naverMapInstanceRef.current = new maps.Map(naverMapRef.current, options)
-          naverMapInstanceRef.current.relayout?.()
-          naverReady = true
-          setMessage(naverConfig.customStyleId ? "네이버 커스텀 베이스맵 · BuildMore 레이어" : "네이버 GL 베이스맵 · BuildMore 레이어")
+          kakaoMapInstanceRef.current = new maps.Map(kakaoMapRef.current, options)
+          kakaoMapInstanceRef.current.relayout?.()
+          kakaoReady = true
+          setMessage("카카오 베이스맵 · BuildMore 레이어")
           window.setTimeout(() => {
-            const hasNaverSurface = Boolean(naverContainer?.querySelector("canvas, img"))
-            if (!hasNaverSurface) {
+            const hasKakaoSurface = Boolean(kakaoContainer?.querySelector("canvas, img"))
+            if (!hasKakaoSurface) {
               showFallbackBase = true
               ensureFallbackRasterBase(mapInstanceRef.current)
-              setMessage("네이버 인증 확인 필요 · VWorld fallback")
+              setMessage("카카오 인증 확인 필요 · VWorld fallback")
             }
           }, 1800)
         } catch {
           showFallbackBase = true
-          setMessage("네이버 지도 로드 실패 · VWorld fallback")
+          setMessage("카카오 지도 로드 실패 · VWorld fallback")
         }
       } else {
         showFallbackBase = true
-        setMessage("네이버 지도 키 없음 · VWorld fallback")
+        setMessage("카카오 지도 키 없음 · VWorld fallback")
       }
 
       let style: string | StyleSpecification = normalizeOverlayStyle(fallbackStyle())
@@ -1096,15 +1095,15 @@ function MapSurface({
           const response = await fetch(config.styleUrl, { cache: "no-store" })
           if (response.ok) {
             style = normalizeOverlayStyle((await response.json()) as StyleSpecification)
-            if (!naverReady) setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
+            if (!kakaoReady) setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
           } else {
-            if (!naverReady) setMessage(`R2 overlay ${response.status} · fallback style`)
+            if (!kakaoReady) setMessage(`R2 overlay ${response.status} · fallback style`)
           }
         } catch {
-          if (!naverReady) setMessage("R2 overlay CORS/연결 대기 · fallback style")
+          if (!kakaoReady) setMessage("R2 overlay CORS/연결 대기 · fallback style")
         }
       } else {
-        if (!naverReady) setMessage("R2 overlay URL 없음 · fallback style")
+        if (!kakaoReady) setMessage("R2 overlay URL 없음 · fallback style")
       }
 
       if (cancelled || !mapRef.current) return
@@ -1159,25 +1158,25 @@ function MapSurface({
           },
         })
         publishViewport(map)
-        syncNaverBaseMap(map)
+        syncKakaoBaseMap(map)
         map.resize()
-        if (!naverReady) {
+        if (!kakaoReady) {
           setMessage((current) => current.includes("fallback") ? current : `MapLibre overlay · PMTiles · ${config.tilesetVersion}`)
         }
       })
 
       map.on("moveend", () => publishViewport(map))
       map.on("move", () => {
-        syncNaverBaseMap(map)
+        syncKakaoBaseMap(map)
       })
       map.on("zoom", () => {
-        syncNaverBaseMap(map)
+        syncKakaoBaseMap(map)
       })
 
       handleWindowResize = () => {
-        naverMapInstanceRef.current?.relayout?.()
+        kakaoMapInstanceRef.current?.relayout?.()
         map.resize()
-        syncNaverBaseMap(map)
+        syncKakaoBaseMap(map)
       }
       window.addEventListener("resize", handleWindowResize)
 
@@ -1212,11 +1211,10 @@ function MapSurface({
       if (handleWindowResize) window.removeEventListener("resize", handleWindowResize)
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
-      naverMapInstanceRef.current?.destroy?.()
-      naverMapInstanceRef.current = null
-      if (naverContainer) naverContainer.innerHTML = ""
+      kakaoMapInstanceRef.current = null
+      if (kakaoContainer) kakaoContainer.innerHTML = ""
     }
-  }, [config, naverConfig, publishViewport, syncNaverBaseMap])
+  }, [config, kakaoConfig, publishViewport, syncKakaoBaseMap])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1275,7 +1273,7 @@ function MapSurface({
       onPointerMove={handlePointerMove}
     >
       <div
-        ref={naverMapRef}
+        ref={kakaoMapRef}
         className="absolute inset-0"
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       />
