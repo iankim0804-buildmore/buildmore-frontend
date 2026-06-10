@@ -98,6 +98,37 @@ type MapConfig = {
   status: string
 }
 
+type NaverMapConfig = {
+  naverMapClientId: string
+  customStyleId: string | null
+}
+
+type NaverLatLng = {
+  lat: () => number
+  lng: () => number
+}
+
+type NaverMapInstance = {
+  setCenter: (center: NaverLatLng) => void
+  setZoom: (zoom: number) => void
+  getZoom: () => number
+  relayout?: () => void
+  destroy?: () => void
+}
+
+type NaverMapsNamespace = {
+  Map: new (element: HTMLElement, options: Record<string, unknown>) => NaverMapInstance
+  LatLng: new (lat: number, lng: number) => NaverLatLng
+}
+
+declare global {
+  interface Window {
+    naver?: {
+      maps: NaverMapsNamespace
+    }
+  }
+}
+
 type BboxApiState = {
   status: "idle" | "loading" | "ready" | "error"
   count: number
@@ -109,6 +140,7 @@ const mapCenter = { lat: 37.5523, lng: 126.9139 }
 const selectedSourceId = "bm-selected-feature"
 
 let pmtilesProtocolRegistered = false
+let naverMapsLoadPromise: Promise<NaverMapsNamespace> | null = null
 
 const vworldTileProxyBaseUrl = (
   process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
@@ -241,12 +273,43 @@ function registerPmtilesProtocol() {
   pmtilesProtocolRegistered = true
 }
 
+function loadNaverMaps(clientId: string) {
+  if (typeof window === "undefined") return Promise.reject(new Error("Naver Maps requires a browser"))
+  if (window.naver?.maps) return Promise.resolve(window.naver.maps)
+  if (naverMapsLoadPromise) return naverMapsLoadPromise
+
+  naverMapsLoadPromise = new Promise<NaverMapsNamespace>((resolve, reject) => {
+    const existingScript = document.getElementById("naver-maps-sdk") as HTMLScriptElement | null
+    if (existingScript) {
+      existingScript.addEventListener("load", () => {
+        if (window.naver?.maps) resolve(window.naver.maps)
+        else reject(new Error("Naver Maps SDK loaded without maps namespace"))
+      })
+      existingScript.addEventListener("error", () => reject(new Error("Failed to load Naver Maps SDK")))
+      return
+    }
+
+    const script = document.createElement("script")
+    script.id = "naver-maps-sdk"
+    script.async = true
+    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(clientId)}&submodules=gl`
+    script.onload = () => {
+      if (window.naver?.maps) resolve(window.naver.maps)
+      else reject(new Error("Naver Maps SDK loaded without maps namespace"))
+    }
+    script.onerror = () => reject(new Error("Failed to load Naver Maps SDK"))
+    document.head.appendChild(script)
+  })
+
+  return naverMapsLoadPromise
+}
+
 function fallbackStyle(): StyleSpecification {
   return {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources: {
-      "vworld-base": {
+      "vworld-fallback-base": {
         type: "raster",
         tiles: vworldBaseTiles,
         tileSize: 256,
@@ -258,18 +321,18 @@ function fallbackStyle(): StyleSpecification {
         tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
         minzoom: 13,
         maxzoom: 17,
-        attribution: "BuildMore PostGIS/VWorld",
+        attribution: "BuildMore PostGIS",
       },
     },
     layers: [
       {
-        id: "vworld-base",
+        id: "vworld-fallback-base",
         type: "raster",
-        source: "vworld-base",
+        source: "vworld-fallback-base",
         paint: {
           "raster-saturation": -0.18,
           "raster-contrast": -0.05,
-          "raster-opacity": 0.92,
+          "raster-opacity": 0,
           "raster-resampling": "linear",
         },
       },
@@ -289,7 +352,7 @@ function fallbackStyle(): StyleSpecification {
   }
 }
 
-function normalizeBaseStyle(style: StyleSpecification): StyleSpecification {
+function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
   const sources = { ...(style.sources ?? {}) } as NonNullable<StyleSpecification["sources"]>
   Object.entries(sources).forEach(([sourceId, source]) => {
     if (source && source.type === "raster") {
@@ -305,20 +368,33 @@ function normalizeBaseStyle(style: StyleSpecification): StyleSpecification {
   return {
     ...style,
     sources,
-    layers: style.layers.map((layer) => {
-      if (layer.type !== "raster") return layer
-      return {
-        ...layer,
-        paint: {
-          ...(layer.paint ?? {}),
-          "raster-saturation": -0.18,
-          "raster-contrast": -0.05,
-          "raster-opacity": 0.92,
-          "raster-resampling": "linear",
-        },
-      }
-    }) as StyleSpecification["layers"],
+    layers: style.layers
+      .filter((layer) => layer.type !== "background")
+      .map((layer) => {
+        if (layer.type !== "raster") return layer
+        return {
+          ...layer,
+          paint: {
+            ...(layer.paint ?? {}),
+            "raster-saturation": -0.18,
+            "raster-contrast": -0.05,
+            "raster-opacity": 0,
+            "raster-resampling": "linear",
+          },
+        }
+      }) as StyleSpecification["layers"],
   }
+}
+
+function setFallbackRasterVisibility(map: MapLibreMap | null, visible: boolean) {
+  if (!map?.isStyleLoaded()) return
+  map.getStyle().layers
+    .filter((layer) => layer.type === "raster")
+    .forEach((layer) => {
+      if (map.getLayer(layer.id)) {
+        map.setPaintProperty(layer.id, "raster-opacity", visible ? 0.92 : 0)
+      }
+    })
 }
 
 function createParcelCoordinates(feature: MapFeature): [number, number][][] {
@@ -866,10 +942,13 @@ function MapSurface({
   onCloseBuildingPanels: () => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
+  const naverMapRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<MapLibreMap | null>(null)
-  const [message, setMessage] = useState("MapLibre 준비 중")
+  const naverMapInstanceRef = useRef<NaverMapInstance | null>(null)
+  const [message, setMessage] = useState("네이버 지도 준비 중")
   const [config, setConfig] = useState<MapConfig | null>(null)
+  const [naverConfig, setNaverConfig] = useState<NaverMapConfig | null>(null)
   const [selectedScreen, setSelectedScreen] = useState<{ left: number; top: number } | null>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
@@ -910,6 +989,16 @@ function MapSurface({
     })
   }, [])
 
+  const syncNaverBaseMap = useCallback((map: MapLibreMap) => {
+    const naverMap = naverMapInstanceRef.current
+    const maps = window.naver?.maps
+    if (!naverMap || !maps) return
+
+    const center = map.getCenter()
+    naverMap.setCenter(new maps.LatLng(center.lat, center.lng))
+    naverMap.setZoom(Math.round(map.getZoom()))
+  }, [])
+
   const updateSelectedPosition = useCallback((map: MapLibreMap, feature: MapFeature) => {
     const point = map.project([feature.coordinates.lng, feature.coordinates.lat])
     const width = map.getCanvas().clientWidth || 0
@@ -925,9 +1014,20 @@ function MapSurface({
 
     const loadConfig = async () => {
       try {
-        const response = await fetch("/api/config/map-tiles", { cache: "no-store" })
-        const payload = (await response.json()) as MapConfig
+        const [mapResponse, naverResponse] = await Promise.all([
+          fetch("/api/config/map-tiles", { cache: "no-store" }),
+          fetch("/api/config/naver-map-key", { cache: "no-store" }),
+        ])
+
+        const payload = (await mapResponse.json()) as MapConfig
         if (!cancelled) setConfig(payload)
+
+        if (naverResponse.ok) {
+          const naverPayload = (await naverResponse.json()) as NaverMapConfig
+          if (!cancelled) setNaverConfig(naverPayload)
+        } else if (!cancelled) {
+          setNaverConfig({ naverMapClientId: "", customStyleId: null })
+        }
       } catch {
         if (!cancelled) {
           setConfig({
@@ -941,6 +1041,7 @@ function MapSurface({
             maxZoom: 19,
             status: "fallback",
           })
+          setNaverConfig({ naverMapClientId: "", customStyleId: null })
         }
       }
     }
@@ -952,29 +1053,73 @@ function MapSurface({
   }, [])
 
   useEffect(() => {
-    if (!config || !mapRef.current || mapInstanceRef.current) return
+    if (!config || !naverConfig || !mapRef.current || mapInstanceRef.current) return
 
     let cancelled = false
     let handleWindowResize: (() => void) | null = null
+    const naverContainer = naverMapRef.current
 
     const createMap = async () => {
       registerPmtilesProtocol()
 
-      let style: string | StyleSpecification = normalizeBaseStyle(fallbackStyle())
+      let naverReady = false
+      let showFallbackBase = false
+      if (naverConfig.naverMapClientId && naverMapRef.current) {
+        try {
+          const maps = await loadNaverMaps(naverConfig.naverMapClientId)
+          if (cancelled || !naverMapRef.current) return
+
+          const options: Record<string, unknown> = {
+            center: new maps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
+            zoom: Math.max(config.defaultZoom || 14, 14),
+            minZoom: config.minZoom || 9,
+            maxZoom: config.maxZoom || 19,
+            gl: true,
+            logoControl: true,
+            mapDataControl: false,
+            scaleControl: false,
+            zoomControl: false,
+          }
+          if (naverConfig.customStyleId) {
+            options.customStyleId = naverConfig.customStyleId
+          }
+
+          naverMapInstanceRef.current = new maps.Map(naverMapRef.current, options)
+          naverMapInstanceRef.current.relayout?.()
+          naverReady = true
+          setMessage(naverConfig.customStyleId ? "네이버 커스텀 베이스맵 · BuildMore 레이어" : "네이버 GL 베이스맵 · BuildMore 레이어")
+          window.setTimeout(() => {
+            const hasNaverSurface = Boolean(naverContainer?.querySelector("canvas, img"))
+            if (!hasNaverSurface) {
+              showFallbackBase = true
+              setFallbackRasterVisibility(mapInstanceRef.current, true)
+              setMessage("네이버 인증 확인 필요 · VWorld fallback")
+            }
+          }, 1800)
+        } catch {
+          showFallbackBase = true
+          setMessage("네이버 지도 로드 실패 · VWorld fallback")
+        }
+      } else {
+        showFallbackBase = true
+        setMessage("네이버 지도 키 없음 · VWorld fallback")
+      }
+
+      let style: string | StyleSpecification = normalizeOverlayStyle(fallbackStyle())
       if (config.styleUrl) {
         try {
           const response = await fetch(config.styleUrl, { cache: "no-store" })
           if (response.ok) {
-            style = normalizeBaseStyle((await response.json()) as StyleSpecification)
-            setMessage(`R2 style 로드 · ${config.tilesetVersion}`)
+            style = normalizeOverlayStyle((await response.json()) as StyleSpecification)
+            if (!naverReady) setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
           } else {
-            setMessage(`R2 style ${response.status} · fallback style`)
+            if (!naverReady) setMessage(`R2 overlay ${response.status} · fallback style`)
           }
         } catch {
-          setMessage("R2 style CORS/연결 대기 · fallback style")
+          if (!naverReady) setMessage("R2 overlay CORS/연결 대기 · fallback style")
         }
       } else {
-        setMessage("R2 style URL 없음 · fallback style")
+        if (!naverReady) setMessage("R2 overlay URL 없음 · fallback style")
       }
 
       if (cancelled || !mapRef.current) return
@@ -990,12 +1135,15 @@ function MapSurface({
       })
 
       mapInstanceRef.current = map
+      map.getContainer().style.background = "transparent"
       requestAnimationFrame(() => map.resize())
       window.setTimeout(() => map.resize(), 250)
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right")
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left")
 
       map.on("load", () => {
+        setFallbackRasterVisibility(map, showFallbackBase)
+
         if (!map.getSource("bm-mock-parcels")) {
           map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
         }
@@ -1058,17 +1206,28 @@ function MapSurface({
         })
 
         publishViewport(map)
+        syncNaverBaseMap(map)
         map.resize()
         updateSelectedPosition(map, selectedRef.current)
-        setMessage((current) => current.includes("fallback") ? current : `MapLibre · PMTiles protocol · ${config.tilesetVersion}`)
+        if (!naverReady) {
+          setMessage((current) => current.includes("fallback") ? current : `MapLibre overlay · PMTiles · ${config.tilesetVersion}`)
+        }
       })
 
       map.on("moveend", () => publishViewport(map))
-      map.on("move", () => updateSelectedPosition(map, selectedRef.current))
-      map.on("zoom", () => updateSelectedPosition(map, selectedRef.current))
+      map.on("move", () => {
+        syncNaverBaseMap(map)
+        updateSelectedPosition(map, selectedRef.current)
+      })
+      map.on("zoom", () => {
+        syncNaverBaseMap(map)
+        updateSelectedPosition(map, selectedRef.current)
+      })
 
       handleWindowResize = () => {
+        naverMapInstanceRef.current?.relayout?.()
         map.resize()
+        syncNaverBaseMap(map)
         updateSelectedPosition(map, selectedRef.current)
       }
       window.addEventListener("resize", handleWindowResize)
@@ -1104,8 +1263,11 @@ function MapSurface({
       if (handleWindowResize) window.removeEventListener("resize", handleWindowResize)
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
+      naverMapInstanceRef.current?.destroy?.()
+      naverMapInstanceRef.current = null
+      if (naverContainer) naverContainer.innerHTML = ""
     }
-  }, [config, publishViewport, updateSelectedPosition])
+  }, [config, naverConfig, publishViewport, syncNaverBaseMap, updateSelectedPosition])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1168,9 +1330,15 @@ function MapSurface({
       onPointerMove={handlePointerMove}
     >
       <div
-        ref={mapRef}
+        ref={naverMapRef}
         className="absolute inset-0"
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      />
+
+      <div
+        ref={mapRef}
+        className="absolute inset-0 z-[1]"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent" }}
       />
 
       <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
