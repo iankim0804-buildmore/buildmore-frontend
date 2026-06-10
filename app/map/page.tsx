@@ -74,7 +74,7 @@ type MapFeature = {
   scenarios: string[]
 }
 
-type LayerKey = "parcels" | "transactions" | "regulations"
+type LayerKey = "parcels" | "stores" | "storeZones" | "transactions" | "regulations"
 type PromptKey = "bankability" | "price" | "location" | "risk"
 
 type MapViewport = {
@@ -98,41 +98,24 @@ type MapConfig = {
   status: string
 }
 
-type KakaoMapConfig = {
-  kakaoMapKey: string
-}
-
-type KakaoLatLng = {
-  getLat: () => number
-  getLng: () => number
-}
-
-type KakaoMapInstance = {
-  setCenter: (center: KakaoLatLng) => void
-  setLevel: (level: number, options?: Record<string, unknown>) => void
-  getLevel: () => number
-  relayout?: () => void
-}
-
-type KakaoMapsNamespace = {
-  load: (callback: () => void) => void
-  Map: new (element: HTMLElement, options: Record<string, unknown>) => KakaoMapInstance
-  LatLng: new (lat: number, lng: number) => KakaoLatLng
-}
-
-declare global {
-  interface Window {
-    kakao?: {
-      maps: KakaoMapsNamespace
-    }
-  }
-}
-
 type BboxApiState = {
   status: "idle" | "loading" | "ready" | "error"
   count: number
   bboxLabel: string
   source: string
+}
+
+type StoreApiState = {
+  status: "idle" | "loading" | "ready" | "error"
+  storeCount: number
+  zoneCount: number
+  source: string
+}
+
+type FeatureCollection = {
+  type: "FeatureCollection"
+  features: Array<Record<string, unknown>>
+  [key: string]: unknown
 }
 
 const mapCenter = { lat: 37.5523, lng: 126.9139 }
@@ -143,7 +126,6 @@ const parcelMinZoom = 13
 const parcelNativeMaxZoom = 17
 
 let pmtilesProtocolRegistered = false
-let kakaoMapsLoadPromise: Promise<KakaoMapsNamespace> | null = null
 
 const vworldTileProxyBaseUrl = (
   process.env.NEXT_PUBLIC_MAP_VWORLD_TILE_PROXY_BASE_URL || "/api/map/vworld/base"
@@ -152,6 +134,8 @@ const vworldBaseTiles = [`${vworldTileProxyBaseUrl}/{z}/{y}/{x}.png`]
 
 const layerLabels: Record<LayerKey, string> = {
   parcels: "필지 경계",
+  stores: "상호/상가",
+  storeZones: "주요상권",
   transactions: "실거래",
   regulations: "규제/정비",
 }
@@ -165,6 +149,8 @@ const promptLabels: Record<PromptKey, string> = {
 
 const layerColors: Record<LayerKey, string> = {
   parcels: "bg-zinc-700",
+  stores: "bg-rose-500",
+  storeZones: "bg-emerald-500",
   transactions: "bg-sky-500",
   regulations: "bg-amber-500",
 }
@@ -269,48 +255,16 @@ const transactions = [
   { label: "2026.03", value: "45.6억", coordinates: [126.9068, 37.5535] },
 ]
 
+const emptyFeatureCollection: FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+}
+
 function registerPmtilesProtocol() {
   if (pmtilesProtocolRegistered || typeof window === "undefined") return
   const protocol = new Protocol()
   maplibregl.addProtocol("pmtiles", protocol.tile)
   pmtilesProtocolRegistered = true
-}
-
-function loadKakaoMaps(kakaoMapKey: string) {
-  if (typeof window === "undefined") return Promise.reject(new Error("Kakao Maps requires a browser"))
-  if (window.kakao?.maps) {
-    return new Promise<KakaoMapsNamespace>((resolve) => {
-      window.kakao?.maps.load(() => resolve(window.kakao!.maps))
-    })
-  }
-  if (kakaoMapsLoadPromise) return kakaoMapsLoadPromise
-
-  kakaoMapsLoadPromise = new Promise<KakaoMapsNamespace>((resolve, reject) => {
-    const existingScript = document.getElementById("kakao-maps-sdk") as HTMLScriptElement | null
-    const resolveLoadedMaps = () => {
-      if (!window.kakao?.maps) {
-        reject(new Error("Kakao Maps SDK loaded without maps namespace"))
-        return
-      }
-      window.kakao.maps.load(() => resolve(window.kakao!.maps))
-    }
-
-    if (existingScript) {
-      existingScript.addEventListener("load", resolveLoadedMaps)
-      existingScript.addEventListener("error", () => reject(new Error("Failed to load Kakao Maps SDK")))
-      return
-    }
-
-    const script = document.createElement("script")
-    script.id = "kakao-maps-sdk"
-    script.async = true
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoMapKey)}&autoload=false`
-    script.onload = resolveLoadedMaps
-    script.onerror = () => reject(new Error("Failed to load Kakao Maps SDK"))
-    document.head.appendChild(script)
-  })
-
-  return kakaoMapsLoadPromise
 }
 
 function fallbackStyle(): StyleSpecification {
@@ -335,8 +289,40 @@ function fallbackStyle(): StyleSpecification {
         minzoom: parcelMinZoom,
         paint: {
           "line-color": "#475569",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.25, 17, 0.7, 22, 1.15],
-          "line-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.2, 17, 0.36, 22, 0.48],
+          "line-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            13,
+            0.22,
+            15,
+            0.42,
+            16.5,
+            0.62,
+            18,
+            0.82,
+            20,
+            1.04,
+            22,
+            1.18,
+          ],
+          "line-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            13,
+            0.18,
+            15,
+            0.3,
+            16.5,
+            0.38,
+            18,
+            0.44,
+            20,
+            0.48,
+            22,
+            0.52,
+          ],
         },
       },
     ],
@@ -389,10 +375,6 @@ function resolveInitialZoom(defaultZoom?: number) {
   return Math.min(mapMaxZoom, Math.max(defaultZoom || mapInitialZoom, mapInitialZoom))
 }
 
-function mapLibreZoomToKakaoLevel(zoom: number) {
-  return Math.min(14, Math.max(1, Math.round(19 - zoom)))
-}
-
 function tuneCadastralVisualLayers(map: MapLibreMap) {
   map.getStyle().layers.forEach((layer) => {
     if (!map.getLayer(layer.id) || !isCadastralVisualLayer(layer)) return
@@ -400,8 +382,40 @@ function tuneCadastralVisualLayers(map: MapLibreMap) {
     map.setLayerZoomRange(layer.id, layer.minzoom ?? parcelMinZoom, mapMaxZoom)
     if (layer.type === "line") {
       map.setPaintProperty(layer.id, "line-color", "#475569")
-      map.setPaintProperty(layer.id, "line-width", ["interpolate", ["linear"], ["zoom"], 15, 0.55, 17, 0.85, 22, 1.2])
-      map.setPaintProperty(layer.id, "line-opacity", ["interpolate", ["linear"], ["zoom"], 15, 0.32, 17, 0.42, 22, 0.5])
+      map.setPaintProperty(layer.id, "line-width", [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        0.22,
+        15,
+        0.42,
+        16.5,
+        0.62,
+        18,
+        0.82,
+        20,
+        1.04,
+        22,
+        1.18,
+      ])
+      map.setPaintProperty(layer.id, "line-opacity", [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        0.18,
+        15,
+        0.3,
+        16.5,
+        0.38,
+        18,
+        0.44,
+        20,
+        0.48,
+        22,
+        0.52,
+      ])
     }
   })
 }
@@ -522,6 +536,19 @@ function stringList(value: unknown, fallback: string[]) {
   return items.length ? items : fallback
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => {
+    const escaped: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }
+    return escaped[char] ?? char
+  })
+}
+
 function dataStatus(value: unknown, fallback: DataStatus): DataStatus {
   return value === "ready" || value === "partial" || value === "queued" ? value : fallback
 }
@@ -583,14 +610,24 @@ export default function MapPage() {
   const [viewedFeatureIds, setViewedFeatureIds] = useState<string[]>(mockFeatures.map((feature) => feature.id))
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>(mockFeatures)
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
+  const [storeFeatures, setStoreFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
+  const [storeZoneFeatures, setStoreZoneFeatures] = useState<FeatureCollection>(emptyFeatureCollection)
   const [bboxApi, setBboxApi] = useState<BboxApiState>({
     status: "idle",
     count: mockFeatures.length,
     bboxLabel: "bbox 대기",
     source: "maplibre-local",
   })
+  const [storeApi, setStoreApi] = useState<StoreApiState>({
+    status: "idle",
+    storeCount: 0,
+    zoneCount: 0,
+    source: "store-layer-idle",
+  })
   const [activeLayers, setActiveLayers] = useState<Record<LayerKey, boolean>>({
     parcels: true,
+    stores: true,
+    storeZones: true,
     transactions: true,
     regulations: true,
   })
@@ -670,23 +707,50 @@ export default function MapPage() {
     const loadBboxSignals = async () => {
       try {
         setBboxApi((current) => ({ ...current, status: "loading", bboxLabel: mapViewport.bboxParam }))
+        setStoreApi((current) => ({ ...current, status: "loading" }))
 
         const params = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           level: String(Math.round(mapViewport.zoom)),
         })
-        const response = await fetch(`/api/map/building-signals?${params.toString()}`, {
-          signal: controller.signal,
+        const storeParams = new URLSearchParams({
+          bbox: mapViewport.bboxParam,
+          limit: mapViewport.zoom >= 16 ? "900" : "350",
+          live: "auto",
         })
+        const zoneParams = new URLSearchParams({
+          bbox: mapViewport.bboxParam,
+          limit: "80",
+        })
+        const [buildingResult, storesResult, zonesResult] = await Promise.allSettled([
+          fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
+          fetch(`/api/map/stores?${storeParams.toString()}`, { signal: controller.signal }),
+          fetch(`/api/map/store-zones?${zoneParams.toString()}`, { signal: controller.signal }),
+        ])
+        const response = buildingResult.status === "fulfilled" ? buildingResult.value : null
+        const storesResponse = storesResult.status === "fulfilled" ? storesResult.value : null
+        const zonesResponse = zonesResult.status === "fulfilled" ? zonesResult.value : null
 
-        if (!response.ok) throw new Error("bbox API failed")
-        const data = (await response.json()) as {
-          count?: number
-          bbox?: string
-          source?: string
-          buildings?: Array<Record<string, unknown>>
-          features?: Array<Record<string, unknown>>
-        }
+        const data = response?.ok
+          ? ((await response.json()) as {
+              count?: number
+              bbox?: string
+              source?: string
+              buildings?: Array<Record<string, unknown>>
+              features?: Array<Record<string, unknown>>
+            })
+          : {
+              count: mockFeatures.length,
+              bbox: mapViewport.bboxParam,
+              source: "maplibre-local",
+              buildings: [],
+            }
+        const storesData = storesResponse?.ok
+          ? ((await storesResponse.json()) as FeatureCollection & { count?: number; source?: string })
+          : emptyFeatureCollection
+        const zonesData = zonesResponse?.ok
+          ? ((await zonesResponse.json()) as FeatureCollection & { count?: number; source?: string })
+          : emptyFeatureCollection
         const livePayloads = data.buildings ?? data.features ?? []
         const liveFeatures = livePayloads.map((item, index) =>
           featureFromSummary(String(item.feature_id ?? item.pnu ?? item.id ?? `bbox-${index}`), item)
@@ -695,20 +759,28 @@ export default function MapPage() {
         if (liveFeatures.length) {
           setMapFeatures(liveFeatures)
           if (selected.featureId.startsWith("parcel-mapo-")) {
-            const defaultFeatureIndex = Math.max(0, liveFeatures.findIndex((feature) => !shouldExcludeScoreShade(feature)))
-            void loadFeatureSummary(liveFeatures[defaultFeatureIndex].featureId, livePayloads[defaultFeatureIndex])
+            void loadFeatureSummary(liveFeatures[0].featureId, livePayloads[0])
           }
         }
 
         setBboxApi({
-          status: "ready",
+          status: response?.ok ? "ready" : "error",
           count: data.count ?? (liveFeatures.length || mockFeatures.length),
           bboxLabel: data.bbox ?? mapViewport.bboxParam,
           source: data.source ?? "maplibre-local",
         })
+        setStoreFeatures(storesData.features ? storesData : emptyFeatureCollection)
+        setStoreZoneFeatures(zonesData.features ? zonesData : emptyFeatureCollection)
+        setStoreApi({
+          status: "ready",
+          storeCount: storesData.count ?? storesData.features?.length ?? 0,
+          zoneCount: zonesData.count ?? zonesData.features?.length ?? 0,
+          source: [storesData.source, zonesData.source].filter(Boolean).join(" + ") || "store-layer",
+        })
       } catch {
         if (controller.signal.aborted) return
         setBboxApi((current) => ({ ...current, status: "error", source: "maplibre-local" }))
+        setStoreApi((current) => ({ ...current, status: "error" }))
       }
     }
 
@@ -780,6 +852,8 @@ export default function MapPage() {
           activeLayers={activeLayers}
           selected={selected}
           features={mapFeatures}
+          storeFeatures={storeFeatures}
+          storeZoneFeatures={storeZoneFeatures}
           savedIds={savedIds}
           onSelect={selectFeatureById}
           onExternalFeature={loadFeatureSummary}
@@ -866,7 +940,7 @@ export default function MapPage() {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">MapLibre layers</p>
-                <p className="text-[11px] text-zinc-500">R2 PMTiles 우선, fallback layer 보조</p>
+                <p className="text-[11px] text-zinc-500">VWorld/R2 배경 위 공공 상가·상권</p>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setFilterOpen(false)}>
                 <X className="h-4 w-4" />
@@ -894,7 +968,7 @@ export default function MapPage() {
         )}
 
         <div className="absolute bottom-3 left-3 z-20 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-[11px] font-medium text-zinc-600 shadow-sm backdrop-blur">
-          bbox API: {bboxApi.status} · 줌 {mapViewport?.zoom.toFixed(1) ?? "-"} · 후보 {bboxApi.count}건 · {bboxApi.source}
+          bbox API: {bboxApi.status} · 줌 {mapViewport?.zoom.toFixed(1) ?? "-"} · 후보 {bboxApi.count}건 · 상가 {storeApi.storeCount} · 상권 {storeApi.zoneCount} · {bboxApi.source}
         </div>
 
         {!statusOpen && (
@@ -931,6 +1005,8 @@ function MapSurface({
   activeLayers,
   selected,
   features,
+  storeFeatures,
+  storeZoneFeatures,
   savedIds,
   onSelect,
   onExternalFeature,
@@ -940,23 +1016,24 @@ function MapSurface({
   activeLayers: Record<LayerKey, boolean>
   selected: MapFeature
   features: MapFeature[]
+  storeFeatures: FeatureCollection
+  storeZoneFeatures: FeatureCollection
   savedIds: string[]
   onSelect: (id: string) => void
   onExternalFeature: (featureId: string, properties?: Record<string, unknown>) => void
   onCloseBuildingPanels: () => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
-  const kakaoMapRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<MapLibreMap | null>(null)
-  const kakaoMapInstanceRef = useRef<KakaoMapInstance | null>(null)
-  const [message, setMessage] = useState("카카오 지도 준비 중")
+  const [message, setMessage] = useState("MapLibre 단일 지도 준비 중")
   const [config, setConfig] = useState<MapConfig | null>(null)
-  const [kakaoConfig, setKakaoConfig] = useState<KakaoMapConfig | null>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
   const selectedRef = useRef(selected)
   const featuresRef = useRef(features)
+  const storeFeaturesRef = useRef(storeFeatures)
+  const storeZoneFeaturesRef = useRef(storeZoneFeatures)
   const onSelectRef = useRef(onSelect)
   const onExternalFeatureRef = useRef(onExternalFeature)
   const onCloseBuildingPanelsRef = useRef(onCloseBuildingPanels)
@@ -969,6 +1046,14 @@ function MapSurface({
   useEffect(() => {
     featuresRef.current = features
   }, [features])
+
+  useEffect(() => {
+    storeFeaturesRef.current = storeFeatures
+  }, [storeFeatures])
+
+  useEffect(() => {
+    storeZoneFeaturesRef.current = storeZoneFeatures
+  }, [storeZoneFeatures])
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -992,36 +1077,14 @@ function MapSurface({
     })
   }, [])
 
-  const syncKakaoBaseMap = useCallback((map: MapLibreMap) => {
-    const kakaoMap = kakaoMapInstanceRef.current
-    const maps = window.kakao?.maps
-    if (!kakaoMap || !maps) return
-
-    const center = map.getCenter()
-    const zoom = Math.min(mapMaxZoom, Math.max(mapMinZoom, map.getZoom()))
-    kakaoMap.setCenter(new maps.LatLng(center.lat, center.lng))
-    kakaoMap.setLevel(mapLibreZoomToKakaoLevel(zoom), { animate: false })
-  }, [])
-
   useEffect(() => {
     let cancelled = false
 
     const loadConfig = async () => {
       try {
-        const [mapResponse, kakaoResponse] = await Promise.all([
-          fetch("/api/config/map-tiles", { cache: "no-store" }),
-          fetch("/api/config/kakao-map-key", { cache: "no-store" }),
-        ])
-
+        const mapResponse = await fetch("/api/config/map-tiles", { cache: "no-store" })
         const payload = (await mapResponse.json()) as MapConfig
         if (!cancelled) setConfig(payload)
-
-        if (kakaoResponse.ok) {
-          const kakaoPayload = (await kakaoResponse.json()) as KakaoMapConfig
-          if (!cancelled) setKakaoConfig(kakaoPayload)
-        } else if (!cancelled) {
-          setKakaoConfig({ kakaoMapKey: "" })
-        }
       } catch {
         if (!cancelled) {
           setConfig({
@@ -1035,7 +1098,6 @@ function MapSurface({
             maxZoom: mapMaxZoom,
             status: "fallback",
           })
-          setKakaoConfig({ kakaoMapKey: "" })
         }
       }
     }
@@ -1047,47 +1109,13 @@ function MapSurface({
   }, [])
 
   useEffect(() => {
-    if (!config || !kakaoConfig || !mapRef.current || mapInstanceRef.current) return
+    if (!config || !mapRef.current || mapInstanceRef.current) return
 
     let cancelled = false
     let handleWindowResize: (() => void) | null = null
-    const kakaoContainer = kakaoMapRef.current
 
     const createMap = async () => {
       registerPmtilesProtocol()
-
-      let kakaoReady = false
-      let showFallbackBase = false
-      if (kakaoConfig.kakaoMapKey && kakaoMapRef.current) {
-        try {
-          const maps = await loadKakaoMaps(kakaoConfig.kakaoMapKey)
-          if (cancelled || !kakaoMapRef.current) return
-
-          const options = {
-            center: new maps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
-            level: mapLibreZoomToKakaoLevel(resolveInitialZoom(config.defaultZoom)),
-          }
-
-          kakaoMapInstanceRef.current = new maps.Map(kakaoMapRef.current, options)
-          kakaoMapInstanceRef.current.relayout?.()
-          kakaoReady = true
-          setMessage("카카오 베이스맵 · BuildMore 레이어")
-          window.setTimeout(() => {
-            const hasKakaoSurface = Boolean(kakaoContainer?.querySelector("canvas, img"))
-            if (!hasKakaoSurface) {
-              showFallbackBase = true
-              ensureFallbackRasterBase(mapInstanceRef.current)
-              setMessage("카카오 인증 확인 필요 · VWorld fallback")
-            }
-          }, 1800)
-        } catch {
-          showFallbackBase = true
-          setMessage("카카오 지도 로드 실패 · VWorld fallback")
-        }
-      } else {
-        showFallbackBase = true
-        setMessage("카카오 지도 키 없음 · VWorld fallback")
-      }
 
       let style: string | StyleSpecification = normalizeOverlayStyle(fallbackStyle())
       if (config.styleUrl) {
@@ -1095,15 +1123,15 @@ function MapSurface({
           const response = await fetch(config.styleUrl, { cache: "no-store" })
           if (response.ok) {
             style = normalizeOverlayStyle((await response.json()) as StyleSpecification)
-            if (!kakaoReady) setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
+            setMessage(`R2 overlay 로드 · ${config.tilesetVersion}`)
           } else {
-            if (!kakaoReady) setMessage(`R2 overlay ${response.status} · fallback style`)
+            setMessage(`R2 overlay ${response.status} · fallback style`)
           }
         } catch {
-          if (!kakaoReady) setMessage("R2 overlay CORS/연결 대기 · fallback style")
+          setMessage("R2 overlay CORS/연결 대기 · fallback style")
         }
       } else {
-        if (!kakaoReady) setMessage("R2 overlay URL 없음 · fallback style")
+        setMessage("R2 overlay URL 없음 · fallback style")
       }
 
       if (cancelled || !mapRef.current) return
@@ -1119,14 +1147,16 @@ function MapSurface({
       })
 
       mapInstanceRef.current = map
-      map.getContainer().style.background = "transparent"
+      map.getContainer().style.background = "#dfe7dc"
+      map.scrollZoom.setWheelZoomRate(1 / 900)
+      map.scrollZoom.setZoomRate(1 / 160)
       requestAnimationFrame(() => map.resize())
       window.setTimeout(() => map.resize(), 250)
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right")
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left")
 
       map.on("load", () => {
-        if (showFallbackBase) ensureFallbackRasterBase(map)
+        ensureFallbackRasterBase(map)
         tuneCadastralVisualLayers(map)
 
         if (!map.getSource("bm-mock-parcels")) {
@@ -1134,6 +1164,12 @@ function MapSurface({
         }
         if (!map.getSource("bm-mock-transactions")) {
           map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
+        }
+        if (!map.getSource("bm-store-zones")) {
+          map.addSource("bm-store-zones", { type: "geojson", data: storeZoneFeaturesRef.current as never })
+        }
+        if (!map.getSource("bm-store-pois")) {
+          map.addSource("bm-store-pois", { type: "geojson", data: storeFeaturesRef.current as never })
         }
 
         map.addLayer({
@@ -1143,6 +1179,51 @@ function MapSurface({
           paint: {
             "fill-color": "#ffffff",
             "fill-opacity": 0.001,
+          },
+        })
+        map.addLayer({
+          id: "bm-store-zone-fill",
+          type: "fill",
+          source: "bm-store-zones",
+          paint: {
+            "fill-color": "#10b981",
+            "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0.05, 15, 0.1, 18, 0.16],
+          },
+        })
+        map.addLayer({
+          id: "bm-store-zone-line",
+          type: "line",
+          source: "bm-store-zones",
+          paint: {
+            "line-color": "#047857",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.8, 16, 1.3, 20, 1.8],
+            "line-opacity": 0.58,
+          },
+        })
+        map.addLayer({
+          id: "bm-store-circle",
+          type: "circle",
+          source: "bm-store-pois",
+          paint: {
+            "circle-color": [
+              "match",
+              ["get", "industry_l_name"],
+              "음식",
+              "#ef4444",
+              "음식점",
+              "#ef4444",
+              "소매",
+              "#f59e0b",
+              "소매업",
+              "#f59e0b",
+              "생활서비스",
+              "#14b8a6",
+              "#6366f1",
+            ],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.4, 15, 4.2, 18, 6.4, 21, 8],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 18, 1.2],
+            "circle-opacity": 0.78,
           },
         })
         map.addLayer({
@@ -1158,39 +1239,49 @@ function MapSurface({
           },
         })
         publishViewport(map)
-        syncKakaoBaseMap(map)
         map.resize()
-        if (!kakaoReady) {
-          setMessage((current) => current.includes("fallback") ? current : `MapLibre overlay · PMTiles · ${config.tilesetVersion}`)
-        }
+        setMessage((current) => current.includes("fallback") ? current : `MapLibre 단일 지도 · VWorld/R2 · ${config.tilesetVersion}`)
       })
 
       map.on("moveend", () => publishViewport(map))
-      map.on("move", () => {
-        syncKakaoBaseMap(map)
-      })
-      map.on("zoom", () => {
-        syncKakaoBaseMap(map)
-      })
 
       handleWindowResize = () => {
-        kakaoMapInstanceRef.current?.relayout?.()
         map.resize()
-        syncKakaoBaseMap(map)
       }
       window.addEventListener("resize", handleWindowResize)
 
       map.on("click", (event) => {
-        const layers = ["bm-parcels-hit"].filter((layerId) => map.getLayer(layerId))
-        const features = map.queryRenderedFeatures(event.point, { layers })
-        const feature = features[0]
+        const storeLayers = ["bm-store-circle"].filter((layerId) => map.getLayer(layerId))
+        const storeFeature = map.queryRenderedFeatures(event.point, { layers: storeLayers })[0]
+        if (storeFeature) {
+          const props = storeFeature.properties as Record<string, unknown>
+          const name = escapeHtml(props.store_name ?? "상가")
+          const industry = escapeHtml(props.industry ?? props.industry_s_name ?? props.industry_m_name ?? props.industry_l_name ?? "업종 미분류")
+          const address = escapeHtml(props.address ?? props.road_address ?? props.lot_address ?? "")
+          const source = escapeHtml(props.source_label ?? props.source ?? "공공 상가정보")
+          new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "280px" })
+            .setLngLat(event.lngLat)
+            .setHTML(
+              `<div style="font: 12px/1.45 system-ui, sans-serif; color: #18181b;">
+                <strong style="display:block; font-size:13px; margin-bottom:4px;">${name}</strong>
+                <span style="display:block; color:#52525b;">${industry}</span>
+                <span style="display:block; margin-top:4px; color:#71717a;">${address}</span>
+                <span style="display:block; margin-top:6px; color:#059669;">${source}</span>
+              </div>`
+            )
+            .addTo(map)
+          return
+        }
 
-        if (!feature) {
+        const parcelLayers = ["bm-parcels-hit"].filter((layerId) => map.getLayer(layerId))
+        const parcelFeature = map.queryRenderedFeatures(event.point, { layers: parcelLayers })[0]
+
+        if (!parcelFeature) {
           onCloseBuildingPanelsRef.current()
           return
         }
 
-        const props = feature.properties as Record<string, unknown>
+        const props = parcelFeature.properties as Record<string, unknown>
         const buildingId = String(props.buildingId ?? "")
         const featureId = String(props.feature_id ?? props.pnu ?? buildingId)
 
@@ -1211,10 +1302,8 @@ function MapSurface({
       if (handleWindowResize) window.removeEventListener("resize", handleWindowResize)
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
-      kakaoMapInstanceRef.current = null
-      if (kakaoContainer) kakaoContainer.innerHTML = ""
     }
-  }, [config, kakaoConfig, publishViewport, syncKakaoBaseMap])
+  }, [config, publishViewport])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1226,9 +1315,26 @@ function MapSurface({
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map?.isStyleLoaded()) return
+    const storesSource = map.getSource("bm-store-pois") as maplibregl.GeoJSONSource | undefined
+    storesSource?.setData(storeFeatures as never)
+  }, [storeFeatures])
+
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map?.isStyleLoaded()) return
+    const zonesSource = map.getSource("bm-store-zones") as maplibregl.GeoJSONSource | undefined
+    zonesSource?.setData(storeZoneFeatures as never)
+  }, [storeZoneFeatures])
+
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map?.isStyleLoaded()) return
 
     const visibilityByLayer: Array<[string, boolean]> = [
       ["bm-parcels-hit", activeLayers.parcels],
+      ["bm-store-circle", activeLayers.stores],
+      ["bm-store-zone-fill", activeLayers.storeZones],
+      ["bm-store-zone-line", activeLayers.storeZones],
       ["bm-transaction-circle", activeLayers.transactions],
     ]
 
@@ -1267,21 +1373,15 @@ function MapSurface({
 
   return (
     <div
-      className="absolute inset-0 bg-[#dfe7dc]"
+      className="absolute inset-0 overflow-hidden bg-[#dfe7dc]"
       onClick={handleSurfaceClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
       <div
-        ref={kakaoMapRef}
-        className="absolute inset-0"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-      />
-
-      <div
         ref={mapRef}
-        className="absolute inset-0 z-[1]"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent" }}
+        className="absolute inset-0"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "#dfe7dc" }}
       />
 
       <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-lg border border-white/70 bg-white/82 px-3 py-2 text-xs font-medium text-zinc-600 shadow-sm backdrop-blur">
