@@ -12,7 +12,7 @@ export async function GET() {
     styleUrl,
     tilesetVersion: process.env.NEXT_PUBLIC_MAP_TILESET_VERSION || "r2-custom-domain",
     defaultCenter: [126.978, 37.5665],
-    defaultZoom: 12,
+    defaultZoom: 15,
     minZoom: 9,
     maxZoom: 22,
     status: tilesBaseUrl ? "configured" : "missing_tiles_base_url",

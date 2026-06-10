@@ -139,6 +139,7 @@ type BboxApiState = {
 const mapCenter = { lat: 37.5523, lng: 126.9139 }
 const mapMinZoom = 9
 const mapMaxZoom = 22
+const mapInitialZoom = 15
 const parcelMinZoom = 13
 const parcelNativeMaxZoom = 17
 
@@ -377,6 +378,23 @@ function isCadastralVisualLayer(layer: StyleSpecification["layers"][number]) {
     sourceLayerId.includes("parcel") ||
     sourceLayerId.includes("cadastral")
   )
+}
+
+function resolveInitialZoom(defaultZoom?: number) {
+  return Math.min(mapMaxZoom, Math.max(defaultZoom || mapInitialZoom, mapInitialZoom))
+}
+
+function tuneCadastralVisualLayers(map: MapLibreMap) {
+  map.getStyle().layers.forEach((layer) => {
+    if (!map.getLayer(layer.id) || !isCadastralVisualLayer(layer)) return
+
+    map.setLayerZoomRange(layer.id, layer.minzoom ?? parcelMinZoom, mapMaxZoom)
+    if (layer.type === "line") {
+      map.setPaintProperty(layer.id, "line-color", "#475569")
+      map.setPaintProperty(layer.id, "line-width", ["interpolate", ["linear"], ["zoom"], 15, 0.55, 17, 0.85, 22, 1.2])
+      map.setPaintProperty(layer.id, "line-opacity", ["interpolate", ["linear"], ["zoom"], 15, 0.32, 17, 0.42, 22, 0.5])
+    }
+  })
 }
 
 function ensureFallbackRasterBase(map: MapLibreMap | null) {
@@ -1003,7 +1021,7 @@ function MapSurface({
             styleUrl: "",
             tilesetVersion: "fallback",
             defaultCenter: [mapCenter.lng, mapCenter.lat],
-            defaultZoom: 14,
+            defaultZoom: mapInitialZoom,
             minZoom: mapMinZoom,
             maxZoom: mapMaxZoom,
             status: "fallback",
@@ -1038,7 +1056,7 @@ function MapSurface({
 
           const options: Record<string, unknown> = {
             center: new maps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
-            zoom: Math.max(config.defaultZoom || 14, 14),
+            zoom: resolveInitialZoom(config.defaultZoom),
             minZoom: config.minZoom || mapMinZoom,
             maxZoom: config.maxZoom || mapMaxZoom,
             gl: true,
@@ -1095,7 +1113,7 @@ function MapSurface({
         container: mapRef.current,
         style,
         center: [selectedRef.current.coordinates.lng, selectedRef.current.coordinates.lat],
-        zoom: Math.max(config.defaultZoom || 14, 14),
+        zoom: resolveInitialZoom(config.defaultZoom),
         minZoom: config.minZoom || mapMinZoom,
         maxZoom: config.maxZoom || mapMaxZoom,
         attributionControl: false,
@@ -1110,6 +1128,7 @@ function MapSurface({
 
       map.on("load", () => {
         if (showFallbackBase) ensureFallbackRasterBase(map)
+        tuneCadastralVisualLayers(map)
 
         if (!map.getSource("bm-mock-parcels")) {
           map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
