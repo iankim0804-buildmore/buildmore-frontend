@@ -72,6 +72,8 @@ type BuildingRegister = {
   district_code?: string | null
   zone_label?: string | null
   zone_code?: string | null
+  land_use_source_status?: string | null
+  land_use_source_label?: string | null
   owner_count?: number | null
 }
 
@@ -638,6 +640,14 @@ function valueWithCode(label?: string, code?: string) {
   const cleanCode = code && code !== "확인 필요" ? code : ""
   if (cleanLabel && cleanCode) return `${cleanLabel} (${cleanCode})`
   return cleanLabel || cleanCode || "확인 필요"
+}
+
+function districtZoneLabel(feature: MapFeature) {
+  const district = valueWithCode(feature.districtLabel, feature.districtCode)
+  const zone = valueWithCode(feature.zoneLabel, feature.zoneCode)
+  if (district === "확인 필요") return zone
+  if (zone === "확인 필요" || zone === district) return district
+  return `${district} / ${zone}`
 }
 
 function parkingSplitLabel(total?: number, indoor?: number, outdoor?: number) {
@@ -1594,7 +1604,7 @@ function LeftParcelPanel({
               ["면적", selected.area],
               ["지목", selected.use],
               ["지역", valueWithCode(selected.zoningLabel, selected.zoningCode)],
-              ["지구", valueWithCode(selected.districtLabel, selected.districtCode)],
+              ["지구", districtZoneLabel(selected)],
               ["현재 건폐율(법정 최대건폐율)", legalPairLabel(selected.buildingCoverageRatio, selected.legalMaxBuildingCoverageRatio)],
               ["용적률(법정 최대용적률)", legalPairLabel(selected.floorAreaRatio, selected.legalMaxFloorAreaRatio)],
               ...(selected.legalRelaxationNote
