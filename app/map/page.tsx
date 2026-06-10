@@ -1119,11 +1119,11 @@ function MapSurface({
       const polygon = new kakaoMaps.Polygon({
         map,
         path,
-        strokeWeight: 2.5,
-        strokeColor: "#111827",
-        strokeOpacity: 0.9,
-        strokeStyle: "shortdash",
-        fillColor: "#111827",
+        strokeWeight: 1.5,
+        strokeColor: "#f59e0b",
+        strokeOpacity: 0.85,
+        strokeStyle: "solid",
+        fillColor: "#f59e0b",
         fillOpacity: 0.08,
         zIndex: 45,
       }) as KakaoOverlay
