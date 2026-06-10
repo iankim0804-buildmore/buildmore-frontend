@@ -309,13 +309,6 @@ function fallbackStyle(): StyleSpecification {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources: {
-      "vworld-fallback-base": {
-        type: "raster",
-        tiles: vworldBaseTiles,
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: "VWorld",
-      },
       "buildmore-parcels": {
         type: "vector",
         tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
@@ -325,17 +318,6 @@ function fallbackStyle(): StyleSpecification {
       },
     },
     layers: [
-      {
-        id: "vworld-fallback-base",
-        type: "raster",
-        source: "vworld-fallback-base",
-        paint: {
-          "raster-saturation": -0.18,
-          "raster-contrast": -0.05,
-          "raster-opacity": 0,
-          "raster-resampling": "linear",
-        },
-      },
       {
         id: "buildmore-parcels-line",
         type: "line",
@@ -356,12 +338,7 @@ function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
   const sources = { ...(style.sources ?? {}) } as NonNullable<StyleSpecification["sources"]>
   Object.entries(sources).forEach(([sourceId, source]) => {
     if (source && source.type === "raster") {
-      sources[sourceId] = {
-        ...source,
-        tiles: vworldBaseTiles,
-        tileSize: 256,
-        attribution: source.attribution || "VWorld",
-      }
+      delete sources[sourceId]
     }
   })
 
@@ -369,32 +346,37 @@ function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
     ...style,
     sources,
     layers: style.layers
-      .filter((layer) => layer.type !== "background")
-      .map((layer) => {
-        if (layer.type !== "raster") return layer
-        return {
-          ...layer,
-          paint: {
-            ...(layer.paint ?? {}),
-            "raster-saturation": -0.18,
-            "raster-contrast": -0.05,
-            "raster-opacity": 0,
-            "raster-resampling": "linear",
-          },
-        }
-      }) as StyleSpecification["layers"],
+      .filter((layer) => layer.type !== "background" && layer.type !== "raster") as StyleSpecification["layers"],
   }
 }
 
-function setFallbackRasterVisibility(map: MapLibreMap | null, visible: boolean) {
+function ensureFallbackRasterBase(map: MapLibreMap | null) {
   if (!map?.isStyleLoaded()) return
-  map.getStyle().layers
-    .filter((layer) => layer.type === "raster")
-    .forEach((layer) => {
-      if (map.getLayer(layer.id)) {
-        map.setPaintProperty(layer.id, "raster-opacity", visible ? 0.92 : 0)
-      }
+  if (!map.getSource("vworld-fallback-base")) {
+    map.addSource("vworld-fallback-base", {
+      type: "raster",
+      tiles: vworldBaseTiles,
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "VWorld",
     })
+  }
+  if (!map.getLayer("vworld-fallback-base")) {
+    map.addLayer(
+      {
+        id: "vworld-fallback-base",
+        type: "raster",
+        source: "vworld-fallback-base",
+        paint: {
+          "raster-saturation": -0.18,
+          "raster-contrast": -0.05,
+          "raster-opacity": 0.92,
+          "raster-resampling": "linear",
+        },
+      },
+      map.getStyle().layers[0]?.id
+    )
+  }
 }
 
 function createParcelCoordinates(feature: MapFeature): [number, number][][] {
@@ -1092,7 +1074,7 @@ function MapSurface({
             const hasNaverSurface = Boolean(naverContainer?.querySelector("canvas, img"))
             if (!hasNaverSurface) {
               showFallbackBase = true
-              setFallbackRasterVisibility(mapInstanceRef.current, true)
+              ensureFallbackRasterBase(mapInstanceRef.current)
               setMessage("네이버 인증 확인 필요 · VWorld fallback")
             }
           }, 1800)
@@ -1142,7 +1124,7 @@ function MapSurface({
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left")
 
       map.on("load", () => {
-        setFallbackRasterVisibility(map, showFallbackBase)
+        if (showFallbackBase) ensureFallbackRasterBase(map)
 
         if (!map.getSource("bm-mock-parcels")) {
           map.addSource("bm-mock-parcels", { type: "geojson", data: mockParcelsGeojson(featuresRef.current) })
