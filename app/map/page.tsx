@@ -137,7 +137,6 @@ type BboxApiState = {
 }
 
 const mapCenter = { lat: 37.5523, lng: 126.9139 }
-const selectedSourceId = "bm-selected-feature"
 
 let pmtilesProtocolRegistered = false
 let naverMapsLoadPromise: Promise<NaverMapsNamespace> | null = null
@@ -308,36 +307,22 @@ function fallbackStyle(): StyleSpecification {
   return {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {
-      "buildmore-parcels": {
-        type: "vector",
-        tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
-        minzoom: 13,
-        maxzoom: 17,
-        attribution: "BuildMore PostGIS",
-      },
-    },
-    layers: [
-      {
-        id: "buildmore-parcels-line",
-        type: "line",
-        source: "buildmore-parcels",
-        "source-layer": "parcels",
-        minzoom: 13,
-        paint: {
-          "line-color": "#334155",
-          "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.25, 16, 0.45, 17, 0.7],
-          "line-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.22, 16, 0.34, 17, 0.46],
-        },
-      },
-    ],
+    sources: {},
+    layers: [],
   }
 }
 
 function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
   const sources = { ...(style.sources ?? {}) } as NonNullable<StyleSpecification["sources"]>
+  const hiddenSourceIds = new Set<string>()
+
   Object.entries(sources).forEach(([sourceId, source]) => {
+    const sourceName = sourceId.toLowerCase()
     if (source && source.type === "raster") {
+      delete sources[sourceId]
+    }
+    if (sourceName.includes("parcel") || sourceName.includes("cadastral")) {
+      hiddenSourceIds.add(sourceId)
       delete sources[sourceId]
     }
   })
@@ -346,7 +331,21 @@ function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
     ...style,
     sources,
     layers: style.layers
-      .filter((layer) => layer.type !== "background" && layer.type !== "raster") as StyleSpecification["layers"],
+      .filter((layer) => {
+        const sourceId = "source" in layer ? String(layer.source ?? "") : ""
+        const sourceLayerId = "source-layer" in layer ? String(layer["source-layer"] ?? "") : ""
+        const layerId = layer.id.toLowerCase()
+
+        return (
+          layer.type !== "background" &&
+          layer.type !== "raster" &&
+          !hiddenSourceIds.has(sourceId) &&
+          !layerId.includes("parcel") &&
+          !layerId.includes("cadastral") &&
+          !sourceLayerId.toLowerCase().includes("parcel") &&
+          !sourceLayerId.toLowerCase().includes("cadastral")
+        )
+      }) as StyleSpecification["layers"],
   }
 }
 
@@ -428,25 +427,6 @@ function mockTransactionsGeojson() {
         coordinates: item.coordinates,
       },
     })),
-  }
-}
-
-function selectedFeatureGeojson(selected: MapFeature) {
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {
-          feature_id: selected.featureId,
-          pnu: selected.pnu,
-        },
-        geometry: selected.geometry ?? {
-          type: "Polygon",
-          coordinates: createParcelCoordinates(selected),
-        },
-      },
-    ],
   }
 }
 
@@ -539,11 +519,10 @@ function featureFromSummary(id: string, payload: Record<string, unknown>): MapFe
 export default function MapPage() {
   const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
   const [statusOpen, setStatusOpen] = useState(false)
-  const [capsuleOpen, setCapsuleOpen] = useState(true)
   const [filterOpen, setFilterOpen] = useState(false)
   const [activePrompt, setActivePrompt] = useState<PromptKey>("bankability")
   const [selectedScenario, setSelectedScenario] = useState(mockFeatures[0].scenarios[0])
-  const [savedIds, setSavedIds] = useState<string[]>([mockFeatures[0].id])
+  const [savedIds, setSavedIds] = useState<string[]>([])
   const [viewedFeatureIds, setViewedFeatureIds] = useState<string[]>(mockFeatures.map((feature) => feature.id))
   const [mapFeatures, setMapFeatures] = useState<MapFeature[]>(mockFeatures)
   const [mapViewport, setMapViewport] = useState<MapViewport | null>(null)
@@ -579,7 +558,6 @@ export default function MapPage() {
     setSelectedScenario(feature.scenarios[0] ?? "")
     setActivePrompt("bankability")
     setStatusOpen(true)
-    setCapsuleOpen(true)
   }, [])
 
   const selectFeatureById = useCallback((id: string) => {
@@ -620,7 +598,6 @@ export default function MapPage() {
   }
 
   const closeBuildingPanels = useCallback(() => {
-    setCapsuleOpen(false)
     setStatusOpen(false)
   }, [])
 
@@ -746,13 +723,9 @@ export default function MapPage() {
           activeLayers={activeLayers}
           selected={selected}
           features={mapFeatures}
-          selectedScenario={selectedScenario}
-          capsuleOpen={capsuleOpen && !statusOpen}
           savedIds={savedIds}
-          onScenarioChange={setSelectedScenario}
           onSelect={selectFeatureById}
           onExternalFeature={loadFeatureSummary}
-          onCloseCapsule={closeBuildingPanels}
           onCloseBuildingPanels={closeBuildingPanels}
           onViewportChange={handleViewportChange}
         />
@@ -901,26 +874,18 @@ function MapSurface({
   activeLayers,
   selected,
   features,
-  selectedScenario,
-  capsuleOpen,
   savedIds,
-  onScenarioChange,
   onSelect,
   onExternalFeature,
-  onCloseCapsule,
   onCloseBuildingPanels,
   onViewportChange,
 }: {
   activeLayers: Record<LayerKey, boolean>
   selected: MapFeature
   features: MapFeature[]
-  selectedScenario: string
-  capsuleOpen: boolean
   savedIds: string[]
-  onScenarioChange: (scenario: string) => void
   onSelect: (id: string) => void
   onExternalFeature: (featureId: string, properties?: Record<string, unknown>) => void
-  onCloseCapsule: () => void
   onCloseBuildingPanels: () => void
   onViewportChange: (viewport: MapViewport) => void
 }) {
@@ -931,7 +896,6 @@ function MapSurface({
   const [message, setMessage] = useState("네이버 지도 준비 중")
   const [config, setConfig] = useState<MapConfig | null>(null)
   const [naverConfig, setNaverConfig] = useState<NaverMapConfig | null>(null)
-  const [selectedScreen, setSelectedScreen] = useState<{ left: number; top: number } | null>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const draggedRef = useRef(false)
   const selectedRef = useRef(selected)
@@ -979,16 +943,6 @@ function MapSurface({
     const center = map.getCenter()
     naverMap.setCenter(new maps.LatLng(center.lat, center.lng))
     naverMap.setZoom(Math.round(map.getZoom()))
-  }, [])
-
-  const updateSelectedPosition = useCallback((map: MapLibreMap, feature: MapFeature) => {
-    const point = map.project([feature.coordinates.lng, feature.coordinates.lat])
-    const width = map.getCanvas().clientWidth || 0
-    const height = map.getCanvas().clientHeight || 0
-    setSelectedScreen({
-      left: width ? Math.min(Math.max(point.x, 180), width - 180) : point.x,
-      top: height ? Math.min(Math.max(point.y, 300), height - 80) : point.y,
-    })
   }, [])
 
   useEffect(() => {
@@ -1132,9 +1086,6 @@ function MapSurface({
         if (!map.getSource("bm-mock-transactions")) {
           map.addSource("bm-mock-transactions", { type: "geojson", data: mockTransactionsGeojson() })
         }
-        if (!map.getSource(selectedSourceId)) {
-          map.addSource(selectedSourceId, { type: "geojson", data: selectedFeatureGeojson(selectedRef.current) })
-        }
 
         map.addLayer({
           id: "bm-parcels-hit",
@@ -1143,16 +1094,6 @@ function MapSurface({
           paint: {
             "fill-color": "#ffffff",
             "fill-opacity": 0.001,
-          },
-        })
-        map.addLayer({
-          id: "bm-parcels-outline",
-          type: "line",
-          source: "bm-mock-parcels",
-          paint: {
-            "line-color": "#334155",
-            "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.45, 17, 0.9, 19, 1.1],
-            "line-opacity": 0.5,
           },
         })
         map.addLayer({
@@ -1167,30 +1108,9 @@ function MapSurface({
             "circle-opacity": 0.72,
           },
         })
-        map.addLayer({
-          id: "bm-selected-feature-fill",
-          type: "fill",
-          source: selectedSourceId,
-          paint: {
-            "fill-color": "#ef4444",
-            "fill-opacity": 0.34,
-          },
-        })
-        map.addLayer({
-          id: "bm-selected-feature-line",
-          type: "line",
-          source: selectedSourceId,
-          paint: {
-            "line-color": "#dc2626",
-            "line-width": 3,
-            "line-opacity": 0.95,
-          },
-        })
-
         publishViewport(map)
         syncNaverBaseMap(map)
         map.resize()
-        updateSelectedPosition(map, selectedRef.current)
         if (!naverReady) {
           setMessage((current) => current.includes("fallback") ? current : `MapLibre overlay · PMTiles · ${config.tilesetVersion}`)
         }
@@ -1199,18 +1119,15 @@ function MapSurface({
       map.on("moveend", () => publishViewport(map))
       map.on("move", () => {
         syncNaverBaseMap(map)
-        updateSelectedPosition(map, selectedRef.current)
       })
       map.on("zoom", () => {
         syncNaverBaseMap(map)
-        updateSelectedPosition(map, selectedRef.current)
       })
 
       handleWindowResize = () => {
         naverMapInstanceRef.current?.relayout?.()
         map.resize()
         syncNaverBaseMap(map)
-        updateSelectedPosition(map, selectedRef.current)
       }
       window.addEventListener("resize", handleWindowResize)
 
@@ -1249,15 +1166,7 @@ function MapSurface({
       naverMapInstanceRef.current = null
       if (naverContainer) naverContainer.innerHTML = ""
     }
-  }, [config, naverConfig, publishViewport, syncNaverBaseMap, updateSelectedPosition])
-
-  useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map?.isStyleLoaded()) return
-    const source = map.getSource(selectedSourceId) as maplibregl.GeoJSONSource | undefined
-    source?.setData(selectedFeatureGeojson(selected) as never)
-    updateSelectedPosition(map, selected)
-  }, [selected, updateSelectedPosition])
+  }, [config, naverConfig, publishViewport, syncNaverBaseMap])
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1272,7 +1181,6 @@ function MapSurface({
 
     const visibilityByLayer: Array<[string, boolean]> = [
       ["bm-parcels-hit", activeLayers.parcels],
-      ["bm-parcels-outline", activeLayers.parcels],
       ["bm-transaction-circle", activeLayers.transactions],
     ]
 
@@ -1329,61 +1237,6 @@ function MapSurface({
           {message}
         </span>
       </div>
-
-      {capsuleOpen && selectedScreen && (
-        <div
-          data-map-overlay
-          className="absolute z-20 w-[320px] -translate-x-1/2 -translate-y-[calc(100%+20px)] rounded-lg border border-white/80 bg-white/76 p-3 shadow-2xl backdrop-blur-md"
-          style={{ left: selectedScreen.left, top: selectedScreen.top }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="rounded-lg border border-zinc-200 bg-white/92 p-3 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-zinc-500">{selected.district}</p>
-                <h3 className="mt-1 truncate text-sm font-semibold text-zinc-950">{selected.address}</h3>
-              </div>
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg bg-white" onClick={onCloseCapsule}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <MiniMetric label="Bank" value={`${selected.bankability}`} />
-            <MiniMetric label="DSCR" value={selected.dscr} />
-            <MiniMetric label="Cap" value={selected.capRate} />
-          </div>
-
-          <div className="mt-2 rounded-lg bg-zinc-950 px-3 py-2 text-xs text-white">
-            {selected.locationSignal} · 신뢰도 {selected.confidence}
-          </div>
-
-          <div className="mt-2 rounded-lg border border-zinc-200 bg-white/92 p-2 shadow-sm">
-            <p className="mb-2 text-[11px] font-semibold text-zinc-500">추천 실행 시나리오</p>
-            <div className="flex flex-wrap gap-1.5">
-              {selected.scenarios.map((scenario) => (
-                <button
-                  key={scenario}
-                  type="button"
-                  onClick={() => onScenarioChange(scenario)}
-                  className={cn(
-                    "rounded-md border px-2 py-1 text-[11px] font-semibold",
-                    selectedScenario === scenario
-                      ? "border-zinc-900 bg-zinc-950 text-white"
-                      : "border-amber-200 bg-amber-50 text-amber-800"
-                  )}
-                >
-                  {scenario}
-                </button>
-              ))}
-            </div>
-            <Button asChild className="mt-2 h-8 w-full rounded-md bg-zinc-950 text-xs text-white">
-              <Link href="/analysis">정밀 분석 실행</Link>
-            </Button>
-          </div>
-        </div>
-      )}
 
       {mockFeatures.map((feature) => {
         if (!savedIds.includes(feature.id)) return null
@@ -1544,15 +1397,6 @@ function CoreMetric({ icon: Icon, label, value }: { icon: typeof Activity; label
         <Icon className="h-3 w-3" />
         {label}
       </div>
-      <p className="mt-0.5 text-sm font-semibold text-zinc-950">{value}</p>
-    </div>
-  )
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5">
-      <p className="text-[10px] font-medium text-zinc-500">{label}</p>
       <p className="mt-0.5 text-sm font-semibold text-zinc-950">{value}</p>
     </div>
   )
