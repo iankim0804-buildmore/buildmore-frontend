@@ -14,7 +14,7 @@ export async function GET() {
     defaultCenter: [126.978, 37.5665],
     defaultZoom: 12,
     minZoom: 9,
-    maxZoom: 19,
+    maxZoom: 22,
     status: tilesBaseUrl ? "configured" : "missing_tiles_base_url",
   })
 }

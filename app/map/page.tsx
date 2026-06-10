@@ -137,6 +137,10 @@ type BboxApiState = {
 }
 
 const mapCenter = { lat: 37.5523, lng: 126.9139 }
+const mapMinZoom = 9
+const mapMaxZoom = 22
+const parcelMinZoom = 13
+const parcelNativeMaxZoom = 17
 
 let pmtilesProtocolRegistered = false
 let naverMapsLoadPromise: Promise<NaverMapsNamespace> | null = null
@@ -307,22 +311,37 @@ function fallbackStyle(): StyleSpecification {
   return {
     version: 8,
     glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-    sources: {},
-    layers: [],
+    sources: {
+      "buildmore-parcels": {
+        type: "vector",
+        tiles: ["/api/map/tiles/cadastral/{z}/{x}/{y}.pbf"],
+        minzoom: parcelMinZoom,
+        maxzoom: parcelNativeMaxZoom,
+        attribution: "BuildMore PostGIS",
+      },
+    },
+    layers: [
+      {
+        id: "buildmore-parcels-line",
+        type: "line",
+        source: "buildmore-parcels",
+        "source-layer": "parcels",
+        minzoom: parcelMinZoom,
+        paint: {
+          "line-color": "#475569",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.25, 17, 0.7, 22, 1.15],
+          "line-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0.2, 17, 0.36, 22, 0.48],
+        },
+      },
+    ],
   }
 }
 
 function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
   const sources = { ...(style.sources ?? {}) } as NonNullable<StyleSpecification["sources"]>
-  const hiddenSourceIds = new Set<string>()
 
   Object.entries(sources).forEach(([sourceId, source]) => {
-    const sourceName = sourceId.toLowerCase()
     if (source && source.type === "raster") {
-      delete sources[sourceId]
-    }
-    if (sourceName.includes("parcel") || sourceName.includes("cadastral")) {
-      hiddenSourceIds.add(sourceId)
       delete sources[sourceId]
     }
   })
@@ -339,14 +358,25 @@ function normalizeOverlayStyle(style: StyleSpecification): StyleSpecification {
         return (
           layer.type !== "background" &&
           layer.type !== "raster" &&
-          !hiddenSourceIds.has(sourceId) &&
-          !layerId.includes("parcel") &&
-          !layerId.includes("cadastral") &&
-          !sourceLayerId.toLowerCase().includes("parcel") &&
-          !sourceLayerId.toLowerCase().includes("cadastral")
+          Boolean(sourceId || sourceLayerId || layerId)
         )
       }) as StyleSpecification["layers"],
   }
+}
+
+function isCadastralVisualLayer(layer: StyleSpecification["layers"][number]) {
+  const layerId = layer.id.toLowerCase()
+  const sourceId = "source" in layer ? String(layer.source ?? "").toLowerCase() : ""
+  const sourceLayerId = "source-layer" in layer ? String(layer["source-layer"] ?? "").toLowerCase() : ""
+
+  return (
+    layerId.includes("parcel") ||
+    layerId.includes("cadastral") ||
+    sourceId.includes("parcel") ||
+    sourceId.includes("cadastral") ||
+    sourceLayerId.includes("parcel") ||
+    sourceLayerId.includes("cadastral")
+  )
 }
 
 function ensureFallbackRasterBase(map: MapLibreMap | null) {
@@ -941,8 +971,9 @@ function MapSurface({
     if (!naverMap || !maps) return
 
     const center = map.getCenter()
+    const zoom = Math.min(mapMaxZoom, Math.max(mapMinZoom, map.getZoom()))
     naverMap.setCenter(new maps.LatLng(center.lat, center.lng))
-    naverMap.setZoom(Math.round(map.getZoom()))
+    naverMap.setZoom(zoom)
   }, [])
 
   useEffect(() => {
@@ -973,8 +1004,8 @@ function MapSurface({
             tilesetVersion: "fallback",
             defaultCenter: [mapCenter.lng, mapCenter.lat],
             defaultZoom: 14,
-            minZoom: 9,
-            maxZoom: 19,
+            minZoom: mapMinZoom,
+            maxZoom: mapMaxZoom,
             status: "fallback",
           })
           setNaverConfig({ naverMapClientId: "", customStyleId: null })
@@ -1008,8 +1039,8 @@ function MapSurface({
           const options: Record<string, unknown> = {
             center: new maps.LatLng(selectedRef.current.coordinates.lat, selectedRef.current.coordinates.lng),
             zoom: Math.max(config.defaultZoom || 14, 14),
-            minZoom: config.minZoom || 9,
-            maxZoom: config.maxZoom || 19,
+            minZoom: config.minZoom || mapMinZoom,
+            maxZoom: config.maxZoom || mapMaxZoom,
             gl: true,
             logoControl: true,
             mapDataControl: false,
@@ -1065,8 +1096,8 @@ function MapSurface({
         style,
         center: [selectedRef.current.coordinates.lng, selectedRef.current.coordinates.lat],
         zoom: Math.max(config.defaultZoom || 14, 14),
-        minZoom: config.minZoom || 9,
-        maxZoom: config.maxZoom || 19,
+        minZoom: config.minZoom || mapMinZoom,
+        maxZoom: config.maxZoom || mapMaxZoom,
         attributionControl: false,
       })
 
@@ -1188,6 +1219,11 @@ function MapSurface({
       if (map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none")
       }
+    })
+
+    map.getStyle().layers.forEach((layer) => {
+      if (layer.id === "bm-parcels-hit" || !map.getLayer(layer.id) || !isCadastralVisualLayer(layer)) return
+      map.setLayoutProperty(layer.id, "visibility", activeLayers.parcels ? "visible" : "none")
     })
   }, [activeLayers])
 
