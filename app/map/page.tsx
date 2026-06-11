@@ -782,6 +782,7 @@ export default function MapPage() {
   })
   const txStoreRef = useRef<Map<string, Record<string, unknown>>>(new Map())
   const txTilesRef = useRef<Set<string>>(new Set())
+  const attemptedPnuRef = useRef<string | null>(null)
 
   const applySelected = useCallback((feature: MapFeature) => {
     setSelected(feature)
@@ -983,8 +984,12 @@ export default function MapPage() {
       }
     }
 
-    loadViewportSignals()
-    return () => controller.abort()
+    // 드래그 중 발생하는 중간 viewport의 fetch를 막는다 (캐시 렌더는 위에서 즉시 수행됨)
+    const debounce = window.setTimeout(loadViewportSignals, 250)
+    return () => {
+      window.clearTimeout(debounce)
+      controller.abort()
+    }
   }, [mapViewport])
 
   // PNU 변경 시: bbox에 이미 로드된 데이터 우선 사용, 없을 때만 API 호출
@@ -1000,10 +1005,14 @@ export default function MapPage() {
       return
     }
 
+    // 같은 pnu로는 한 번만 폴백 조회 — transactionFeatures 갱신마다 재요청하는 루프 방지
+    if (attemptedPnuRef.current === selected.pnu) return
+    attemptedPnuRef.current = selected.pnu
+
     // bbox 밖 필지이거나 아직 로드 안 됐을 때 fallback
     const controller = new AbortController()
     const params = new URLSearchParams({ pnu: selected.pnu, limit: "40", date_from: "2025-01-01" })
-    fetch(`/api/map/transactions?${params.toString()}`, { signal: controller.signal, cache: "no-store" })
+    fetch(`/api/map/transactions?${params.toString()}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => { if (data) setSelectedTransactions((data.items ?? []) as TransactionItem[]) })
       .catch(() => {})
