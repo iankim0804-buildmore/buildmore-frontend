@@ -1114,21 +1114,22 @@ function MapSurface({
       })
     }
 
-    const selectedGeometry = selectedFeature.geometry ?? { type: "Polygon", coordinates: createParcelCoordinates(selectedFeature) }
-    geometryToKakaoPaths(selectedGeometry, kakaoMaps).forEach((path) => {
-      const polygon = new kakaoMaps.Polygon({
-        map,
-        path,
-        strokeWeight: 2.5,
-        strokeColor: "#111827",
-        strokeOpacity: 0.9,
-        strokeStyle: "shortdash",
-        fillColor: "#111827",
-        fillOpacity: 0.08,
-        zIndex: 45,
-      }) as KakaoOverlay
-      overlaysRef.current.push(polygon)
-    })
+    if (selectedFeature.geometry) {
+      geometryToKakaoPaths(selectedFeature.geometry, kakaoMaps).forEach((path) => {
+        const polygon = new kakaoMaps.Polygon({
+          map,
+          path,
+          strokeWeight: 2.5,
+          strokeColor: "#111827",
+          strokeOpacity: 0.9,
+          strokeStyle: "shortdash",
+          fillColor: "#111827",
+          fillOpacity: 0.08,
+          zIndex: 45,
+        }) as KakaoOverlay
+        overlaysRef.current.push(polygon)
+      })
+    }
 
     geometryToKakaoPaths(selectedFeature.buildingGeometry, kakaoMaps).forEach((path) => {
       const polygon = new kakaoMaps.Polygon({
