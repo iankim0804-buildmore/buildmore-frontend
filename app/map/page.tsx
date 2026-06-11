@@ -1314,6 +1314,7 @@ function MapSurface({
             content: label,
             yAnchor: 0.5,
             zIndex: 24,
+            clickable: true,
           }) as KakaoOverlay
           // 실거래 말풍선 등에 가려져 있어도 hover 시 제목이 앞으로 나온다
           label.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
@@ -1391,6 +1392,7 @@ function MapSurface({
           content,
           yAnchor: 1,
           zIndex: 35,
+          clickable: true,
         }) as KakaoOverlay
         // 겹쳐 있는 다른 말풍선 위로 hover한 말풍선을 끌어올린다
         content.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
