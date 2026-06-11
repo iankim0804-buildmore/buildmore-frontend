@@ -16,12 +16,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/map/transactions?${params.toString()}`, {
-      next: { revalidate: 60 },
+      next: { revalidate: 300 },
     })
 
     if (response.ok) {
       return NextResponse.json(await response.json(), {
-        headers: { "Cache-Control": "public, max-age=30, s-maxage=60, stale-while-revalidate=120" },
+        headers: { "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=600" },
       })
     }
 

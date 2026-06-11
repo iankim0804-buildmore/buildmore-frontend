@@ -713,6 +713,51 @@ function bboxFromKakaoMap(map: KakaoMapInstance) {
   }
 }
 
+// ── 실거래 타일 캐시 ──────────────────────────────────────────────────────────
+// 지도를 0.01° 격자(약 1km)로 나눠 한 번 로드한 타일은 재방문 시 fetch 없이
+// 메모리에서 즉시 렌더한다. bbox를 격자에 스냅해 같은 지역 = 같은 URL이
+// 되도록 만들어 브라우저 HTTP 캐시와 백엔드 TTL 캐시도 적중시킨다.
+const TX_TILE_DEG = 0.01
+
+function snapBboxOutward(swLng: number, swLat: number, neLng: number, neLat: number, step = TX_TILE_DEG) {
+  return [
+    Math.floor(swLng / step) * step,
+    Math.floor(swLat / step) * step,
+    Math.ceil(neLng / step) * step,
+    Math.ceil(neLat / step) * step,
+  ] as const
+}
+
+function tileKeysForBbox(swLng: number, swLat: number, neLng: number, neLat: number, band: string, step = TX_TILE_DEG) {
+  const keys: string[] = []
+  for (let x = Math.floor(swLng / step); x <= Math.floor((neLng - 1e-9) / step); x++) {
+    for (let y = Math.floor(swLat / step); y <= Math.floor((neLat - 1e-9) / step); y++) {
+      keys.push(`${band}:${x}:${y}`)
+    }
+  }
+  return keys
+}
+
+function txCollectionFromStore(
+  store: Map<string, Record<string, unknown>>,
+  swLng: number,
+  swLat: number,
+  neLng: number,
+  neLat: number,
+): FeatureCollection {
+  const margin = 0.005
+  const features: Array<Record<string, unknown>> = []
+  store.forEach((feature) => {
+    const coords = (feature.geometry as { coordinates?: [number, number] } | undefined)?.coordinates
+    if (!Array.isArray(coords) || coords.length < 2) return
+    const [lng, lat] = coords
+    if (lng >= swLng - margin && lng <= neLng + margin && lat >= swLat - margin && lat <= neLat + margin) {
+      features.push(feature)
+    }
+  })
+  return { type: "FeatureCollection", features: features.slice(0, 800) }
+}
+
 export default function MapPage() {
   const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
   const [activeSection, setActiveSection] = useState<PanelSection>("transactions")
@@ -735,6 +780,8 @@ export default function MapPage() {
     transactions: true,
     regulations: true,
   })
+  const txStoreRef = useRef<Map<string, Record<string, unknown>>>(new Map())
+  const txTilesRef = useRef<Set<string>>(new Set())
 
   const applySelected = useCallback((feature: MapFeature) => {
     setSelected(feature)
@@ -822,30 +869,50 @@ export default function MapPage() {
     if (!mapViewport) return
     const controller = new AbortController()
 
+    const [swLng, swLat, neLng, neLat] = mapViewport.bboxParam.split(",").map(Number)
+    const band = mapViewport.zoom >= 16 ? "hi" : "lo"
+    const snapped = snapBboxOutward(swLng, swLat, neLng, neLat)
+    const snappedParam = snapped.map((value) => value.toFixed(3)).join(",")
+    const visibleTiles = tileKeysForBbox(swLng, swLat, neLng, neLat, band)
+    const missingTiles = visibleTiles.filter((key) => !txTilesRef.current.has(key))
+
+    // 이미 본 지역은 메모리 캐시에서 즉시 렌더 — 재방문 딜레이 제거
+    if (txStoreRef.current.size) {
+      const cached = txCollectionFromStore(txStoreRef.current, swLng, swLat, neLng, neLat)
+      if (cached.features.length) {
+        setTransactionFeatures(cached)
+        setTransactionApi({ status: "ready", count: cached.features.length, source: "client-tile-cache" })
+      }
+    }
+
     const loadViewportSignals = async () => {
       try {
         setBboxApi((current) => ({ ...current, status: "loading" }))
-        setTransactionApi((current) => ({ ...current, status: "loading" }))
+        if (missingTiles.length) {
+          setTransactionApi((current) => ({ ...current, status: "loading" }))
+        }
         setRegulationApi((current) => ({ ...current, status: "loading" }))
 
         const params = new URLSearchParams({
-          bbox: mapViewport.bboxParam,
+          bbox: snappedParam,
           level: String(Math.round(mapViewport.zoom)),
           limit: "220",
         })
         const transactionParams = new URLSearchParams({
-          bbox: mapViewport.bboxParam,
-          limit: mapViewport.zoom >= 16 ? "500" : "260",
+          bbox: snappedParam,
+          limit: band === "hi" ? "500" : "260",
           date_from: "2025-01-01",
         })
         const regulationParams = new URLSearchParams({
-          bbox: mapViewport.bboxParam,
+          bbox: snappedParam,
           limit: "160",
         })
 
         const [buildingResult, transactionResult, regulationResult] = await Promise.allSettled([
           fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
-          fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal }),
+          missingTiles.length
+            ? fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal })
+            : Promise.resolve(null),
           fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal }),
         ])
 
@@ -874,12 +941,34 @@ export default function MapPage() {
           count: buildingData.count ?? liveFeatures.length,
           source: buildingData.source ?? "map-building-signals",
         })
-        setTransactionFeatures(transactionData.features ? transactionData : emptyFeatureCollection)
+
+        // 새로 받은 실거래를 타일 스토어에 누적하고, 현재 뷰포트 기준으로 렌더
+        if (transactionResponse?.ok && Array.isArray(transactionData.features)) {
+          transactionData.features.forEach((feature) => {
+            const props = ((feature as Record<string, unknown>).properties ?? {}) as Record<string, unknown>
+            const key = String(props.transaction_id ?? props.id ?? "")
+            if (key) txStoreRef.current.set(key, feature as Record<string, unknown>)
+          })
+          visibleTiles.forEach((key) => txTilesRef.current.add(key))
+          if (txStoreRef.current.size > 8000) {
+            // 스토어가 넘치면 오래된 절반을 비우고 타일 기록도 초기화(다음 방문 때 재조회)
+            const keys = Array.from(txStoreRef.current.keys()).slice(0, 4000)
+            keys.forEach((key) => txStoreRef.current.delete(key))
+            txTilesRef.current.clear()
+          }
+        }
+        const merged = txCollectionFromStore(txStoreRef.current, swLng, swLat, neLng, neLat)
+        if (merged.features.length || transactionResponse) {
+          setTransactionFeatures(merged.features.length ? merged : emptyFeatureCollection)
+        }
         setTransactionApi({
-          status: transactionResponse?.ok ? "ready" : "error",
-          count: Number(transactionData.count ?? transactionData.features?.length ?? 0),
-          source: typeof transactionData.source === "string" ? transactionData.source : "commerce_seoul_transactions",
+          status: transactionResponse ? (transactionResponse.ok ? "ready" : "error") : "ready",
+          count: merged.features.length,
+          source: transactionResponse
+            ? (typeof transactionData.source === "string" ? transactionData.source : "commerce_seoul_transactions")
+            : "client-tile-cache",
         })
+
         setRegulationFeatures(regulationData.features ? regulationData : emptyFeatureCollection)
         setRegulationApi({
           status: regulationResponse?.ok ? "ready" : "error",
