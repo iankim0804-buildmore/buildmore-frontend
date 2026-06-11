@@ -1258,6 +1258,23 @@ function MapSurface({
     }
   }, [setMessage])
 
+  // 좌표 hit-test는 겹치는 필지에서 다른 필지를 잡을 수 있으므로, pnu를 아는 경우 직접 조회한다
+  const selectParcelByPnu = useCallback(async (pnu: string) => {
+    try {
+      setMessage("필지 정보 조회 중")
+      const response = await fetch(`/api/map/features/${encodeURIComponent(pnu)}/summary`, { cache: "no-store" })
+      if (!response.ok) {
+        setMessage("필지 정보를 찾지 못했습니다")
+        return
+      }
+      const payload = (await response.json()) as Record<string, unknown>
+      onFeaturePayloadRef.current(payload)
+      setMessage("필지/건물 경계 강조")
+    } catch {
+      setMessage("필지 정보 API 연결 대기")
+    }
+  }, [setMessage])
+
   const drawOverlays = useCallback(() => {
     const kakaoMaps = window.kakao?.maps
     const map = mapInstanceRef.current
@@ -1379,15 +1396,17 @@ function MapSurface({
         content.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
         content.addEventListener("mouseleave", () => overlay.setZIndex?.(35))
         // 말풍선 클릭 시 뒤의 지도가 아니라 말풍선의 필지가 선택되도록 한다
+        const bubblePnu = textValue(props.pnu, "")
         content.addEventListener("click", (event) => {
           event.stopPropagation()
-          void hitTestParcel(lat, lng)
+          if (bubblePnu) void selectParcelByPnu(bubblePnu)
+          else void hitTestParcel(lat, lng)
         })
         overlay.setMap(map)
         overlaysRef.current.push(overlay)
       })
     }
-  }, [clearOverlays, hitTestParcel])
+  }, [clearOverlays, hitTestParcel, selectParcelByPnu])
 
   useEffect(() => {
     drawOverlaysRef.current = drawOverlays
