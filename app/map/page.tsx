@@ -205,7 +205,7 @@ type FeatureCollection = {
   [key: string]: unknown
 }
 
-type KakaoOverlay = { setMap: (map: unknown | null) => void }
+type KakaoOverlay = { setMap: (map: unknown | null) => void; setZIndex?: (zIndex: number) => void }
 type KakaoLatLngLike = {
   getLat?: () => number
   getLng?: () => number
@@ -758,6 +758,26 @@ function txCollectionFromStore(
   return { type: "FeatureCollection", features: features.slice(0, 800) }
 }
 
+// 정비구역(폴리곤)은 중심점 기준으로 필터하므로 마진을 넉넉히 잡는다
+type RegStoreEntry = { feature: Record<string, unknown>; lat: number; lng: number }
+
+function regCollectionFromStore(
+  store: Map<string, RegStoreEntry>,
+  swLng: number,
+  swLat: number,
+  neLng: number,
+  neLat: number,
+): FeatureCollection {
+  const margin = 0.03
+  const features: Array<Record<string, unknown>> = []
+  store.forEach((entry) => {
+    if (entry.lng >= swLng - margin && entry.lng <= neLng + margin && entry.lat >= swLat - margin && entry.lat <= neLat + margin) {
+      features.push(entry.feature)
+    }
+  })
+  return { type: "FeatureCollection", features: features.slice(0, 300) }
+}
+
 export default function MapPage() {
   const [selected, setSelected] = useState<MapFeature>(mockFeatures[0])
   const [activeSection, setActiveSection] = useState<PanelSection>("transactions")
@@ -782,6 +802,8 @@ export default function MapPage() {
   })
   const txStoreRef = useRef<Map<string, Record<string, unknown>>>(new Map())
   const txTilesRef = useRef<Set<string>>(new Set())
+  const regStoreRef = useRef<Map<string, RegStoreEntry>>(new Map())
+  const regTilesRef = useRef<Set<string>>(new Set())
   const attemptedPnuRef = useRef<string | null>(null)
 
   const applySelected = useCallback((feature: MapFeature) => {
@@ -876,6 +898,8 @@ export default function MapPage() {
     const snappedParam = snapped.map((value) => value.toFixed(3)).join(",")
     const visibleTiles = tileKeysForBbox(swLng, swLat, neLng, neLat, band)
     const missingTiles = visibleTiles.filter((key) => !txTilesRef.current.has(key))
+    const regVisibleTiles = tileKeysForBbox(swLng, swLat, neLng, neLat, "reg")
+    const regMissingTiles = regVisibleTiles.filter((key) => !regTilesRef.current.has(key))
 
     // 이미 본 지역은 메모리 캐시에서 즉시 렌더 — 재방문 딜레이 제거
     if (txStoreRef.current.size) {
@@ -885,6 +909,13 @@ export default function MapPage() {
         setTransactionApi({ status: "ready", count: cached.features.length, source: "client-tile-cache" })
       }
     }
+    if (regStoreRef.current.size) {
+      const cached = regCollectionFromStore(regStoreRef.current, swLng, swLat, neLng, neLat)
+      if (cached.features.length) {
+        setRegulationFeatures(cached)
+        setRegulationApi({ status: "ready", count: cached.features.length, source: "client-tile-cache" })
+      }
+    }
 
     const loadViewportSignals = async () => {
       try {
@@ -892,7 +923,9 @@ export default function MapPage() {
         if (missingTiles.length) {
           setTransactionApi((current) => ({ ...current, status: "loading" }))
         }
-        setRegulationApi((current) => ({ ...current, status: "loading" }))
+        if (regMissingTiles.length) {
+          setRegulationApi((current) => ({ ...current, status: "loading" }))
+        }
 
         const params = new URLSearchParams({
           bbox: snappedParam,
@@ -914,7 +947,9 @@ export default function MapPage() {
           missingTiles.length
             ? fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal })
             : Promise.resolve(null),
-          fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal }),
+          regMissingTiles.length
+            ? fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal })
+            : Promise.resolve(null),
         ])
 
         const buildingResponse = buildingResult.status === "fulfilled" ? buildingResult.value : null
@@ -970,11 +1005,34 @@ export default function MapPage() {
             : "client-tile-cache",
         })
 
-        setRegulationFeatures(regulationData.features ? regulationData : emptyFeatureCollection)
+        // 새로 받은 정비구역을 타일 스토어에 누적하고, 현재 뷰포트 기준으로 렌더
+        if (regulationResponse?.ok && Array.isArray(regulationData.features)) {
+          regulationData.features.forEach((feature) => {
+            const record = feature as Record<string, unknown>
+            const props = (record.properties ?? {}) as Record<string, unknown>
+            const key = String(props.zone_key ?? props.id ?? "")
+            if (!key) return
+            const center = geometryCenter(record.geometry as MapGeometry | undefined)
+            if (!center) return
+            regStoreRef.current.set(key, { feature: record, lat: center.lat, lng: center.lng })
+          })
+          regVisibleTiles.forEach((key) => regTilesRef.current.add(key))
+          if (regStoreRef.current.size > 1500) {
+            const keys = Array.from(regStoreRef.current.keys()).slice(0, 750)
+            keys.forEach((key) => regStoreRef.current.delete(key))
+            regTilesRef.current.clear()
+          }
+        }
+        const regMerged = regCollectionFromStore(regStoreRef.current, swLng, swLat, neLng, neLat)
+        if (regMerged.features.length || regulationResponse) {
+          setRegulationFeatures(regMerged.features.length ? regMerged : emptyFeatureCollection)
+        }
         setRegulationApi({
-          status: regulationResponse?.ok ? "ready" : "error",
-          count: Number(regulationData.count ?? regulationData.features?.length ?? 0),
-          source: typeof regulationData.source === "string" ? regulationData.source : "map_redevelopment_zones",
+          status: regulationResponse ? (regulationResponse.ok ? "ready" : "error") : "ready",
+          count: regMerged.features.length,
+          source: regulationResponse
+            ? (typeof regulationData.source === "string" ? regulationData.source : "map_redevelopment_zones")
+            : "client-tile-cache",
         })
       } catch {
         if (controller.signal.aborted) return
@@ -1218,6 +1276,9 @@ function MapSurface({
             yAnchor: 0.5,
             zIndex: 24,
           }) as KakaoOverlay
+          // 실거래 말풍선 등에 가려져 있어도 hover 시 제목이 앞으로 나온다
+          label.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
+          label.addEventListener("mouseleave", () => overlay.setZIndex?.(24))
           overlay.setMap(map)
           overlaysRef.current.push(overlay)
         }
@@ -1285,6 +1346,9 @@ function MapSurface({
           yAnchor: 1,
           zIndex: 35,
         }) as KakaoOverlay
+        // 겹쳐 있는 다른 말풍선 위로 hover한 말풍선을 끌어올린다
+        content.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
+        content.addEventListener("mouseleave", () => overlay.setZIndex?.(35))
         overlay.setMap(map)
         overlaysRef.current.push(overlay)
       })
