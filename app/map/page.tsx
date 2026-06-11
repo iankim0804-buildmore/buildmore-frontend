@@ -1205,6 +1205,8 @@ function MapSurface({
   const roadviewClientRef = useRef<KakaoRoadviewClient | null>(null)
   const roadviewOverlayRef = useRef<KakaoOverlay | null>(null)
   const overlaysRef = useRef<KakaoOverlay[]>([])
+  const selectedZoneKeyRef = useRef<string | null>(null)
+  const drawOverlaysRef = useRef<() => void>(() => {})
   const featuresRef = useRef(features)
   const selectedRef = useRef(selected)
   const transactionFeaturesRef = useRef(transactionFeatures)
@@ -1238,6 +1240,24 @@ function MapSurface({
     onViewportChangeRef.current(bboxFromKakaoMap(map))
   }, [])
 
+  const hitTestParcel = useCallback(async (lat: number, lng: number) => {
+    try {
+      setMessage("클릭 좌표에서 필지 조회 중")
+      const response = await fetch(`/api/map/feature-at?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`, {
+        cache: "no-store",
+      })
+      if (!response.ok) {
+        setMessage("해당 좌표의 필지를 찾지 못했습니다")
+        return
+      }
+      const payload = (await response.json()) as Record<string, unknown>
+      onFeaturePayloadRef.current(payload)
+      setMessage("필지/건물 경계 강조")
+    } catch {
+      setMessage("필지 hit-test API 연결 대기")
+    }
+  }, [setMessage])
+
   const drawOverlays = useCallback(() => {
     const kakaoMaps = window.kakao?.maps
     const map = mapInstanceRef.current
@@ -1251,16 +1271,18 @@ function MapSurface({
       regulationFeaturesRef.current.features.slice(0, 160).forEach((feature) => {
         const geometry = feature.geometry as MapGeometry | undefined
         const props = (feature.properties ?? {}) as Record<string, unknown>
+        const zoneKey = textValue(props.zone_key ?? props.id, "")
+        const isZoneSelected = zoneKey !== "" && selectedZoneKeyRef.current === zoneKey
         geometryToKakaoPaths(geometry, kakaoMaps).forEach((path) => {
           const polygon = new kakaoMaps.Polygon({
             map,
             path,
-            strokeWeight: 1.25,
-            strokeColor: "#f59e0b",
-            strokeOpacity: 0.72,
-            fillColor: "#fbbf24",
-            fillOpacity: 0.11,
-            zIndex: 18,
+            strokeWeight: isZoneSelected ? 3 : 1.25,
+            strokeColor: isZoneSelected ? "#d97706" : "#f59e0b",
+            strokeOpacity: isZoneSelected ? 1 : 0.72,
+            fillColor: isZoneSelected ? "#f59e0b" : "#fbbf24",
+            fillOpacity: isZoneSelected ? 0.3 : 0.11,
+            zIndex: isZoneSelected ? 30 : 18,
           }) as KakaoOverlay
           overlaysRef.current.push(polygon)
         })
@@ -1268,7 +1290,7 @@ function MapSurface({
         const name = textValue(props.name, "")
         if (center && name) {
           const label = document.createElement("div")
-          label.className = "max-w-[132px] truncate rounded-full border border-amber-500/30 bg-white/82 px-2 py-0.5 text-[10px] font-extrabold text-amber-700 shadow-sm backdrop-blur"
+          label.className = "max-w-[132px] cursor-pointer truncate rounded-full border border-amber-500/30 bg-white/82 px-2 py-0.5 text-[10px] font-extrabold text-amber-700 shadow-sm backdrop-blur"
           label.textContent = name
           const overlay = new kakaoMaps.CustomOverlay({
             position: new kakaoMaps.LatLng(center.lat, center.lng),
@@ -1279,6 +1301,13 @@ function MapSurface({
           // 실거래 말풍선 등에 가려져 있어도 hover 시 제목이 앞으로 나온다
           label.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
           label.addEventListener("mouseleave", () => overlay.setZIndex?.(24))
+          // 제목 클릭 시 해당 정비사업 영역을 하이라이트 (재클릭하면 해제)
+          label.addEventListener("click", (event) => {
+            event.stopPropagation()
+            if (!zoneKey) return
+            selectedZoneKeyRef.current = selectedZoneKeyRef.current === zoneKey ? null : zoneKey
+            drawOverlaysRef.current()
+          })
           overlay.setMap(map)
           overlaysRef.current.push(overlay)
         }
@@ -1330,7 +1359,7 @@ function MapSurface({
         const accent = transactionAccent(category)
         const content = document.createElement("div")
         const countBadge = count > 1 ? `<span style="position:absolute;right:-5px;top:-6px;min-width:17px;height:17px;border-radius:9999px;background:#111827;color:#fff;border:2px solid #fff;font-size:9px;line-height:13px;text-align:center;font-weight:900">${count}</span>` : ""
-        content.className = "relative overflow-visible pb-2"
+        content.className = "relative cursor-pointer overflow-visible pb-2"
         content.innerHTML = `
           ${countBadge}
           <div style="position:relative;min-width:62px;overflow:hidden;border-radius:9999px;border:1px solid rgba(9,9,11,0.1);background:#fff;padding:4px 10px 4px 13px;text-align:center;font-size:11px;font-weight:800;line-height:1.1;color:#09090b;box-shadow:0 2px 8px rgba(0,0,0,0.18)">
@@ -1349,11 +1378,20 @@ function MapSurface({
         // 겹쳐 있는 다른 말풍선 위로 hover한 말풍선을 끌어올린다
         content.addEventListener("mouseenter", () => overlay.setZIndex?.(80))
         content.addEventListener("mouseleave", () => overlay.setZIndex?.(35))
+        // 말풍선 클릭 시 뒤의 지도가 아니라 말풍선의 필지가 선택되도록 한다
+        content.addEventListener("click", (event) => {
+          event.stopPropagation()
+          void hitTestParcel(lat, lng)
+        })
         overlay.setMap(map)
         overlaysRef.current.push(overlay)
       })
     }
-  }, [clearOverlays])
+  }, [clearOverlays, hitTestParcel])
+
+  useEffect(() => {
+    drawOverlaysRef.current = drawOverlays
+  }, [drawOverlays])
 
   useEffect(() => {
     const kakaoMaps = window.kakao?.maps
@@ -1367,24 +1405,6 @@ function MapSurface({
       drawOverlays()
     }, 180)
   }, [drawOverlays, focusTarget, publishViewport])
-
-  const hitTestParcel = useCallback(async (lat: number, lng: number) => {
-    try {
-      setMessage("클릭 좌표에서 필지 조회 중")
-      const response = await fetch(`/api/map/feature-at?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`, {
-        cache: "no-store",
-      })
-      if (!response.ok) {
-        setMessage("해당 좌표의 필지를 찾지 못했습니다")
-        return
-      }
-      const payload = (await response.json()) as Record<string, unknown>
-      onFeaturePayloadRef.current(payload)
-      setMessage("필지/건물 경계 강조")
-    } catch {
-      setMessage("필지 hit-test API 연결 대기")
-    }
-  }, [setMessage])
 
   const openRoadviewAt = useCallback((position: unknown) => {
     const roadview = roadviewInstanceRef.current
