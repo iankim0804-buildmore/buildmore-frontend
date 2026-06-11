@@ -75,6 +75,8 @@ interface AddressProps {
   land_price_per_m2: number | null
   built_year: number | null
   floors_above: number | null
+  is_sub_parcel?: boolean
+  representative_jibun?: string | null
 }
 
 interface BuildingRegistryTitle {
@@ -1560,6 +1562,11 @@ BuildMore 판단:
                 )}
                 {addressProps?.vlrat != null && !hasBuildingRegistryTitle && (
                   <span className="px-2 py-0.5 bg-muted text-[11px] rounded-full whitespace-nowrap">용적률 {formatPercent(addressProps.vlrat)}</span>
+                )}
+                {addressProps?.is_sub_parcel && addressProps.representative_jibun && (
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[11px] rounded-full whitespace-nowrap">
+                    다필지 건물 · 대표번지 {addressProps.representative_jibun}
+                  </span>
                 )}
               </>
             ) : (
