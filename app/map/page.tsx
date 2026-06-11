@@ -1376,8 +1376,6 @@ function MapSurface({
         const amountLabel = formatTransactionAmount(props)
         const category = transactionCategoryFromProps(props)
         const accent = transactionAccent(category)
-        // 지번 마스킹(일반건축물)을 건축물대장 조합으로 역추적한 거래는 위치가 추정값
-        const locationEstimated = props.location_estimated === true
         const content = document.createElement("div")
         const countBadge = count > 1 ? `<span style="position:absolute;right:-5px;top:-6px;min-width:17px;height:17px;border-radius:9999px;background:#111827;color:#fff;border:2px solid #fff;font-size:9px;line-height:13px;text-align:center;font-weight:900">${count}</span>` : ""
         content.className = "relative cursor-pointer overflow-visible pb-2"
@@ -1385,7 +1383,7 @@ function MapSurface({
           ${countBadge}
           <div style="position:relative;min-width:62px;overflow:hidden;border-radius:9999px;border:1px solid rgba(9,9,11,0.1);background:#fff;padding:4px 10px 4px 13px;text-align:center;font-size:11px;font-weight:800;line-height:1.1;color:#09090b;box-shadow:0 2px 8px rgba(0,0,0,0.18)">
             <span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${accent.color}"></span>
-            <span>${locationEstimated ? `<span title="위치 추정 (지번 마스킹 역추적)" style="color:#b45309;font-weight:900">≈</span>` : ""}${escapeHtml(amountLabel)}</span><br>
+            <span>${escapeHtml(amountLabel)}</span><br>
             <span style="font-size:10px;font-weight:700;color:#71717a">${escapeHtml(props.deal_date_label ?? "-")}</span>
           </div>
           <span title="${escapeHtml(accent.label)}" style="position:absolute;left:50%;bottom:3px;width:8px;height:8px;border-radius:9999px;background:${accent.color};transform:translateX(-50%);box-shadow:0 0 0 2px #fff"></span>
