@@ -838,35 +838,25 @@ export default function MapPage() {
           limit: mapViewport.zoom >= 16 ? "500" : "260",
           date_from: "2025-01-01",
         })
-        const selectedTransactionParams = new URLSearchParams({
-          pnu: selected.pnu,
-          limit: "40",
-          date_from: "2025-01-01",
-        })
         const regulationParams = new URLSearchParams({
           bbox: mapViewport.bboxParam,
           limit: "160",
         })
 
-        const [buildingResult, transactionResult, selectedTransactionResult, regulationResult] = await Promise.allSettled([
+        const [buildingResult, transactionResult, regulationResult] = await Promise.allSettled([
           fetch(`/api/map/building-signals?${params.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/transactions?${transactionParams.toString()}`, { signal: controller.signal }),
-          fetch(`/api/map/transactions?${selectedTransactionParams.toString()}`, { signal: controller.signal }),
           fetch(`/api/map/regulations?${regulationParams.toString()}`, { signal: controller.signal }),
         ])
 
         const buildingResponse = buildingResult.status === "fulfilled" ? buildingResult.value : null
         const transactionResponse = transactionResult.status === "fulfilled" ? transactionResult.value : null
-        const selectedTransactionResponse = selectedTransactionResult.status === "fulfilled" ? selectedTransactionResult.value : null
         const regulationResponse = regulationResult.status === "fulfilled" ? regulationResult.value : null
         const buildingData = buildingResponse?.ok
           ? ((await buildingResponse.json()) as { count?: number; source?: string; buildings?: Array<Record<string, unknown>>; features?: Array<Record<string, unknown>> })
           : { count: mockFeatures.length, source: "local-map-features", buildings: [] }
         const transactionData = transactionResponse?.ok
           ? ((await transactionResponse.json()) as FeatureCollection & { count?: number; source?: string; items?: TransactionItem[] })
-          : emptyFeatureCollection
-        const selectedTransactionData = selectedTransactionResponse?.ok
-          ? ((await selectedTransactionResponse.json()) as FeatureCollection & { count?: number; source?: string; items?: TransactionItem[] })
           : emptyFeatureCollection
         const regulationData = regulationResponse?.ok
           ? ((await regulationResponse.json()) as FeatureCollection & { count?: number; source?: string })
@@ -885,7 +875,6 @@ export default function MapPage() {
           source: buildingData.source ?? "map-building-signals",
         })
         setTransactionFeatures(transactionData.features ? transactionData : emptyFeatureCollection)
-        setSelectedTransactions((selectedTransactionData.items ?? []) as TransactionItem[])
         setTransactionApi({
           status: transactionResponse?.ok ? "ready" : "error",
           count: Number(transactionData.count ?? transactionData.features?.length ?? 0),
@@ -907,7 +896,30 @@ export default function MapPage() {
 
     loadViewportSignals()
     return () => controller.abort()
-  }, [mapViewport, selected.pnu])
+  }, [mapViewport])
+
+  // PNU 변경 시: bbox에 이미 로드된 데이터 우선 사용, 없을 때만 API 호출
+  useEffect(() => {
+    if (!selected.pnu) return
+
+    const localItems = transactionFeatures.features
+      .filter((f) => (f.properties as Record<string, unknown>)?.pnu === selected.pnu)
+      .map((f) => f.properties as TransactionItem)
+
+    if (localItems.length > 0) {
+      setSelectedTransactions(localItems)
+      return
+    }
+
+    // bbox 밖 필지이거나 아직 로드 안 됐을 때 fallback
+    const controller = new AbortController()
+    const params = new URLSearchParams({ pnu: selected.pnu, limit: "40", date_from: "2025-01-01" })
+    fetch(`/api/map/transactions?${params.toString()}`, { signal: controller.signal, cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setSelectedTransactions((data.items ?? []) as TransactionItem[]) })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [selected.pnu, transactionFeatures])
 
   return (
     <main className="h-screen overflow-hidden bg-background text-foreground">

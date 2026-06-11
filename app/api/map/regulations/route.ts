@@ -19,12 +19,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/map/regulations?${params.toString()}`, {
-      cache: "no-store",
+      next: { revalidate: 300 },
     })
 
     if (response.ok) {
       return NextResponse.json(await response.json(), {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": "public, max-age=120, s-maxage=300, stale-while-revalidate=600" },
       })
     }
 

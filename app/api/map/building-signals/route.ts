@@ -64,14 +64,14 @@ export async function GET(request: Request) {
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/map/building-signals?${params.toString()}`, {
-      cache: "no-store",
+      next: { revalidate: 120 },
     })
 
     if (response.ok) {
       const data = await response.json()
       return Response.json(data, {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
         },
       })
     }
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
     },
     {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
       },
     }
   )
