@@ -920,18 +920,29 @@ export default function MapPage() {
   }
 
   const refreshTransactionView = useCallback(() => {
-    const viewport = mapViewportRef.current
-    if (!viewport) return
-    const [swLng, swLat, neLng, neLat] = viewport.bboxParam.split(",").map(Number)
-    const collection = mergedTxCollection(
-      txStoreRef.current,
-      cityTxStoreRef.current,
-      swLng, swLat, neLng, neLat,
-      categoryFiltersRef.current,
-      activeYearRangesRef.current,
-    )
-    setTransactionFeatures(collection.features.length ? collection : emptyFeatureCollection)
-    setTransactionApi((prev) => ({ ...prev, count: collection.features.length }))
+    const filters = categoryFiltersRef.current
+    const ranges = activeYearRangesRef.current
+    const seen = new Set<string>()
+    const features: Array<Record<string, unknown>> = []
+
+    const tryAdd = (f: Record<string, unknown>) => {
+      const id = String((f as { id?: string }).id ?? "")
+      if (id && seen.has(id)) return
+      if (id) seen.add(id)
+      const props = (f as { properties?: Record<string, unknown> }).properties ?? {}
+      if (!filters[transactionCategoryFromProps(props)]) return
+      const year = parseInt(String(props.deal_date ?? "").slice(0, 4))
+      if (!isYearInRanges(year, ranges)) return
+      features.push(f)
+    }
+
+    // 도시 전체 사전 로드 데이터 먼저 (bbox 필터 없음 — drawOverlays에서 뷰포트 필터링)
+    cityTxStoreRef.current.forEach(tryAdd)
+    // 타일 기반 fetch 데이터 보완 (중복 제거됨)
+    txStoreRef.current.forEach(tryAdd)
+
+    setTransactionFeatures(features.length ? { type: "FeatureCollection", features } : emptyFeatureCollection)
+    setTransactionApi((prev) => ({ ...prev, count: features.length }))
   }, [])
 
   const loadBulkTransactions = useCallback(async (range: typeof YEAR_RANGES[number]) => {
@@ -1061,7 +1072,8 @@ export default function MapPage() {
     const regMissingTiles = regVisibleTiles.filter((key) => !regTilesRef.current.has(key))
 
     // 이미 본 지역은 메모리 캐시에서 즉시 렌더 — 재방문 딜레이 제거
-    if (txStoreRef.current.size || cityTxStoreRef.current.size) {
+    // city store 로드 완료 후에는 drawOverlays(idle)가 뷰포트 필터를 직접 처리하므로 state 갱신 불필요
+    if (!cityTxStoreRef.current.size && txStoreRef.current.size) {
       refreshTransactionView()
       setTransactionApi((prev) => ({ ...prev, status: "ready", source: "client-tile-cache" }))
     }
@@ -1149,7 +1161,10 @@ export default function MapPage() {
             txTilesRef.current.clear()
           }
         }
-        refreshTransactionView()
+        // city store 미로드 시에만 타일 결과로 state 갱신 (로드 후엔 drawOverlays idle이 처리)
+        if (!cityTxStoreRef.current.size) {
+          refreshTransactionView()
+        }
         setTransactionApi((prev) => ({
           status: transactionResponse ? (transactionResponse.ok ? "ready" : "error") : "ready",
           count: prev.count,
@@ -1514,6 +1529,8 @@ function MapSurface({
   const viewModeRef = useRef(viewMode)
   const onFeaturePayloadRef = useRef(onFeaturePayload)
   const onViewportChangeRef = useRef(onViewportChange)
+  // 그룹화된 실거래 캐시 — transactionFeatures가 바뀔 때만 재계산
+  const groupedTxCacheRef = useRef<Array<{ feature: Record<string, unknown>; count: number }>>([])
   const setMessage = ignoreMapMessage
   const [roadviewActive, setRoadviewActive] = useState(false)
 
@@ -1527,6 +1544,11 @@ function MapSurface({
     onFeaturePayloadRef.current = onFeaturePayload
     onViewportChangeRef.current = onViewportChange
   }, [activeLayers, features, focusTarget, onFeaturePayload, onViewportChange, selected, transactionFeatures, regulationFeatures, viewMode])
+
+  // transactionFeatures 변경 시에만 PNU 그룹화 재계산 (idle마다 반복 안 함)
+  useEffect(() => {
+    groupedTxCacheRef.current = groupedTransactionFeatures(transactionFeatures)
+  }, [transactionFeatures])
 
   const clearOverlays = useCallback(() => {
     overlaysRef.current.forEach((overlay) => overlay.setMap(null))
@@ -1663,7 +1685,21 @@ function MapSurface({
     })
 
     if (layers.transactions) {
-      groupedTransactionFeatures(transactionFeaturesRef.current).slice(0, 140).forEach(({ feature, count }) => {
+      // 현재 뷰포트 경계로 필터 (서울 전역 데이터 중 화면에 보이는 것만 DOM 생성)
+      const mapBounds = map.getBounds?.()
+      const bboxSW = mapBounds ? kakaoLatLngToPoint(mapBounds.getSouthWest()) : { lat: 37.40, lng: 126.75 }
+      const bboxNE = mapBounds ? kakaoLatLngToPoint(mapBounds.getNorthEast()) : { lat: 37.72, lng: 127.20 }
+      const txMargin = 0.01
+
+      groupedTxCacheRef.current
+        .filter(({ feature }) => {
+          const c = (feature.geometry as { coordinates?: [number, number] } | undefined)?.coordinates
+          if (!Array.isArray(c) || c.length < 2) return false
+          const [fLng, fLat] = c
+          return fLng >= bboxSW.lng - txMargin && fLng <= bboxNE.lng + txMargin
+            && fLat >= bboxSW.lat - txMargin && fLat <= bboxNE.lat + txMargin
+        })
+        .forEach(({ feature, count }) => {
         const geometry = feature.geometry as { type?: string; coordinates?: unknown } | undefined
         const coords = geometry?.coordinates
         if (!Array.isArray(coords) || coords.length < 2) return
