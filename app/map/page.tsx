@@ -29,6 +29,28 @@ type DataStatus = "ready" | "partial" | "queued"
 type LayerKey = "transactions" | "regulations"
 type ViewMode = "map" | "roadview"
 type PanelSection = "transactions" | "land" | "building" | "analysis"
+type CategoryKey = "apartment" | "officetel" | "retail" | "other"
+
+const YEAR_RANGES = [
+  { key: "2024-2026", label: "2024 ~ 현재", dateFrom: "2024-01-01", dateTo: null as string | null },
+  { key: "2023", label: "2023", dateFrom: "2023-01-01", dateTo: "2023-12-31" },
+  { key: "2022", label: "2022", dateFrom: "2022-01-01", dateTo: "2022-12-31" },
+  { key: "2021", label: "2021", dateFrom: "2021-01-01", dateTo: "2021-12-31" },
+  { key: "2016-2020", label: "2016 ~ 2020", dateFrom: "2016-01-01", dateTo: "2020-12-31" },
+  { key: "2011-2015", label: "2011 ~ 2015", dateFrom: "2011-01-01", dateTo: "2015-12-31" },
+  { key: "2006-2010", label: "2006 ~ 2010", dateFrom: "2006-01-01", dateTo: "2010-12-31" },
+] as const
+type YearRangeKey = typeof YEAR_RANGES[number]["key"]
+
+const YEAR_RANGE_BOUNDS: Record<string, [number, number]> = {
+  "2024-2026": [2024, 2026],
+  "2023": [2023, 2023],
+  "2022": [2022, 2022],
+  "2021": [2021, 2021],
+  "2016-2020": [2016, 2020],
+  "2011-2015": [2011, 2015],
+  "2006-2010": [2006, 2010],
+}
 
 type MapGeometry = {
   type: string
@@ -759,6 +781,55 @@ function txCollectionFromStore(
   return { type: "FeatureCollection", features: features.slice(0, 800) }
 }
 
+function isYearInRanges(year: number, activeRanges: Set<string>): boolean {
+  for (const key of activeRanges) {
+    const bounds = YEAR_RANGE_BOUNDS[key]
+    if (bounds && year >= bounds[0] && year <= bounds[1]) return true
+  }
+  return false
+}
+
+function mergedTxCollection(
+  tileStore: Map<string, Record<string, unknown>>,
+  cityStore: Map<string, Record<string, unknown>>,
+  swLng: number,
+  swLat: number,
+  neLng: number,
+  neLat: number,
+  categoryFilters: Record<string, boolean>,
+  activeYearRanges: Set<string>,
+): FeatureCollection {
+  const margin = 0.005
+  const seen = new Set<string>()
+  const features: Array<Record<string, unknown>> = []
+
+  const inBbox = (coords: [number, number]) => {
+    const [lng, lat] = coords
+    return lng >= swLng - margin && lng <= neLng + margin && lat >= swLat - margin && lat <= neLat + margin
+  }
+
+  const tryAdd = (feature: Record<string, unknown>, applyFilters: boolean) => {
+    const coords = (feature.geometry as { coordinates?: [number, number] } | undefined)?.coordinates
+    if (!Array.isArray(coords) || coords.length < 2) return
+    if (!inBbox(coords as [number, number])) return
+    if (applyFilters) {
+      const props = (feature.properties ?? {}) as Record<string, unknown>
+      if (!categoryFilters[transactionCategoryFromProps(props)]) return
+      const year = parseInt(String(props.deal_date ?? "").slice(0, 4))
+      if (!isYearInRanges(year, activeYearRanges)) return
+    }
+    const id = String((feature as { id?: string }).id ?? "")
+    if (id && seen.has(id)) return
+    if (id) seen.add(id)
+    features.push(feature)
+  }
+
+  tileStore.forEach((f) => tryAdd(f, true))
+  cityStore.forEach((f) => tryAdd(f, true))
+
+  return { type: "FeatureCollection", features: features.slice(0, 2000) }
+}
+
 // 정비구역(폴리곤)은 중심점 기준으로 필터하므로 마진을 넉넉히 잡는다
 type RegStoreEntry = { feature: Record<string, unknown>; lat: number; lng: number }
 
@@ -801,11 +872,30 @@ export default function MapPage() {
     transactions: true,
     regulations: true,
   })
+  const [categoryFilters, setCategoryFilters] = useState<Record<CategoryKey, boolean>>({
+    apartment: true,
+    officetel: true,
+    retail: true,
+    other: true,
+  })
+  const [activeYearRanges, setActiveYearRanges] = useState<Set<YearRangeKey>>(new Set(["2024-2026"]))
+  const [openTxFilter, setOpenTxFilter] = useState(false)
+  const [bulkLoadState, setBulkLoadState] = useState<{
+    loading: boolean
+    loaded: number
+    total: number
+    label: string
+  }>({ loading: false, loaded: 0, total: 0, label: "" })
   const txStoreRef = useRef<Map<string, Record<string, unknown>>>(new Map())
   const txTilesRef = useRef<Set<string>>(new Set())
+  const cityTxStoreRef = useRef<Map<string, Record<string, unknown>>>(new Map())
+  const loadedRangesRef = useRef<Set<YearRangeKey>>(new Set())
   const regStoreRef = useRef<Map<string, RegStoreEntry>>(new Map())
   const regTilesRef = useRef<Set<string>>(new Set())
   const attemptedPnuRef = useRef<string | null>(null)
+  const mapViewportRef = useRef<MapViewport | null>(null)
+  const categoryFiltersRef = useRef(categoryFilters)
+  const activeYearRangesRef = useRef(activeYearRanges)
 
   const applySelected = useCallback((feature: MapFeature) => {
     setSelected(feature)
@@ -828,6 +918,73 @@ export default function MapPage() {
   const toggleLayer = (key: LayerKey) => {
     setActiveLayers((current) => ({ ...current, [key]: !current[key] }))
   }
+
+  const refreshTransactionView = useCallback(() => {
+    const viewport = mapViewportRef.current
+    if (!viewport) return
+    const [swLng, swLat, neLng, neLat] = viewport.bboxParam.split(",").map(Number)
+    const collection = mergedTxCollection(
+      txStoreRef.current,
+      cityTxStoreRef.current,
+      swLng, swLat, neLng, neLat,
+      categoryFiltersRef.current,
+      activeYearRangesRef.current,
+    )
+    setTransactionFeatures(collection.features.length ? collection : emptyFeatureCollection)
+    setTransactionApi((prev) => ({ ...prev, count: collection.features.length }))
+  }, [])
+
+  const loadBulkTransactions = useCallback(async (range: typeof YEAR_RANGES[number]) => {
+    if (loadedRangesRef.current.has(range.key)) {
+      setActiveYearRanges((prev) => new Set([...prev, range.key]))
+      refreshTransactionView()
+      return
+    }
+    setBulkLoadState({ loading: true, loaded: 0, total: 0, label: range.label })
+    try {
+      const makeUrl = (pg: number) => {
+        const p = new URLSearchParams({ date_from: range.dateFrom, page: String(pg), page_size: "3000" })
+        if (range.dateTo) p.set("date_to", range.dateTo)
+        return `/api/map/transactions/bulk?${p.toString()}`
+      }
+      const firstResp = await fetch(makeUrl(0))
+      if (!firstResp.ok) throw new Error(`HTTP ${firstResp.status}`)
+      const totalCount = parseInt(firstResp.headers.get("X-Total-Count") ?? "0")
+      const totalPages = parseInt(firstResp.headers.get("X-Total-Pages") ?? "1")
+      const firstData = (await firstResp.json()) as { features?: Array<Record<string, unknown>> }
+      setBulkLoadState((prev) => ({ ...prev, total: totalCount }))
+      let loaded = 0
+      ;(firstData.features ?? []).forEach((f) => {
+        const id = String((f as { id?: string }).id ?? "")
+        if (id) { cityTxStoreRef.current.set(id, f); loaded++ }
+      })
+      setBulkLoadState((prev) => ({ ...prev, loaded: prev.loaded + loaded }))
+      refreshTransactionView()
+      for (let i = 1; i < totalPages; i += 5) {
+        const batch = Array.from({ length: Math.min(5, totalPages - i) }, (_, j) => i + j)
+        const results = await Promise.all(
+          batch.map((pg) =>
+            fetch(makeUrl(pg)).then((r) => r.json() as Promise<{ features?: Array<Record<string, unknown>> }>)
+          )
+        )
+        let batchCount = 0
+        results.forEach((data) => {
+          ;(data.features ?? []).forEach((f) => {
+            const id = String((f as { id?: string }).id ?? "")
+            if (id) { cityTxStoreRef.current.set(id, f); batchCount++ }
+          })
+        })
+        setBulkLoadState((prev) => ({ ...prev, loaded: prev.loaded + batchCount }))
+      }
+      loadedRangesRef.current.add(range.key)
+      setActiveYearRanges((prev) => new Set([...prev, range.key]))
+      refreshTransactionView()
+    } catch (err) {
+      console.error("[BulkTx] load failed", err)
+    } finally {
+      setBulkLoadState((prev) => ({ ...prev, loading: false }))
+    }
+  }, [refreshTransactionView])
 
   const searchAddress = useCallback(async (query: string): Promise<AddressSuggestion[]> => {
     const trimmed = query.trim()
@@ -891,6 +1048,7 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!mapViewport) return
+    mapViewportRef.current = mapViewport
     const controller = new AbortController()
 
     const [swLng, swLat, neLng, neLat] = mapViewport.bboxParam.split(",").map(Number)
@@ -903,12 +1061,9 @@ export default function MapPage() {
     const regMissingTiles = regVisibleTiles.filter((key) => !regTilesRef.current.has(key))
 
     // 이미 본 지역은 메모리 캐시에서 즉시 렌더 — 재방문 딜레이 제거
-    if (txStoreRef.current.size) {
-      const cached = txCollectionFromStore(txStoreRef.current, swLng, swLat, neLng, neLat)
-      if (cached.features.length) {
-        setTransactionFeatures(cached)
-        setTransactionApi({ status: "ready", count: cached.features.length, source: "client-tile-cache" })
-      }
+    if (txStoreRef.current.size || cityTxStoreRef.current.size) {
+      refreshTransactionView()
+      setTransactionApi((prev) => ({ ...prev, status: "ready", source: "client-tile-cache" }))
     }
     if (regStoreRef.current.size) {
       const cached = regCollectionFromStore(regStoreRef.current, swLng, swLat, neLng, neLat)
@@ -994,17 +1149,14 @@ export default function MapPage() {
             txTilesRef.current.clear()
           }
         }
-        const merged = txCollectionFromStore(txStoreRef.current, swLng, swLat, neLng, neLat)
-        if (merged.features.length || transactionResponse) {
-          setTransactionFeatures(merged.features.length ? merged : emptyFeatureCollection)
-        }
-        setTransactionApi({
+        refreshTransactionView()
+        setTransactionApi((prev) => ({
           status: transactionResponse ? (transactionResponse.ok ? "ready" : "error") : "ready",
-          count: merged.features.length,
+          count: prev.count,
           source: transactionResponse
             ? (typeof transactionData.source === "string" ? transactionData.source : "commerce_seoul_transactions")
             : "client-tile-cache",
-        })
+        }))
 
         // 새로 받은 정비구역을 타일 스토어에 누적하고, 현재 뷰포트 기준으로 렌더
         if (regulationResponse?.ok && Array.isArray(regulationData.features)) {
@@ -1049,7 +1201,24 @@ export default function MapPage() {
       window.clearTimeout(debounce)
       controller.abort()
     }
-  }, [mapViewport])
+  }, [mapViewport, refreshTransactionView])
+
+  // 카테고리 필터 변경 시 ref 동기화 + 뷰 갱신
+  useEffect(() => {
+    categoryFiltersRef.current = categoryFilters
+    refreshTransactionView()
+  }, [categoryFilters, refreshTransactionView])
+
+  // 활성 연도 범위 변경 시 ref 동기화 + 뷰 갱신
+  useEffect(() => {
+    activeYearRangesRef.current = activeYearRanges
+    refreshTransactionView()
+  }, [activeYearRanges, refreshTransactionView])
+
+  // 맵 최초 진입 시 2024~현재 전체 서울 데이터 벌크 로드
+  useEffect(() => {
+    loadBulkTransactions(YEAR_RANGES[0])
+  }, [loadBulkTransactions])
 
   // PNU 변경 시: bbox에 이미 로드된 데이터 우선 사용, 없을 때만 API 호출
   useEffect(() => {
@@ -1077,6 +1246,16 @@ export default function MapPage() {
       .catch(() => {})
     return () => controller.abort()
   }, [selected.pnu, transactionFeatures])
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    if (!openTxFilter) return
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as Element).closest("[data-tx-filter]")) setOpenTxFilter(false)
+    }
+    document.addEventListener("click", handler, true)
+    return () => document.removeEventListener("click", handler, true)
+  }, [openTxFilter])
 
   return (
     <main className="h-screen overflow-hidden bg-background text-foreground">
@@ -1129,14 +1308,133 @@ export default function MapPage() {
           </div>
         </div>
 
-        <div className="absolute left-[420px] top-[68px] z-30 flex flex-wrap gap-1.5 rounded-lg border border-border bg-background/88 px-2.5 py-2 text-[11px] font-bold text-zinc-700 shadow-lg backdrop-blur">
-          {transactionLegend.map((item) => (
-            <span key={item.key} className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white/80 px-2 py-1">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-              {item.label}
-            </span>
-          ))}
+        {/* 실거래 카테고리 범례 + 연도 필터 */}
+        <div
+          data-tx-filter
+          className="absolute left-[420px] top-[68px] z-30 flex flex-wrap gap-1.5 rounded-lg border border-border bg-background/88 px-2.5 py-2 text-[11px] font-bold text-zinc-700 shadow-lg backdrop-blur"
+        >
+          {transactionLegend.map((item) => {
+            const active = categoryFilters[item.key as CategoryKey]
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setOpenTxFilter((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 transition-opacity",
+                  active ? "border-zinc-200 bg-white/80" : "border-zinc-200 bg-zinc-100/60 opacity-40",
+                )}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: active ? item.color : "#9ca3af" }} />
+                {item.label}
+              </button>
+            )
+          })}
         </div>
+
+        {/* 실거래 필터 패널 */}
+        {openTxFilter && (
+          <div
+            data-tx-filter
+            className="absolute left-[420px] top-[108px] z-40 w-56 overflow-hidden rounded-xl border border-border bg-white shadow-2xl"
+          >
+            {/* 분류 토글 */}
+            <div className="border-b border-zinc-100 px-3 py-2.5">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">분류별</p>
+              <div className="flex flex-wrap gap-1">
+                {transactionLegend.map((item) => {
+                  const active = categoryFilters[item.key as CategoryKey]
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setCategoryFilters((prev) => ({ ...prev, [item.key]: !prev[item.key as CategoryKey] }))}
+                      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-all"
+                      style={active ? { backgroundColor: item.color, borderColor: item.color, color: "#fff" } : {}}
+                    >
+                      {!active && <span className="h-1.5 w-1.5 rounded-full bg-zinc-300" />}
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            {/* 연도 범위 토글 */}
+            <div className="px-3 py-2.5">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">기간별</p>
+              <div className="space-y-0.5">
+                {YEAR_RANGES.map((range) => {
+                  const isActive = activeYearRanges.has(range.key)
+                  const isLoadingThis = bulkLoadState.loading && bulkLoadState.label === range.label
+                  const isLoaded = loadedRangesRef.current.has(range.key)
+                  return (
+                    <button
+                      key={range.key}
+                      type="button"
+                      disabled={isLoadingThis}
+                      onClick={() => {
+                        if (isActive && range.key !== "2024-2026") {
+                          setActiveYearRanges((prev) => {
+                            const next = new Set(prev)
+                            next.delete(range.key)
+                            return next
+                          })
+                        } else if (!isActive) {
+                          void loadBulkTransactions(range)
+                        }
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors",
+                        isActive ? "bg-zinc-950 font-semibold text-white" : "text-zinc-600 hover:bg-zinc-50",
+                        isLoadingThis && "opacity-60",
+                      )}
+                    >
+                      <span>{range.label}</span>
+                      {isLoadingThis ? (
+                        <span className="text-[10px] opacity-60">로딩 중</span>
+                      ) : isActive ? (
+                        <span className="text-[10px] opacity-60">✓</span>
+                      ) : isLoaded ? (
+                        <span className="text-[10px] text-zinc-400">캐시됨</span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 벌크 로딩 오버레이 */}
+        {bulkLoadState.loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/65 backdrop-blur-sm">
+            <div className="w-80 rounded-2xl bg-white px-6 py-5 shadow-2xl">
+              <p className="text-base font-bold text-zinc-900">실거래 데이터 불러오는 중</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                {bulkLoadState.label} · {bulkLoadState.loaded.toLocaleString("ko-KR")}건 로드됨
+              </p>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-zinc-900 transition-[width] duration-300"
+                  style={{
+                    width:
+                      bulkLoadState.total > 0
+                        ? `${Math.min(100, (bulkLoadState.loaded / bulkLoadState.total) * 100)}%`
+                        : "5%",
+                  }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
+                <span>총 {bulkLoadState.total > 0 ? bulkLoadState.total.toLocaleString("ko-KR") : "…"} 건</span>
+                <span>
+                  {bulkLoadState.total > 0
+                    ? `${Math.round((bulkLoadState.loaded / bulkLoadState.total) * 100)}%`
+                    : "준비 중…"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {filterOpen && (
           <div className="absolute left-[420px] top-[112px] z-40 w-72 rounded-lg border border-border bg-background/90 p-3 shadow-xl backdrop-blur">
